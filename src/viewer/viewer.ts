@@ -225,16 +225,8 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
   // Inject annotation styles into iframe (for image annotator and manual highlights)
   injectAnnotationStyles(doc);
 
-  // Inject the iframe annotator script
-  const script = doc.createElement('script');
-  script.src = chrome.runtime.getURL('iframe-annotator.js');
-  script.onload = () => {
-    console.log('Iframe annotator script loaded');
-  };
-  script.onerror = (e) => {
-    console.error('Failed to load iframe annotator script:', e);
-  };
-  doc.head.appendChild(script);
+  // Inject the iframe annotator script (inline to avoid CSP issues)
+  injectAnnotatorScript(doc);
 
   // Listen for messages from iframe annotator
   const messageHandler = (event: MessageEvent) => {
@@ -351,6 +343,24 @@ function handleAnnotationDeleted(payload: { annotation: unknown }) {
   updateAnnotationCounts();
   renderAnnotationList();
   saveCurrentSnapshot();
+}
+
+// Inject the annotator script inline into iframe
+async function injectAnnotatorScript(doc: Document) {
+  try {
+    // Fetch the pre-built iframe annotator script
+    const scriptUrl = chrome.runtime.getURL('iframe-annotator.js');
+    const response = await fetch(scriptUrl);
+    const scriptContent = await response.text();
+
+    // Create inline script element
+    const script = doc.createElement('script');
+    script.textContent = scriptContent;
+    doc.head.appendChild(script);
+    console.log('Iframe annotator script injected inline');
+  } catch (error) {
+    console.error('Failed to inject iframe annotator script:', error);
+  }
 }
 
 // Inject CSS for annotation styling into iframe
