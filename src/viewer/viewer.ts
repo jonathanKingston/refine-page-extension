@@ -284,6 +284,14 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
       case 'ANNOTATION_DELETED':
         handleAnnotationDeleted(message.payload);
         break;
+
+      case 'ANNOTATION_CLICKED': {
+        const { annotationId } = message.payload as { annotationId: string };
+        if (annotationId) {
+          scrollSidebarToAnnotation(annotationId);
+        }
+        break;
+      }
     }
   };
 
@@ -758,29 +766,10 @@ function highlightTextManually(doc: Document, annotation: TextAnnotation) {
 // Scroll to and highlight annotation in iframe
 function scrollToAnnotation(annotationId: string) {
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
-  const doc = iframe?.contentDocument;
-  if (!doc) return;
+  if (!iframe) return;
 
-  // Remove previous selection
-  doc.querySelectorAll('.selected, .pl-selected').forEach(el => {
-    el.classList.remove('selected', 'pl-selected');
-  });
-
-  // Find and highlight the annotation
-  const selectors = [
-    `[data-annotation="${annotationId}"]`,
-    `[data-id="${annotationId}"]`,
-    `[data-annotation-id="${annotationId}"]`,
-  ];
-
-  for (const selector of selectors) {
-    const highlight = doc.querySelector(selector);
-    if (highlight) {
-      highlight.classList.add('selected', 'pl-selected');
-      highlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
-    }
-  }
+  // Send message to iframe to scroll to and highlight the annotation
+  sendToIframe(iframe, 'SCROLL_TO_ANNOTATION', { annotationId });
 }
 
 // Scroll sidebar annotation list to show the annotation

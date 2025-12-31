@@ -123,6 +123,36 @@ function initializeAnnotator(container: HTMLElement) {
       payload: { annotation: serialized }
     }, '*');
   });
+
+  // Handle annotation click/selection
+  annotator.on('clickAnnotation', (annotation: unknown) => {
+    console.log('[Iframe Annotator] Annotation clicked:', annotation);
+    const ann = annotation as { id?: string };
+    if (ann.id) {
+      highlightAnnotation(ann.id);
+      window.parent.postMessage({
+        type: 'ANNOTATION_CLICKED',
+        payload: { annotationId: ann.id }
+      }, '*');
+    }
+  });
+}
+
+// Highlight a specific annotation and scroll to it
+function highlightAnnotation(annotationId: string) {
+  // Remove previous selection
+  document.querySelectorAll('.selected, .pl-selected').forEach(el => {
+    el.classList.remove('selected', 'pl-selected');
+  });
+
+  // Find and highlight the annotation
+  const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
+  if (elements.length > 0) {
+    elements.forEach(el => {
+      el.classList.add('selected', 'pl-selected');
+    });
+    elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 }
 
 // Inject custom styles for annotation colors
@@ -240,6 +270,14 @@ function handleMessage(event: MessageEvent) {
         annotator.clearAnnotations();
       }
       break;
+
+    case 'SCROLL_TO_ANNOTATION': {
+      const { annotationId } = message.payload as { annotationId: string };
+      if (annotationId) {
+        highlightAnnotation(annotationId);
+      }
+      break;
+    }
   }
 }
 
