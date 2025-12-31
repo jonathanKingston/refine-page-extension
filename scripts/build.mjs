@@ -23,6 +23,7 @@ const entryPoints = {
   'popup': join(srcDir, 'popup/popup.ts'),
   'viewer': join(srcDir, 'viewer/viewer.ts'),
   'snapshot': join(srcDir, 'snapshot/snapshot.ts'),
+  'iframe-annotator': join(srcDir, 'iframe/annotator.ts'),
 };
 
 // Common esbuild options
@@ -99,6 +100,15 @@ async function buildScripts() {
     entryPoints: [entryPoints.snapshot],
     outfile: join(distDir, 'snapshot.js'),
   });
+
+  // Iframe annotator script - runs inside iframe, needs CSS inlining and IIFE format
+  await esbuild.build({
+    ...commonOptions,
+    entryPoints: [entryPoints['iframe-annotator']],
+    outfile: join(distDir, 'iframe-annotator.js'),
+    format: 'iife',
+    plugins: [inlineCssPlugin],
+  });
 }
 
 // Copy static files
@@ -112,7 +122,8 @@ function copyStaticFiles() {
   manifest.action.default_popup = 'popup.html';
   manifest.web_accessible_resources[0].resources = [
     'viewer.html', 'viewer.js', 'viewer.css',
-    'snapshot.html', 'snapshot.js'
+    'snapshot.html', 'snapshot.js',
+    'iframe-annotator.js'
   ];
 
   writeFileSync(join(distDir, 'manifest.json'), JSON.stringify(manifest, null, 2));

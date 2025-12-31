@@ -195,6 +195,22 @@ function updateUI() {
   updateSnapshotNavActive();
 }
 
+// Track if iframe annotator is ready
+let iframeAnnotatorReady = false;
+let pendingIframeMessages: Array<{type: string; payload?: unknown}> = [];
+
+// Send message to iframe annotator
+function sendToIframe(iframe: HTMLIFrameElement, type: string, payload?: unknown) {
+  if (!iframe.contentWindow) return;
+
+  const message = { type, payload };
+  if (iframeAnnotatorReady) {
+    iframe.contentWindow.postMessage(message, '*');
+  } else {
+    pendingIframeMessages.push(message);
+  }
+}
+
 // Initialize annotation libraries on iframe content
 function initializeAnnotators(iframe: HTMLIFrameElement) {
   const doc = iframe.contentDocument;
@@ -202,96 +218,68 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
 
   console.log('Initializing annotators on iframe document:', doc);
 
-  // Inject annotation styles into iframe
+  // Reset iframe annotator state
+  iframeAnnotatorReady = false;
+  pendingIframeMessages = [];
+
+  // Inject annotation styles into iframe (for image annotator and manual highlights)
   injectAnnotationStyles(doc);
 
-  // Handle text selection manually since Recogito can't work across iframe boundary
-  doc.addEventListener('mouseup', () => {
-    if (currentTool === 'select' || !currentSnapshot) return;
+  // Inject the iframe annotator script
+  const script = doc.createElement('script');
+  script.src = chrome.runtime.getURL('iframe-annotator.js');
+  script.onload = () => {
+    console.log('Iframe annotator script loaded');
+  };
+  script.onerror = (e) => {
+    console.error('Failed to load iframe annotator script:', e);
+  };
+  doc.head.appendChild(script);
 
-    const selection = doc.getSelection();
-    if (!selection || selection.isCollapsed) return;
+  // Listen for messages from iframe annotator
+  const messageHandler = (event: MessageEvent) => {
+    // Only accept messages from our iframe
+    if (event.source !== iframe.contentWindow) return;
 
-    const text = selection.toString().trim();
-    if (!text) return;
+    const message = event.data;
+    if (!message?.type) return;
 
-    console.log('Creating annotation for selection:', text.substring(0, 50));
+    console.log('Message from iframe:', message.type, message.payload);
 
-    // Create annotation from selection
-    const range = selection.getRangeAt(0);
-    const id = `text-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-    // Wrap selection in highlight span
-    try {
-      const highlight = doc.createElement('span');
-      highlight.className = `pl-highlight pl-${currentTool}`;
-      highlight.dataset.annotationId = id;
-      range.surroundContents(highlight);
-
-      // Create our annotation record
-      const textAnnotation: TextAnnotation = {
-        id,
-        type: currentTool as AnnotationType,
-        text,
-        selector: {
-          type: 'TextQuoteSelector',
-          exact: text,
-        },
-        createdAt: new Date().toISOString(),
-      };
-
-      currentSnapshot.annotations.text.push(textAnnotation);
-
-      // Link to current question if one is selected
-      if (currentQuestionId) {
-        const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-        if (question) {
-          question.annotationIds.push(id);
+    switch (message.type) {
+      case 'ANNOTATOR_READY':
+        iframeAnnotatorReady = true;
+        // Send any pending messages
+        pendingIframeMessages.forEach(msg => {
+          iframe.contentWindow?.postMessage(msg, '*');
+        });
+        pendingIframeMessages = [];
+        // Send current tool state
+        sendToIframe(iframe, 'SET_TOOL', currentTool);
+        // Load existing annotations
+        if (currentSnapshot?.annotations.text.length) {
+          const w3cAnnotations = currentSnapshot.annotations.text.map(a => convertToW3CText(a));
+          sendToIframe(iframe, 'LOAD_ANNOTATIONS', w3cAnnotations);
         }
-      }
+        break;
 
-      // Clear selection
-      selection.removeAllRanges();
+      case 'ANNOTATION_CREATED':
+        handleAnnotationCreated(message.payload);
+        break;
 
-      // Update UI
-      updateAnnotationCounts();
-      renderAnnotationList();
-      saveCurrentSnapshot();
-
-      console.log('Annotation created:', id);
-    } catch (error) {
-      console.warn('Could not wrap selection (may span multiple elements):', error);
-      // For complex selections spanning multiple elements, just record the text
-      const textAnnotation: TextAnnotation = {
-        id,
-        type: currentTool as AnnotationType,
-        text,
-        selector: {
-          type: 'TextQuoteSelector',
-          exact: text,
-        },
-        createdAt: new Date().toISOString(),
-      };
-
-      currentSnapshot.annotations.text.push(textAnnotation);
-
-      if (currentQuestionId) {
-        const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-        if (question) {
-          question.annotationIds.push(id);
-        }
-      }
-
-      selection.removeAllRanges();
-      updateAnnotationCounts();
-      renderAnnotationList();
-      saveCurrentSnapshot();
+      case 'ANNOTATION_DELETED':
+        handleAnnotationDeleted(message.payload);
+        break;
     }
-  });
+  };
+
+  window.addEventListener('message', messageHandler);
+
+  // Store handler for cleanup
+  (iframe as any)._messageHandler = messageHandler;
 
   // Forward keyboard events from iframe to parent for shortcuts
   doc.addEventListener('keydown', (e) => {
-    // Clone the event and dispatch to parent document
     const clonedEvent = new KeyboardEvent('keydown', {
       key: e.key,
       code: e.code,
@@ -307,7 +295,6 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
   // Add click handler for annotation highlights to scroll sidebar
   doc.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
-    // Check if clicked on an annotation highlight
     const highlight = target.closest('[data-annotation], [data-id], [data-annotation-id], .pl-highlight, .r6o-annotation');
     if (highlight) {
       const annotationId = (highlight as HTMLElement).dataset.annotation ||
@@ -319,13 +306,51 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
     }
   });
 
-  // Skip Recogito text annotator - it doesn't work across iframe boundaries
-  // We use manual selection handling via mouseup event above instead
-  // Just render existing annotations manually
-  renderAnnotationsManually(doc);
-
   // Initialize image annotators for each image
   initializeImageAnnotators(doc);
+}
+
+// Handle annotation created from iframe
+function handleAnnotationCreated(payload: { annotation: unknown; tool: string }) {
+  if (!currentSnapshot) return;
+
+  const { annotation, tool } = payload;
+  const textAnnotation = convertFromW3CText(annotation, tool as AnnotationType);
+
+  if (textAnnotation) {
+    currentSnapshot.annotations.text.push(textAnnotation);
+
+    if (currentQuestionId) {
+      const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+      if (question) {
+        question.annotationIds.push(textAnnotation.id);
+      }
+    }
+
+    updateAnnotationCounts();
+    renderAnnotationList();
+    saveCurrentSnapshot();
+    console.log('Annotation created:', textAnnotation.id);
+  }
+}
+
+// Handle annotation deleted from iframe
+function handleAnnotationDeleted(payload: { annotation: unknown }) {
+  if (!currentSnapshot) return;
+
+  const annotation = payload.annotation as { id?: string };
+  const id = annotation?.id;
+  if (!id) return;
+
+  currentSnapshot.annotations.text = currentSnapshot.annotations.text.filter(a => a.id !== id);
+
+  for (const question of currentSnapshot.questions) {
+    question.annotationIds = question.annotationIds.filter(aid => aid !== id);
+  }
+
+  updateAnnotationCounts();
+  renderAnnotationList();
+  saveCurrentSnapshot();
 }
 
 // Inject CSS for annotation styling into iframe
@@ -604,6 +629,26 @@ function loadExistingRegionAnnotations(annotator: AnyAnnotator, imgId: string) {
       console.warn('Failed to load region annotation:', error);
     }
   }
+}
+
+// Convert our text annotation format to W3C format for Recogito
+function convertToW3CText(annotation: TextAnnotation): unknown {
+  return {
+    '@context': 'http://www.w3.org/ns/anno.jsonld',
+    type: 'Annotation',
+    id: annotation.id,
+    body: [{
+      type: 'TextualBody',
+      purpose: 'tagging',
+      value: annotation.type,
+    }],
+    target: {
+      selector: [{
+        type: 'TextQuoteSelector',
+        exact: annotation.selectedText,
+      }]
+    }
+  };
 }
 
 // Convert W3C text annotation to our format
@@ -1179,6 +1224,12 @@ function setTool(tool: 'select' | AnnotationType) {
   imageAnnotators.forEach(annotator => {
     annotator.setDrawingEnabled(tool !== 'select');
   });
+
+  // Notify iframe annotator of tool change
+  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+  if (iframe) {
+    sendToIframe(iframe, 'SET_TOOL', tool);
+  }
 }
 
 // Set evaluation value
