@@ -10,14 +10,14 @@ import * as singlefile from 'single-file-core/single-file.js';
 const SINGLE_FILE_OPTIONS = {
   // Resource handling
   removeHiddenElements: false,
-  removeUnusedStyles: true,
-  removeUnusedFonts: true,
-  removeFrames: true,  // Remove iframes to speed up capture
-  removeImports: true,
+  removeUnusedStyles: false,  // Keep all styles for accurate rendering
+  removeUnusedFonts: false,   // Keep all fonts
+  removeFrames: true,         // Remove iframes to speed up capture
+  removeImports: false,       // Keep CSS imports
   removeScripts: true,
-  removeAlternativeFonts: true,
-  removeAlternativeMedias: true,
-  removeAlternativeImages: true,
+  removeAlternativeFonts: false,
+  removeAlternativeMedias: false,
+  removeAlternativeImages: false,
   groupDuplicateImages: true,
 
   // Disable deferred/lazy image loading entirely
