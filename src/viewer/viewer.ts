@@ -636,18 +636,41 @@ function convertToW3CText(annotation: TextAnnotation): unknown {
 // Convert W3C text annotation to our format
 function convertFromW3CText(w3c: any, type: AnnotationType): TextAnnotation | null {
   try {
-    const selector = Array.isArray(w3c.target?.selector)
-      ? w3c.target.selector.find((s: any) => s.type === 'TextQuoteSelector')
-      : w3c.target?.selector;
+    console.log('Converting annotation:', JSON.stringify(w3c, null, 2));
 
-    if (!selector || selector.type !== 'TextQuoteSelector') return null;
+    // Handle both Recogito v3 format (bodies/target.selector array) and W3C format
+    const selectors = w3c.target?.selector;
+    let selectedText = '';
 
-    return {
+    if (Array.isArray(selectors)) {
+      // Recogito v3 format - try TextQuoteSelector first, then TextPositionSelector
+      const quoteSelector = selectors.find((s: any) => s.type === 'TextQuoteSelector');
+      if (quoteSelector) {
+        selectedText = quoteSelector.exact || '';
+      } else {
+        // Try to get text from TextPositionSelector - but we need the actual text
+        const posSelector = selectors.find((s: any) => s.type === 'TextPositionSelector');
+        if (posSelector) {
+          // We'll need to extract text differently - for now use a placeholder
+          selectedText = '[Selected text]';
+        }
+      }
+    } else if (selectors?.type === 'TextQuoteSelector') {
+      // W3C format
+      selectedText = selectors.exact || '';
+    }
+
+    if (!selectedText) {
+      console.warn('Could not extract selected text from annotation');
+      return null;
+    }
+
+    const annotation: TextAnnotation = {
       id: w3c.id || generateId(),
       type,
       startOffset: 0,
       endOffset: 0,
-      selectedText: selector.exact || '',
+      selectedText,
       selector: {
         type: 'text-position',
         value: '0:0',
@@ -655,6 +678,9 @@ function convertFromW3CText(w3c: any, type: AnnotationType): TextAnnotation | nu
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+
+    console.log('Converted to:', annotation);
+    return annotation;
   } catch (error) {
     console.error('Failed to convert text annotation:', error);
     return null;

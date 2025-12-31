@@ -55,6 +55,14 @@ function applyAnnotationStyle(annotationId: string, tool: string) {
   }, 50);
 }
 
+// Get style for annotation based on type
+function getAnnotationStyle(tool: string): { fill: string; fillOpacity: number } {
+  if (tool === 'answer') {
+    return { fill: '#3b82f6', fillOpacity: 0.4 }; // blue
+  }
+  return { fill: '#22c55e', fillOpacity: 0.4 }; // green (relevant)
+}
+
 // Initialize annotator on the content
 function initializeAnnotator(container: HTMLElement) {
   console.log('[Iframe Annotator] Initializing annotator on container');
@@ -73,6 +81,8 @@ function initializeAnnotator(container: HTMLElement) {
 
   annotator = createTextAnnotator(container, {
     annotatingEnabled: currentTool !== 'select',
+    // Style function to color annotations based on current tool
+    style: () => getAnnotationStyle(currentTool),
   });
 
   if (currentTool !== 'select') {
@@ -122,22 +132,42 @@ function injectAnnotationStyles() {
   const style = document.createElement('style');
   style.id = 'pl-annotation-styles';
   style.textContent = `
-    /* Custom annotation colors */
+    /* Custom annotation colors for relevant (green) */
     .annotation-relevant,
     [data-annotation].annotation-relevant {
       background-color: rgba(34, 197, 94, 0.4) !important;
+      border-bottom: 2px solid rgb(34, 197, 94) !important;
     }
+    /* Custom annotation colors for answer (blue) */
     .annotation-answer,
     [data-annotation].annotation-answer {
       background-color: rgba(59, 130, 246, 0.4) !important;
+      border-bottom: 2px solid rgb(59, 130, 246) !important;
     }
-    /* Recogito highlight overrides */
-    .r6o-annotation {
+    /* Recogito highlight layer styling */
+    .r6o-annotation,
+    .r6o-span-highlight-layer .r6o-annotation {
       cursor: pointer;
-      transition: background-color 0.2s;
+      transition: all 0.2s ease;
+      border-radius: 2px;
     }
     .r6o-annotation:hover {
-      filter: brightness(0.9);
+      filter: brightness(0.85);
+    }
+    /* Selected annotation */
+    .r6o-annotation.selected,
+    [data-annotation].selected {
+      outline: 2px solid #f59e0b !important;
+      outline-offset: 1px;
+    }
+    /* Make sure annotations are visible */
+    .r6o-canvas-highlight-layer,
+    .r6o-span-highlight-layer {
+      pointer-events: none;
+      z-index: 1000;
+    }
+    .r6o-span-highlight-layer .r6o-annotation {
+      pointer-events: auto;
     }
   `;
   document.head.appendChild(style);
