@@ -455,9 +455,35 @@ function initializeImageAnnotators(doc: Document) {
       const imgId = img.id || `img-${index}`;
       img.id = imgId;
 
+      // Capture computed dimensions before Annotorious wraps the image
+      // This is critical for images inside <picture> elements
+      const rect = img.getBoundingClientRect();
+      const width = rect.width || img.naturalWidth;
+      const height = rect.height || img.naturalHeight;
+      const isInPicture = img.closest('picture') !== null;
+
       const annotator = createImageAnnotator(img, {
         drawingEnabled: currentTool !== 'select',
       });
+
+      // Fix wrapper dimensions for images inside <picture> elements
+      // Annotorious creates a wrapper that can collapse when the image's
+      // CSS layout depends on the <picture> parent
+      if (isInPicture || (width > 0 && height > 0)) {
+        // The annotator wraps the image - find the wrapper (img's new parent)
+        const wrapper = img.parentElement;
+        if (wrapper && wrapper !== img.closest('picture')) {
+          // Set explicit dimensions on the wrapper to prevent collapse
+          wrapper.style.display = 'inline-block';
+          wrapper.style.width = `${width}px`;
+          wrapper.style.height = `${height}px`;
+          wrapper.style.position = 'relative';
+          // Also ensure the image itself maintains its size
+          img.style.width = '100%';
+          img.style.height = '100%';
+          img.style.objectFit = 'contain';
+        }
+      }
 
       annotator.on('createAnnotation', (annotation: any) => {
         if (currentTool === 'select' || !currentSnapshot) return;
