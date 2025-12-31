@@ -1,9 +1,63 @@
 /**
  * Core types for Page Labeller extension
+ * Uses W3C Web Annotation format for compatibility with annotation libraries
  */
 
-// Annotation types matching Label Studio style
-export type AnnotationType = 'relevant' | 'answer' | 'no_content';
+// Annotation types/purposes matching Label Studio style
+export type AnnotationPurpose = 'relevant' | 'answer' | 'no_content';
+
+// W3C Web Annotation selectors
+export interface TextQuoteSelector {
+  type: 'TextQuoteSelector';
+  exact: string;
+  prefix?: string;
+  suffix?: string;
+}
+
+export interface TextPositionSelector {
+  type: 'TextPositionSelector';
+  start: number;
+  end: number;
+}
+
+export interface FragmentSelector {
+  type: 'FragmentSelector';
+  conformsTo: 'http://www.w3.org/TR/media-frags/';
+  value: string; // xywh=x,y,width,height format (pixel or percent)
+}
+
+export type Selector = TextQuoteSelector | TextPositionSelector | FragmentSelector;
+
+// W3C Web Annotation body
+export interface AnnotationBody {
+  type: 'TextualBody';
+  purpose: 'tagging' | 'commenting' | 'classifying';
+  value: AnnotationPurpose;
+}
+
+// W3C Web Annotation target
+export interface AnnotationTarget {
+  source: string; // The snapshot ID or URL
+  selector: Selector | Selector[];
+}
+
+// W3C Web Annotation format
+export interface WebAnnotation {
+  '@context': 'http://www.w3.org/ns/anno.jsonld';
+  id: string;
+  type: 'Annotation';
+  body: AnnotationBody | AnnotationBody[];
+  target: AnnotationTarget;
+  created: string;
+  modified: string;
+  // Custom extension for our purposes
+  'x-page-labeller'?: {
+    annotationType: 'text' | 'region';
+  };
+}
+
+// Legacy TextAnnotation format (for backwards compatibility)
+export type AnnotationType = AnnotationPurpose;
 
 export interface TextAnnotation {
   id: string;
@@ -18,6 +72,8 @@ export interface TextAnnotation {
   };
   createdAt: string;
   updatedAt: string;
+  // Optional W3C annotation reference
+  w3cAnnotation?: WebAnnotation;
 }
 
 export interface RegionAnnotation {
@@ -30,8 +86,12 @@ export interface RegionAnnotation {
     width: number;
     height: number;
   };
+  // Target element (image, canvas, etc.)
+  targetSelector?: string;
   createdAt: string;
   updatedAt: string;
+  // Optional W3C annotation reference
+  w3cAnnotation?: WebAnnotation;
 }
 
 // Question/Answer evaluation types
@@ -124,4 +184,95 @@ export interface CaptureErrorMessage extends ExtensionMessage {
   payload: {
     error: string;
   };
+}
+
+// Helper function to convert our annotation to W3C format
+export function toW3CAnnotation(
+  annotation: TextAnnotation | RegionAnnotation,
+  snapshotId: string
+): WebAnnotation {
+  const isText = 'selectedText' in annotation;
+
+  let selector: Selector;
+  if (isText) {
+    const textAnn = annotation as TextAnnotation;
+    selector = {
+      type: 'TextQuoteSelector',
+      exact: textAnn.selectedText,
+    };
+  } else {
+    const regionAnn = annotation as RegionAnnotation;
+    selector = {
+      type: 'FragmentSelector',
+      conformsTo: 'http://www.w3.org/TR/media-frags/',
+      value: `xywh=percent:${regionAnn.bounds.x},${regionAnn.bounds.y},${regionAnn.bounds.width},${regionAnn.bounds.height}`,
+    };
+  }
+
+  return {
+    '@context': 'http://www.w3.org/ns/anno.jsonld',
+    id: annotation.id,
+    type: 'Annotation',
+    body: {
+      type: 'TextualBody',
+      purpose: 'tagging',
+      value: annotation.type,
+    },
+    target: {
+      source: snapshotId,
+      selector,
+    },
+    created: annotation.createdAt,
+    modified: annotation.updatedAt,
+    'x-page-labeller': {
+      annotationType: isText ? 'text' : 'region',
+    },
+  };
+}
+
+// Helper to convert W3C annotation back to our format
+export function fromW3CAnnotation(
+  w3c: WebAnnotation
+): TextAnnotation | RegionAnnotation | null {
+  const body = Array.isArray(w3c.body) ? w3c.body[0] : w3c.body;
+  const selector = Array.isArray(w3c.target.selector)
+    ? w3c.target.selector[0]
+    : w3c.target.selector;
+
+  if (selector.type === 'TextQuoteSelector') {
+    return {
+      id: w3c.id,
+      type: body.value as AnnotationType,
+      startOffset: 0, // Will be computed by the library
+      endOffset: 0,
+      selectedText: selector.exact,
+      selector: {
+        type: 'text-position',
+        value: '0:0',
+      },
+      createdAt: w3c.created,
+      updatedAt: w3c.modified,
+      w3cAnnotation: w3c,
+    };
+  } else if (selector.type === 'FragmentSelector') {
+    // Parse xywh=percent:x,y,w,h format
+    const match = selector.value.match(/xywh=(?:percent:)?([^,]+),([^,]+),([^,]+),([^,]+)/);
+    if (!match) return null;
+
+    return {
+      id: w3c.id,
+      type: body.value as AnnotationType,
+      bounds: {
+        x: parseFloat(match[1]),
+        y: parseFloat(match[2]),
+        width: parseFloat(match[3]),
+        height: parseFloat(match[4]),
+      },
+      createdAt: w3c.created,
+      updatedAt: w3c.modified,
+      w3cAnnotation: w3c,
+    };
+  }
+
+  return null;
 }

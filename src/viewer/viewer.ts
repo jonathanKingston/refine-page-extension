@@ -1,16 +1,28 @@
 /**
  * Viewer page for annotating and labeling snapshots
+ * Uses @recogito/text-annotator for text and @annotorious/annotorious for images
  */
 
 import type {
   Snapshot,
   Question,
   TextAnnotation,
+  RegionAnnotation,
   AnnotationType,
   AnswerCorrectness,
   AnswerInPage,
   PageQuality,
 } from '@/types';
+
+// Import annotation libraries
+import { createTextAnnotator } from '@recogito/text-annotator';
+import { createImageAnnotator } from '@annotorious/annotorious';
+import '@recogito/text-annotator/text-annotator.css';
+import '@annotorious/annotorious/annotorious.css';
+
+// Use any for annotator types to avoid complex type conflicts
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyAnnotator = any;
 
 // State
 let currentSnapshot: Snapshot | null = null;
@@ -18,6 +30,17 @@ let currentQuestionId: string | null = null;
 let currentTool: 'select' | AnnotationType = 'select';
 let zoomLevel = 100;
 let allSnapshots: Snapshot[] = [];
+
+// Annotation library instances
+let textAnnotator: AnyAnnotator = null;
+let imageAnnotators: Map<string, AnyAnnotator> = new Map();
+
+// Color mapping for annotation types
+const ANNOTATION_COLORS: Record<AnnotationType, string> = {
+  relevant: '#22c55e',
+  answer: '#3b82f6',
+  no_content: '#9ca3af',
+};
 
 // Generate unique ID
 function generateId(): string {
@@ -55,10 +78,24 @@ async function loadSnapshot(snapshotId: string) {
 
     currentSnapshot = snapshot;
     currentQuestionId = snapshot.questions.length > 0 ? snapshot.questions[0].id : null;
+
+    // Clean up existing annotators
+    destroyAnnotators();
+
     updateUI();
   } catch (error) {
     console.error('Failed to load snapshot:', error);
   }
+}
+
+// Destroy existing annotators
+function destroyAnnotators() {
+  if (textAnnotator) {
+    textAnnotator.destroy();
+    textAnnotator = null;
+  }
+  imageAnnotators.forEach((annotator) => annotator.destroy());
+  imageAnnotators.clear();
 }
 
 // Update the entire UI
@@ -79,11 +116,9 @@ function updateUI() {
     const blobUrl = URL.createObjectURL(blob);
     iframe.src = blobUrl;
 
-    // Set up selection handling after iframe loads
+    // Set up annotation handling after iframe loads
     iframe.onload = () => {
-      setupIframeSelection(iframe);
-      injectAnnotationStyles(iframe);
-      renderAnnotationsInIframe(iframe);
+      initializeAnnotators(iframe);
     };
   }
 
@@ -112,14 +147,127 @@ function updateUI() {
   updateSnapshotNavActive();
 }
 
-// Inject annotation styles into iframe
-function injectAnnotationStyles(iframe: HTMLIFrameElement) {
+// Initialize annotation libraries on iframe content
+function initializeAnnotators(iframe: HTMLIFrameElement) {
   const doc = iframe.contentDocument;
-  if (!doc) return;
+  if (!doc || !currentSnapshot) return;
 
+  // Inject annotation styles into iframe
+  injectAnnotationStyles(doc);
+
+  // Initialize text annotator on the document body
+  try {
+    textAnnotator = createTextAnnotator(doc.body, {
+      // User can only annotate when tool is set
+      annotatingEnabled: currentTool !== 'select',
+    });
+
+    // Handle text annotation creation
+    textAnnotator.on('createAnnotation', (annotation: any) => {
+      if (currentTool === 'select' || !currentSnapshot) return;
+
+      // Convert to our format
+      const textAnnotation = convertFromW3CText(annotation, currentTool);
+      if (textAnnotation) {
+        currentSnapshot.annotations.text.push(textAnnotation);
+
+        // Link to current question if one is selected
+        if (currentQuestionId) {
+          const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+          if (question) {
+            question.annotationIds.push(textAnnotation.id);
+          }
+        }
+
+        // Update our annotation styling
+        updateAnnotationAppearance(annotation.id, currentTool);
+
+        // Update UI
+        updateAnnotationCounts();
+        renderAnnotationList();
+        saveCurrentSnapshot();
+      }
+    });
+
+    textAnnotator.on('deleteAnnotation', (annotation: any) => {
+      if (!currentSnapshot) return;
+      const id = annotation.id;
+      currentSnapshot.annotations.text = currentSnapshot.annotations.text.filter(a => a.id !== id);
+
+      // Remove from questions
+      for (const question of currentSnapshot.questions) {
+        question.annotationIds = question.annotationIds.filter(aid => aid !== id);
+      }
+
+      updateAnnotationCounts();
+      renderAnnotationList();
+      saveCurrentSnapshot();
+    });
+
+    // Load existing text annotations
+    loadExistingTextAnnotations();
+  } catch (error) {
+    console.error('Failed to initialize text annotator:', error);
+    // Fallback to manual highlighting
+    renderAnnotationsManually(doc);
+  }
+
+  // Initialize image annotators for each image
+  initializeImageAnnotators(doc);
+}
+
+// Inject CSS for annotation styling into iframe
+function injectAnnotationStyles(doc: Document) {
   const style = doc.createElement('style');
   style.id = 'pl-annotation-styles';
   style.textContent = `
+    /* Text annotator styles */
+    .r6o-annotation {
+      padding: 2px 0;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .r6o-annotation:hover {
+      filter: brightness(0.9);
+    }
+    .r6o-annotation.relevant {
+      background-color: rgba(34, 197, 94, 0.4) !important;
+      border-bottom: 2px solid rgb(34, 197, 94);
+    }
+    .r6o-annotation.answer {
+      background-color: rgba(59, 130, 246, 0.4) !important;
+      border-bottom: 2px solid rgb(59, 130, 246);
+    }
+    .r6o-annotation.no_content {
+      background-color: rgba(156, 163, 175, 0.4) !important;
+      border-bottom: 2px solid rgb(156, 163, 175);
+    }
+    .r6o-annotation.selected {
+      outline: 3px solid #f59e0b;
+      outline-offset: 2px;
+    }
+
+    /* Image annotator styles */
+    .a9s-annotationlayer {
+      pointer-events: auto;
+    }
+    .a9s-annotation.relevant .a9s-inner {
+      stroke: rgb(34, 197, 94) !important;
+      fill: rgba(34, 197, 94, 0.2) !important;
+    }
+    .a9s-annotation.answer .a9s-inner {
+      stroke: rgb(59, 130, 246) !important;
+      fill: rgba(59, 130, 246, 0.2) !important;
+    }
+    .a9s-annotation.no_content .a9s-inner {
+      stroke: rgb(156, 163, 175) !important;
+      fill: rgba(156, 163, 175, 0.2) !important;
+    }
+    .a9s-annotation.selected .a9s-inner {
+      stroke-width: 3px !important;
+    }
+
+    /* Manual highlight fallback */
     .pl-highlight {
       padding: 2px 0;
       border-radius: 3px;
@@ -145,148 +293,236 @@ function injectAnnotationStyles(iframe: HTMLIFrameElement) {
       outline: 3px solid #f59e0b;
       outline-offset: 2px;
     }
-    .pl-annotation-label {
-      display: inline-block;
-      font-size: 10px;
-      font-weight: bold;
-      padding: 1px 4px;
-      border-radius: 3px;
-      margin-left: 2px;
-      vertical-align: super;
-      color: white;
-    }
-    .pl-annotation-label.relevant { background: rgb(34, 197, 94); }
-    .pl-annotation-label.answer { background: rgb(59, 130, 246); }
   `;
   doc.head?.appendChild(style);
 }
 
-// Setup text selection in iframe
-function setupIframeSelection(iframe: HTMLIFrameElement) {
-  const doc = iframe.contentDocument;
+// Load existing text annotations into the text annotator
+function loadExistingTextAnnotations() {
+  if (!textAnnotator || !currentSnapshot) return;
+
+  for (const annotation of currentSnapshot.annotations.text) {
+    try {
+      // Create W3C annotation format for the library
+      const w3cAnnotation = {
+        '@context': 'http://www.w3.org/ns/anno.jsonld',
+        type: 'Annotation',
+        id: annotation.id,
+        body: [{
+          type: 'TextualBody',
+          purpose: 'tagging',
+          value: annotation.type,
+        }],
+        target: {
+          source: currentSnapshot.id,
+          selector: {
+            type: 'TextQuoteSelector',
+            exact: annotation.selectedText,
+          },
+        },
+      };
+
+      textAnnotator.addAnnotation(w3cAnnotation);
+      updateAnnotationAppearance(annotation.id, annotation.type);
+    } catch (error) {
+      console.warn('Failed to load annotation:', annotation.selectedText.substring(0, 30), error);
+    }
+  }
+}
+
+// Update the visual appearance of an annotation based on its type
+function updateAnnotationAppearance(annotationId: string, type: AnnotationType) {
+  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+  const doc = iframe?.contentDocument;
   if (!doc) return;
 
-  doc.addEventListener('mouseup', () => {
-    if (currentTool === 'select') return;
+  // Find the annotation element and add the type class
+  setTimeout(() => {
+    const elements = doc.querySelectorAll(`[data-annotation="${annotationId}"], [data-id="${annotationId}"]`);
+    elements.forEach(el => {
+      el.classList.remove('relevant', 'answer', 'no_content');
+      el.classList.add(type);
+    });
+  }, 50);
+}
 
-    const selection = doc.getSelection();
-    if (!selection || selection.isCollapsed) return;
+// Initialize image annotators for each image in the document
+function initializeImageAnnotators(doc: Document) {
+  if (!currentSnapshot) return;
 
-    const selectedText = selection.toString().trim();
-    if (!selectedText) return;
+  const images = doc.querySelectorAll('img');
+  images.forEach((img, index) => {
+    // Skip tiny images (icons, etc.)
+    if (img.naturalWidth < 100 || img.naturalHeight < 100) return;
 
-    // Create annotation
-    const range = selection.getRangeAt(0);
-    const annotation: TextAnnotation = {
-      id: generateId(),
-      type: currentTool as AnnotationType,
-      startOffset: range.startOffset,
-      endOffset: range.endOffset,
-      selectedText,
+    try {
+      const imgId = img.id || `img-${index}`;
+      img.id = imgId;
+
+      const annotator = createImageAnnotator(img, {
+        drawingEnabled: currentTool !== 'select',
+      });
+
+      annotator.on('createAnnotation', (annotation: any) => {
+        if (currentTool === 'select' || !currentSnapshot) return;
+
+        const regionAnnotation = convertFromW3CRegion(annotation, currentTool, imgId);
+        if (regionAnnotation) {
+          currentSnapshot.annotations.region.push(regionAnnotation);
+
+          if (currentQuestionId) {
+            const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+            if (question) {
+              question.annotationIds.push(regionAnnotation.id);
+            }
+          }
+
+          updateAnnotationCounts();
+          renderAnnotationList();
+          saveCurrentSnapshot();
+        }
+      });
+
+      annotator.on('deleteAnnotation', (annotation: any) => {
+        if (!currentSnapshot) return;
+        const id = annotation.id;
+        currentSnapshot.annotations.region = currentSnapshot.annotations.region.filter(a => a.id !== id);
+
+        for (const question of currentSnapshot.questions) {
+          question.annotationIds = question.annotationIds.filter(aid => aid !== id);
+        }
+
+        updateAnnotationCounts();
+        renderAnnotationList();
+        saveCurrentSnapshot();
+      });
+
+      // Load existing region annotations for this image
+      loadExistingRegionAnnotations(annotator, imgId);
+
+      imageAnnotators.set(imgId, annotator);
+    } catch (error) {
+      console.warn('Failed to initialize image annotator:', error);
+    }
+  });
+}
+
+// Load existing region annotations for an image
+function loadExistingRegionAnnotations(annotator: AnyAnnotator, imgId: string) {
+  if (!currentSnapshot) return;
+
+  const regionAnnotations = currentSnapshot.annotations.region.filter(
+    a => a.targetSelector === imgId
+  );
+
+  for (const annotation of regionAnnotations) {
+    try {
+      const w3cAnnotation = {
+        '@context': 'http://www.w3.org/ns/anno.jsonld',
+        type: 'Annotation',
+        id: annotation.id,
+        body: [{
+          type: 'TextualBody',
+          purpose: 'tagging',
+          value: annotation.type,
+        }],
+        target: {
+          source: imgId,
+          selector: {
+            type: 'FragmentSelector',
+            conformsTo: 'http://www.w3.org/TR/media-frags/',
+            value: `xywh=percent:${annotation.bounds.x},${annotation.bounds.y},${annotation.bounds.width},${annotation.bounds.height}`,
+          },
+        },
+      };
+
+      annotator.addAnnotation(w3cAnnotation);
+    } catch (error) {
+      console.warn('Failed to load region annotation:', error);
+    }
+  }
+}
+
+// Convert W3C text annotation to our format
+function convertFromW3CText(w3c: any, type: AnnotationType): TextAnnotation | null {
+  try {
+    const selector = Array.isArray(w3c.target?.selector)
+      ? w3c.target.selector.find((s: any) => s.type === 'TextQuoteSelector')
+      : w3c.target?.selector;
+
+    if (!selector || selector.type !== 'TextQuoteSelector') return null;
+
+    return {
+      id: w3c.id || generateId(),
+      type,
+      startOffset: 0,
+      endOffset: 0,
+      selectedText: selector.exact || '',
       selector: {
         type: 'text-position',
-        value: getTextPosition(range, doc),
+        value: '0:0',
       },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+  } catch (error) {
+    console.error('Failed to convert text annotation:', error);
+    return null;
+  }
+}
 
-    // Add to current snapshot
-    if (currentSnapshot) {
-      currentSnapshot.annotations.text.push(annotation);
+// Convert W3C region annotation to our format
+function convertFromW3CRegion(w3c: any, type: AnnotationType, targetSelector: string): RegionAnnotation | null {
+  try {
+    const selector = w3c.target?.selector;
+    if (!selector) return null;
 
-      // Link to current question if one is selected
-      if (currentQuestionId) {
-        const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-        if (question) {
-          question.annotationIds.push(annotation.id);
-        }
+    // Parse xywh fragment
+    let bounds = { x: 0, y: 0, width: 0, height: 0 };
+
+    if (selector.type === 'FragmentSelector') {
+      const match = selector.value?.match(/xywh=(?:percent:)?([^,]+),([^,]+),([^,]+),([^,]+)/);
+      if (match) {
+        bounds = {
+          x: parseFloat(match[1]),
+          y: parseFloat(match[2]),
+          width: parseFloat(match[3]),
+          height: parseFloat(match[4]),
+        };
       }
-
-      // Update UI
-      updateAnnotationCounts();
-      renderAnnotationList();
-      renderAnnotationsInIframe(iframe);
-
-      // Auto-save
-      saveCurrentSnapshot();
     }
 
-    // Clear selection
-    selection.removeAllRanges();
-  });
-}
-
-// Get text position for selector
-function getTextPosition(range: Range, doc: Document): string {
-  const walker = doc.createTreeWalker(
-    doc.body,
-    NodeFilter.SHOW_TEXT,
-    null
-  );
-
-  let offset = 0;
-  let node: Node | null;
-
-  while ((node = walker.nextNode())) {
-    if (node === range.startContainer) {
-      return `${offset + range.startOffset}:${offset + range.endOffset}`;
-    }
-    offset += (node.textContent?.length || 0);
+    return {
+      id: w3c.id || generateId(),
+      type,
+      bounds,
+      targetSelector,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error('Failed to convert region annotation:', error);
+    return null;
   }
-
-  return `0:0`;
 }
 
-// Render annotations as highlights in iframe
-function renderAnnotationsInIframe(iframe: HTMLIFrameElement) {
-  const doc = iframe.contentDocument;
-  if (!doc || !currentSnapshot) return;
+// Fallback: render annotations manually if library fails
+function renderAnnotationsManually(doc: Document) {
+  if (!currentSnapshot) return;
 
-  // Remove existing highlights (but preserve text content without labels)
-  doc.querySelectorAll('.pl-highlight').forEach(el => {
-    const parent = el.parentNode;
-    if (parent) {
-      // Remove the label first to avoid including R/A in text
-      el.querySelectorAll('.pl-annotation-label').forEach(label => label.remove());
-      parent.replaceChild(doc.createTextNode(el.textContent || ''), el);
-      parent.normalize();
-    }
-  });
-
-  // Remove any orphaned labels
-  doc.querySelectorAll('.pl-annotation-label').forEach(el => el.remove());
-
-  // Add highlights for each annotation
   for (const annotation of currentSnapshot.annotations.text) {
-    highlightText(doc, annotation);
+    highlightTextManually(doc, annotation);
   }
 }
 
-// Highlight text in document - handles text that may span multiple nodes
-function highlightText(doc: Document, annotation: TextAnnotation) {
+// Manual text highlighting (fallback)
+function highlightTextManually(doc: Document, annotation: TextAnnotation) {
   const searchText = annotation.selectedText;
   if (!searchText) return;
 
-  // Strategy 1: Try exact match in single text node
-  if (tryHighlightSingleNode(doc, annotation, searchText)) return;
-
-  // Strategy 2: Try normalized whitespace match
-  const normalizedSearch = searchText.replace(/\s+/g, ' ').trim();
-  if (normalizedSearch !== searchText && tryHighlightSingleNode(doc, annotation, normalizedSearch)) return;
-
-  // Strategy 3: Try to find and highlight across multiple nodes using text position
-  if (tryHighlightByPosition(doc, annotation)) return;
-
-  // If all strategies fail, log warning
-  console.warn('Could not highlight annotation:', searchText.substring(0, 30));
-}
-
-// Try to highlight text within a single text node
-function tryHighlightSingleNode(doc: Document, annotation: TextAnnotation, searchText: string): boolean {
   const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null);
-
   let node: Node | null;
+
   while ((node = walker.nextNode())) {
     const text = node.textContent || '';
     const index = text.indexOf(searchText);
@@ -300,177 +536,41 @@ function tryHighlightSingleNode(doc: Document, annotation: TextAnnotation, searc
         const highlight = doc.createElement('mark');
         highlight.className = `pl-highlight pl-${annotation.type}`;
         highlight.dataset.annotationId = annotation.id;
-        highlight.dataset.annotationType = annotation.type;
-        highlight.title = `${annotation.type}: "${annotation.selectedText.substring(0, 50)}${annotation.selectedText.length > 50 ? '...' : ''}"`;
 
         range.surroundContents(highlight);
-
-        const label = doc.createElement('span');
-        label.className = `pl-annotation-label ${annotation.type}`;
-        label.textContent = annotation.type === 'relevant' ? 'R' : 'A';
-        highlight.appendChild(label);
-
-        return true;
+        return;
       } catch {
         continue;
       }
     }
   }
-  return false;
 }
 
-// Try to highlight text that spans multiple nodes by finding start/end positions
-function tryHighlightByPosition(doc: Document, annotation: TextAnnotation): boolean {
-  const searchText = annotation.selectedText;
-  const normalizedSearch = searchText.replace(/\s+/g, ' ');
-
-  // Build a map of text content to nodes
-  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null);
-  const textNodes: { node: Node; start: number; end: number }[] = [];
-  let totalOffset = 0;
-  let fullText = '';
-
-  let node: Node | null;
-  while ((node = walker.nextNode())) {
-    const text = node.textContent || '';
-    if (text.trim()) { // Skip empty nodes
-      textNodes.push({ node, start: totalOffset, end: totalOffset + text.length });
-      fullText += text;
-      totalOffset += text.length;
-    }
-  }
-
-  // Try to find the text in the concatenated content
-  let matchIndex = fullText.indexOf(searchText);
-  if (matchIndex === -1) {
-    // Try normalized
-    const normalizedFull = fullText.replace(/\s+/g, ' ');
-    matchIndex = normalizedFull.indexOf(normalizedSearch);
-  }
-
-  if (matchIndex === -1) return false;
-
-  const matchEnd = matchIndex + searchText.length;
-
-  // Find which nodes contain the start and end
-  let startNode: Node | null = null;
-  let startOffset = 0;
-  let endNode: Node | null = null;
-  let endOffset = 0;
-
-  for (const { node, start, end } of textNodes) {
-    if (!startNode && matchIndex >= start && matchIndex < end) {
-      startNode = node;
-      startOffset = matchIndex - start;
-    }
-    if (matchEnd > start && matchEnd <= end) {
-      endNode = node;
-      endOffset = matchEnd - start;
-      break;
-    }
-  }
-
-  if (!startNode || !endNode) return false;
-
-  // If same node, use simple approach
-  if (startNode === endNode) {
-    try {
-      const range = doc.createRange();
-      range.setStart(startNode, startOffset);
-      range.setEnd(endNode, endOffset);
-
-      const highlight = doc.createElement('mark');
-      highlight.className = `pl-highlight pl-${annotation.type}`;
-      highlight.dataset.annotationId = annotation.id;
-      highlight.dataset.annotationType = annotation.type;
-
-      range.surroundContents(highlight);
-
-      const label = doc.createElement('span');
-      label.className = `pl-annotation-label ${annotation.type}`;
-      label.textContent = annotation.type === 'relevant' ? 'R' : 'A';
-      highlight.appendChild(label);
-
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  // Multi-node: highlight each part separately
-  try {
-    let inRange = false;
-    for (const { node, start, end } of textNodes) {
-      if (node === startNode) {
-        inRange = true;
-        wrapPartialNode(doc, node, startOffset, (node.textContent || '').length, annotation);
-      } else if (node === endNode) {
-        wrapPartialNode(doc, node, 0, endOffset, annotation);
-        break;
-      } else if (inRange) {
-        wrapPartialNode(doc, node, 0, (node.textContent || '').length, annotation);
-      }
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// Wrap part of a text node in a highlight
-function wrapPartialNode(doc: Document, node: Node, start: number, end: number, annotation: TextAnnotation) {
-  const text = node.textContent || '';
-  if (start >= end || start >= text.length) return;
-
-  const range = doc.createRange();
-  range.setStart(node, start);
-  range.setEnd(node, Math.min(end, text.length));
-
-  const highlight = doc.createElement('mark');
-  highlight.className = `pl-highlight pl-${annotation.type}`;
-  highlight.dataset.annotationId = annotation.id;
-  highlight.dataset.annotationType = annotation.type;
-
-  try {
-    range.surroundContents(highlight);
-  } catch {
-    // If surroundContents fails, try extracting and inserting
-    const fragment = range.extractContents();
-    highlight.appendChild(fragment);
-    range.insertNode(highlight);
-  }
-}
-
-// Get annotation color
-function getAnnotationColor(type: AnnotationType): string {
-  switch (type) {
-    case 'relevant':
-      return 'rgba(34, 197, 94, 0.4)';
-    case 'answer':
-      return 'rgba(59, 130, 246, 0.4)';
-    case 'no_content':
-      return 'rgba(156, 163, 175, 0.4)';
-    default:
-      return 'rgba(156, 163, 175, 0.4)';
-  }
-}
-
-// Scroll to and highlight annotation in iframe
+// Scroll to and highlight annotation
 function scrollToAnnotation(annotationId: string) {
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
   const doc = iframe?.contentDocument;
   if (!doc) return;
 
-  // Remove previous selection highlight
-  doc.querySelectorAll('.pl-highlight.pl-selected').forEach(el => {
-    el.classList.remove('pl-selected');
+  // Remove previous selection
+  doc.querySelectorAll('.selected, .pl-selected').forEach(el => {
+    el.classList.remove('selected', 'pl-selected');
   });
 
   // Find and highlight the annotation
-  const highlight = doc.querySelector(`[data-annotation-id="${annotationId}"]`);
-  if (highlight) {
-    highlight.classList.add('pl-selected');
-    highlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const selectors = [
+    `[data-annotation="${annotationId}"]`,
+    `[data-id="${annotationId}"]`,
+    `[data-annotation-id="${annotationId}"]`,
+  ];
+
+  for (const selector of selectors) {
+    const highlight = doc.querySelector(selector);
+    if (highlight) {
+      highlight.classList.add('selected', 'pl-selected');
+      highlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
   }
 }
 
@@ -529,8 +629,12 @@ function clearQuestionForm() {
 function updateAnnotationCounts() {
   if (!currentSnapshot) return;
 
-  const relevantCount = currentSnapshot.annotations.text.filter(a => a.type === 'relevant').length;
-  const answerCount = currentSnapshot.annotations.text.filter(a => a.type === 'answer').length;
+  const textAnnotations = currentSnapshot.annotations.text;
+  const regionAnnotations = currentSnapshot.annotations.region;
+  const allAnnotations = [...textAnnotations, ...regionAnnotations];
+
+  const relevantCount = allAnnotations.filter(a => a.type === 'relevant').length;
+  const answerCount = allAnnotations.filter(a => a.type === 'answer').length;
 
   const relevantEl = document.getElementById('relevant-count');
   const answerEl = document.getElementById('answer-count');
@@ -544,24 +648,38 @@ function renderAnnotationList() {
   const listEl = document.getElementById('annotation-list');
   if (!listEl || !currentSnapshot) return;
 
-  const annotations = currentSnapshot.annotations.text;
+  const textAnnotations = currentSnapshot.annotations.text;
+  const regionAnnotations = currentSnapshot.annotations.region;
 
-  if (annotations.length === 0) {
-    listEl.innerHTML = '<div class="empty-state">No annotations yet. Select text in the preview to annotate.</div>';
+  if (textAnnotations.length === 0 && regionAnnotations.length === 0) {
+    listEl.innerHTML = '<div class="empty-state">No annotations yet. Select text or draw on images to annotate.</div>';
     return;
   }
 
-  listEl.innerHTML = annotations
-    .map(
-      (a) => `
-      <div class="annotation-item" data-id="${a.id}">
+  // Combine text and region annotations
+  const items: string[] = [];
+
+  for (const a of textAnnotations) {
+    items.push(`
+      <div class="annotation-item" data-id="${a.id}" data-type="text">
         <span class="type-indicator ${a.type}"></span>
         <span class="annotation-text" title="${escapeHtml(a.selectedText)}">${escapeHtml(a.selectedText.substring(0, 40))}${a.selectedText.length > 40 ? '...' : ''}</span>
         <button class="annotation-delete" data-id="${a.id}" title="Delete">×</button>
       </div>
-    `
-    )
-    .join('');
+    `);
+  }
+
+  for (const a of regionAnnotations) {
+    items.push(`
+      <div class="annotation-item" data-id="${a.id}" data-type="region">
+        <span class="type-indicator ${a.type}"></span>
+        <span class="annotation-text">[Region: ${a.bounds.width.toFixed(0)}×${a.bounds.height.toFixed(0)}]</span>
+        <button class="annotation-delete" data-id="${a.id}" title="Delete">×</button>
+      </div>
+    `);
+  }
+
+  listEl.innerHTML = items.join('');
 
   // Add click handlers to scroll to annotation
   listEl.querySelectorAll('.annotation-item').forEach((item) => {
@@ -569,10 +687,8 @@ function renderAnnotationList() {
       if ((e.target as HTMLElement).classList.contains('annotation-delete')) return;
       const id = (item as HTMLElement).dataset.id;
       if (id) {
-        // Highlight the item in the list
         listEl.querySelectorAll('.annotation-item').forEach(i => i.classList.remove('selected'));
         item.classList.add('selected');
-        // Scroll to in page
         scrollToAnnotation(id);
       }
     });
@@ -583,31 +699,45 @@ function renderAnnotationList() {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const id = (btn as HTMLElement).dataset.id;
-      if (id) deleteAnnotation(id);
+      const type = (btn.parentElement as HTMLElement).dataset.type;
+      if (id) deleteAnnotation(id, type as 'text' | 'region');
     });
   });
 }
 
 // Delete annotation
-function deleteAnnotation(id: string) {
+function deleteAnnotation(id: string, type: 'text' | 'region') {
   if (!currentSnapshot) return;
 
-  currentSnapshot.annotations.text = currentSnapshot.annotations.text.filter(a => a.id !== id);
+  if (type === 'text') {
+    currentSnapshot.annotations.text = currentSnapshot.annotations.text.filter(a => a.id !== id);
+    // Also remove from text annotator
+    if (textAnnotator) {
+      try {
+        textAnnotator.removeAnnotation(id);
+      } catch (e) {
+        // Ignore if annotation not found in annotator
+      }
+    }
+  } else {
+    currentSnapshot.annotations.region = currentSnapshot.annotations.region.filter(a => a.id !== id);
+    // Also remove from image annotators
+    imageAnnotators.forEach(annotator => {
+      try {
+        annotator.removeAnnotation(id);
+      } catch (e) {
+        // Ignore
+      }
+    });
+  }
 
   // Remove from questions
   for (const question of currentSnapshot.questions) {
     question.annotationIds = question.annotationIds.filter(aid => aid !== id);
   }
 
-  // Update UI
   updateAnnotationCounts();
   renderAnnotationList();
-
-  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
-  if (iframe) {
-    renderAnnotationsInIframe(iframe);
-  }
-
   saveCurrentSnapshot();
 }
 
@@ -676,7 +806,6 @@ async function saveCurrentSnapshot() {
 
 // Show notification
 function showNotification(message: string, type: 'success' | 'error' = 'success') {
-  // Check if notification container exists
   let container = document.getElementById('notification-container');
   if (!container) {
     container = document.createElement('div');
@@ -755,7 +884,6 @@ function renderSnapshotNav(snapshots: Snapshot[]) {
   // Add click handlers for navigation
   navEl.querySelectorAll('li[data-id]').forEach((li) => {
     li.addEventListener('click', (e) => {
-      // Don't navigate if clicking delete button
       if ((e.target as HTMLElement).classList.contains('nav-item-delete')) return;
       const id = (li as HTMLElement).dataset.id;
       if (id) {
@@ -787,14 +915,13 @@ async function deleteSnapshotById(id: string) {
     await sendMessage('DELETE_SNAPSHOT', { id });
     showNotification('Snapshot deleted');
 
-    // If we deleted the current snapshot, load another one
     if (currentSnapshot?.id === id) {
+      destroyAnnotators();
       currentSnapshot = null;
       const remaining = allSnapshots.filter(s => s.id !== id);
       if (remaining.length > 0) {
         await loadSnapshot(remaining[0].id);
       } else {
-        // No snapshots left - clear the UI
         const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
         if (iframe) iframe.src = 'about:blank';
         const titleEl = document.getElementById('page-title');
@@ -802,7 +929,6 @@ async function deleteSnapshotById(id: string) {
       }
     }
 
-    // Reload the navigation
     await loadAllSnapshots();
   } catch (error) {
     console.error('Failed to delete snapshot:', error);
@@ -856,7 +982,6 @@ function addQuestion() {
   clearQuestionForm();
   saveCurrentSnapshot();
 
-  // Focus the query input
   const queryInput = document.getElementById('query-input') as HTMLTextAreaElement;
   queryInput?.focus();
 }
@@ -867,6 +992,14 @@ function setTool(tool: 'select' | AnnotationType) {
   document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector(`.tool-btn[data-tool="${tool}"]`);
   btn?.classList.add('active');
+
+  // Update annotator enabled state
+  if (textAnnotator) {
+    textAnnotator.setAnnotatingEnabled(tool !== 'select');
+  }
+  imageAnnotators.forEach(annotator => {
+    annotator.setDrawingEnabled(tool !== 'select');
+  });
 }
 
 // Set evaluation value
@@ -894,7 +1027,6 @@ function setEvaluationValue(name: string, value: string) {
 // Setup keyboard shortcuts
 function setupKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
-    // Don't trigger shortcuts when typing in inputs
     if ((e.target as HTMLElement).tagName === 'INPUT' ||
         (e.target as HTMLElement).tagName === 'TEXTAREA' ||
         (e.target as HTMLElement).tagName === 'SELECT') {
@@ -916,9 +1048,8 @@ function setupKeyboardShortcuts() {
       setTool('select');
     }
 
-    // Evaluation shortcuts (when a question is selected)
+    // Evaluation shortcuts
     if (currentQuestionId) {
-      // Answer correctness
       if (e.key === 'c') {
         e.preventDefault();
         setEvaluationValue('correctness', 'correct');
@@ -930,7 +1061,6 @@ function setupKeyboardShortcuts() {
         setEvaluationValue('correctness', 'partial');
       }
 
-      // Answer in page
       if (e.key === 'y') {
         e.preventDefault();
         setEvaluationValue('in-page', 'yes');
@@ -939,7 +1069,6 @@ function setupKeyboardShortcuts() {
         setEvaluationValue('in-page', 'no');
       }
 
-      // Page quality
       if (e.key === 'g') {
         e.preventDefault();
         setEvaluationValue('quality', 'good');
@@ -956,13 +1085,11 @@ function setupKeyboardShortcuts() {
         saveCurrentSnapshot();
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        // Approve and go to next
         if (currentSnapshot) {
           currentSnapshot.status = 'approved';
           updateStatusDisplay();
           saveCurrentSnapshot();
           loadAllSnapshots();
-          // Load next pending
           const nextPending = allSnapshots.find(s => s.status === 'pending' && s.id !== currentSnapshot?.id);
           if (nextPending) {
             loadSnapshot(nextPending.id);
@@ -984,22 +1111,34 @@ function setupKeyboardShortcuts() {
   });
 }
 
+// Apply zoom level
+function applyZoom() {
+  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+  const zoomEl = document.getElementById('zoom-level');
+
+  if (iframe) {
+    iframe.style.transform = `scale(${zoomLevel / 100})`;
+    iframe.style.width = `${10000 / zoomLevel}%`;
+    iframe.style.height = `${10000 / zoomLevel}%`;
+  }
+
+  if (zoomEl) {
+    zoomEl.textContent = `${zoomLevel}%`;
+  }
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   const params = getUrlParams();
   const snapshotId = params.get('id');
 
-  // Setup keyboard shortcuts
   setupKeyboardShortcuts();
 
-  // Load snapshot list
   await loadAllSnapshots();
 
-  // Load specific snapshot if ID provided
   if (snapshotId) {
     await loadSnapshot(snapshotId);
   } else if (allSnapshots.length > 0) {
-    // Load first snapshot
     await loadSnapshot(allSnapshots[0].id);
   }
 
@@ -1132,7 +1271,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Save button
   document.getElementById('save-btn')?.addEventListener('click', saveCurrentSnapshot);
 
-  // Submit button (same as save for now)
+  // Submit button
   document.getElementById('submit-btn')?.addEventListener('click', saveCurrentSnapshot);
 
   // Back button
@@ -1140,19 +1279,3 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.close();
   });
 });
-
-// Apply zoom level
-function applyZoom() {
-  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
-  const zoomEl = document.getElementById('zoom-level');
-
-  if (iframe) {
-    iframe.style.transform = `scale(${zoomLevel / 100})`;
-    iframe.style.width = `${10000 / zoomLevel}%`;
-    iframe.style.height = `${10000 / zoomLevel}%`;
-  }
-
-  if (zoomEl) {
-    zoomEl.textContent = `${zoomLevel}%`;
-  }
-}

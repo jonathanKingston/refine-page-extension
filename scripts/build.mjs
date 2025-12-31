@@ -36,6 +36,30 @@ const commonOptions = {
   },
 };
 
+// Plugin to handle CSS imports by inlining them as JS that injects styles
+const inlineCssPlugin = {
+  name: 'inline-css',
+  setup(build) {
+    build.onLoad({ filter: /\.css$/ }, async (args) => {
+      const css = readFileSync(args.path, 'utf8');
+      // Escape backticks and backslashes for template literal
+      const escaped = css.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+      return {
+        contents: `
+          (function() {
+            if (typeof document !== 'undefined') {
+              const style = document.createElement('style');
+              style.textContent = \`${escaped}\`;
+              document.head.appendChild(style);
+            }
+          })();
+        `,
+        loader: 'js',
+      };
+    });
+  },
+};
+
 // Build scripts
 async function buildScripts() {
   // Background script (service worker - needs iife format)
@@ -61,11 +85,12 @@ async function buildScripts() {
     outfile: join(distDir, 'popup.js'),
   });
 
-  // Viewer script
+  // Viewer script - with CSS inlining for annotation libraries
   await esbuild.build({
     ...commonOptions,
     entryPoints: [entryPoints.viewer],
     outfile: join(distDir, 'viewer.js'),
+    plugins: [inlineCssPlugin],
   });
 
   // Snapshot viewer script
@@ -166,6 +191,7 @@ async function watch() {
       ...commonOptions,
       entryPoints: [entryPoints.viewer],
       outfile: join(distDir, 'viewer.js'),
+      plugins: [inlineCssPlugin],
     }),
     esbuild.context({
       ...commonOptions,
