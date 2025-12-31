@@ -20,6 +20,9 @@ let annotationIndex = 0; // Track annotation numbers
 // Store annotation metadata for re-applying styles after Recogito re-renders
 const annotationMeta: Map<string, { tool: string; index: number }> = new Map();
 
+// Store annotation text for scrolling to off-screen annotations
+const annotationText: Map<string, string> = new Map();
+
 // Color mapping for annotation types
 const ANNOTATION_COLORS: Record<string, string> = {
   relevant: 'rgba(34, 197, 94, 0.4)',  // green
@@ -256,7 +259,53 @@ function highlightAnnotation(annotationId: string) {
     }
   }
 
+  // DOM elements don't exist (annotation is off-screen) - search for text instead
+  const searchText = annotationText.get(annotationId);
+  if (searchText) {
+    console.log('[Iframe Annotator] Searching for text:', searchText.substring(0, 50));
+    const textNode = findTextInDocument(searchText);
+    if (textNode) {
+      // Create a range and scroll to it
+      const range = document.createRange();
+      range.selectNodeContents(textNode.node);
+      const rect = range.getBoundingClientRect();
+      const scrollTarget = window.scrollY + rect.top - window.innerHeight / 2;
+
+      document.documentElement.scrollTop = scrollTarget;
+      document.body.scrollTop = scrollTarget;
+      window.scrollTo({
+        top: Math.max(0, scrollTarget),
+        behavior: 'smooth'
+      });
+      console.log('[Iframe Annotator] Scrolled to text at:', scrollTarget);
+      return;
+    }
+  }
+
   console.log('[Iframe Annotator] No elements found for annotation:', annotationId);
+}
+
+// Find text content in the document
+function findTextInDocument(searchText: string): { node: Node; offset: number } | null {
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    null
+  );
+
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const text = node.textContent || '';
+    const index = text.indexOf(searchText);
+    if (index !== -1) {
+      return { node, offset: index };
+    }
+    // Also try partial match for long texts
+    if (searchText.length > 20 && text.includes(searchText.substring(0, 20))) {
+      return { node, offset: text.indexOf(searchText.substring(0, 20)) };
+    }
+  }
+  return null;
 }
 
 // Inject custom styles for annotation colors
@@ -430,11 +479,20 @@ function handleMessage(event: MessageEvent) {
         const annotations = message.payload as Array<{
           id?: string;
           bodies?: Array<{ value?: string }>;
+          target?: { selector?: Array<{ quote?: string }> };
         }>;
         console.log('[Iframe Annotator] LOAD_ANNOTATIONS received:', annotations);
         if (annotations?.length) {
           // Reset annotation index and set to count of loaded annotations
           annotationIndex = annotations.length;
+
+          // Store annotation text for scroll functionality
+          annotations.forEach(ann => {
+            if (ann.id && ann.target?.selector?.[0]?.quote) {
+              annotationText.set(ann.id, ann.target.selector[0].quote);
+            }
+          });
+
           try {
             annotator.setAnnotations(annotations);
             console.log('[Iframe Annotator] setAnnotations called successfully');
@@ -461,8 +519,9 @@ function handleMessage(event: MessageEvent) {
     case 'CLEAR_ANNOTATIONS':
       if (annotator) {
         annotator.clearAnnotations();
-        // Also clear metadata and reset index
+        // Also clear metadata, text, and reset index
         annotationMeta.clear();
+        annotationText.clear();
         annotationIndex = 0;
       }
       break;
