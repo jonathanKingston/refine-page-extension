@@ -102,6 +102,17 @@ async function importData(data: ExportData): Promise<{ imported: number; skipped
 
 // Message handlers
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Ignore messages without a type or from SingleFile internal messaging
+  if (!message || !message.type) {
+    return false;
+  }
+
+  // Ignore SingleFile internal messages (lazy loading coordination)
+  const singleFileMessages = ['idleTimeout', 'maxTimeout', 'loadDeferredImages'];
+  if (singleFileMessages.includes(message.type)) {
+    return false;
+  }
+
   const handleMessage = async () => {
     switch (message.type) {
       case 'GET_ALL_SNAPSHOTS':
@@ -129,9 +140,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case 'OPEN_VIEWER':
         // Open the viewer in a new tab with the snapshot ID
-        const viewerUrl = chrome.runtime.getURL(
-          `src/viewer/viewer.html?id=${message.payload.snapshotId}`
-        );
+        const viewerUrl = chrome.runtime.getURL(`viewer.html?id=${message.payload.snapshotId}`);
         await chrome.tabs.create({ url: viewerUrl });
         return { success: true };
 
@@ -145,7 +154,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         throw new Error('No active tab found');
 
       default:
-        throw new Error(`Unknown message type: ${message.type}`);
+        // Log unknown messages for debugging but don't throw
+        console.warn('Unknown message type:', message.type);
+        return { error: `Unknown message type: ${message.type}` };
     }
   };
 
