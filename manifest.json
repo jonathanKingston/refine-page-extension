@@ -9,6 +9,9 @@
     "unlimitedStorage",
     "scripting"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval' blob:; object-src 'self'"
+  },
   "action": {
     "default_popup": "src/popup/popup.html"
   },

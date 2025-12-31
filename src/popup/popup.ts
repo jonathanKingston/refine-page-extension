@@ -2,7 +2,30 @@
  * Popup script for Page Labeller extension
  */
 
-import type { Snapshot, ExportData } from '@/types';
+import type { Snapshot, ExportData, ExportedSnapshot } from '@/types';
+
+// Direct storage access functions to bypass message size limits
+async function getSnapshotIndex(): Promise<string[]> {
+  const result = await chrome.storage.local.get('snapshotIndex');
+  return result.snapshotIndex || [];
+}
+
+async function getSnapshotFromStorage(id: string): Promise<Snapshot | null> {
+  const key = `snapshot_${id}`;
+  const result = await chrome.storage.local.get(key);
+  return result[key] || null;
+}
+
+async function getAllSnapshotsFromStorage(): Promise<Snapshot[]> {
+  const index = await getSnapshotIndex();
+  const keys = index.map((id) => `snapshot_${id}`);
+  if (keys.length === 0) return [];
+  const result = await chrome.storage.local.get(keys);
+  return keys
+    .map((key) => result[key])
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime());
+}
 
 // Send message to background script
 async function sendMessage<T>(type: string, payload?: unknown): Promise<T> {
@@ -156,11 +179,27 @@ async function capturePage() {
   }
 }
 
-// Export all data
+// Export all data - uses direct storage access to bypass message size limits
 async function exportData() {
   try {
     showStatus('Exporting data...', 'loading');
-    const data = await sendMessage<ExportData>('EXPORT_DATA');
+
+    // Access storage directly to avoid message passing size limits
+    const snapshots = await getAllSnapshotsFromStorage();
+    const baseViewerUrl = chrome.runtime.getURL('viewer.html');
+
+    // Add viewer URLs to each snapshot
+    const exportedSnapshots: ExportedSnapshot[] = snapshots.map((snapshot) => ({
+      ...snapshot,
+      viewerUrl: `${baseViewerUrl}?id=${snapshot.id}`,
+    }));
+
+    const data: ExportData = {
+      version: '1.0.0',
+      exportedAt: new Date().toISOString(),
+      extensionId: chrome.runtime.id,
+      snapshots: exportedSnapshots,
+    };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);

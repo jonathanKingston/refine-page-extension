@@ -456,33 +456,40 @@ function initializeImageAnnotators(doc: Document) {
       img.id = imgId;
 
       // Capture computed dimensions before Annotorious wraps the image
-      // This is critical for images inside <picture> elements
+      // Use bounding rect if available, fall back to natural dimensions
       const rect = img.getBoundingClientRect();
-      const width = rect.width || img.naturalWidth;
-      const height = rect.height || img.naturalHeight;
-      const isInPicture = img.closest('picture') !== null;
+      const computedStyle = doc.defaultView?.getComputedStyle(img);
+      const width = rect.width > 0 ? rect.width :
+                    (computedStyle?.width && computedStyle.width !== 'auto' ? parseFloat(computedStyle.width) : img.naturalWidth);
+      const height = rect.height > 0 ? rect.height :
+                     (computedStyle?.height && computedStyle.height !== 'auto' ? parseFloat(computedStyle.height) : img.naturalHeight);
+
+      // Store original parent for reference
+      const originalParent = img.parentElement;
 
       const annotator = createImageAnnotator(img, {
         drawingEnabled: currentTool !== 'select',
       });
 
-      // Fix wrapper dimensions for images inside <picture> elements
-      // Annotorious creates a wrapper that can collapse when the image's
-      // CSS layout depends on the <picture> parent
-      if (isInPicture || (width > 0 && height > 0)) {
-        // The annotator wraps the image - find the wrapper (img's new parent)
-        const wrapper = img.parentElement;
-        if (wrapper && wrapper !== img.closest('picture')) {
-          // Set explicit dimensions on the wrapper to prevent collapse
-          wrapper.style.display = 'inline-block';
-          wrapper.style.width = `${width}px`;
-          wrapper.style.height = `${height}px`;
-          wrapper.style.position = 'relative';
-          // Also ensure the image itself maintains its size
-          img.style.width = '100%';
-          img.style.height = '100%';
-          img.style.objectFit = 'contain';
-        }
+      // Fix wrapper dimensions - Annotorious wraps the image in a container
+      // that can collapse if the image's CSS layout depends on parent elements
+      const wrapper = img.parentElement;
+      if (wrapper && wrapper !== originalParent && width > 0 && height > 0) {
+        // Set explicit dimensions on the wrapper to prevent collapse
+        wrapper.style.cssText = `
+          display: inline-block !important;
+          width: ${width}px !important;
+          height: ${height}px !important;
+          position: relative !important;
+          max-width: 100% !important;
+        `;
+        // Ensure the image fills the wrapper properly
+        img.style.cssText = `
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: contain !important;
+          display: block !important;
+        `;
       }
 
       annotator.on('createAnnotation', (annotation: any) => {
