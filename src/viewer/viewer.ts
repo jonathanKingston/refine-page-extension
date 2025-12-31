@@ -200,8 +200,18 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
   const doc = iframe.contentDocument;
   if (!doc || !currentSnapshot) return;
 
+  console.log('Initializing annotators on iframe document:', doc);
+
   // Inject annotation styles into iframe
   injectAnnotationStyles(doc);
+
+  // Debug: listen for native selection changes
+  doc.addEventListener('selectionchange', () => {
+    const selection = doc.getSelection();
+    if (selection && selection.toString().trim()) {
+      console.log('Native selection detected:', selection.toString().substring(0, 50));
+    }
+  });
 
   // Forward keyboard events from iframe to parent for shortcuts
   doc.addEventListener('keydown', (e) => {
@@ -237,10 +247,19 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
   try {
     console.log('Creating text annotator on:', doc.body);
     textAnnotator = createTextAnnotator(doc.body, {
-      // User can only annotate when tool is set
-      annotatingEnabled: currentTool !== 'select',
+      // Start with annotation enabled and mode set
+      annotatingEnabled: true,
     });
     console.log('Text annotator created:', textAnnotator);
+
+    // Set mode to CREATE_NEW immediately
+    textAnnotator.setAnnotatingMode('CREATE_NEW');
+    console.log('Set annotating mode to CREATE_NEW');
+
+    // Debug: listen to selection changes
+    textAnnotator.on('selectionChanged', (selection: any) => {
+      console.log('Selection changed:', selection);
+    });
 
     // Handle text annotation creation
     textAnnotator.on('createAnnotation', (annotation: any) => {
