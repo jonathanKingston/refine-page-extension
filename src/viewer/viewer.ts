@@ -265,33 +265,37 @@ function renderAnnotationsInIframe(iframe: HTMLIFrameElement) {
 
 // Highlight text in document - handles text that may span multiple nodes
 function highlightText(doc: Document, annotation: TextAnnotation) {
-  // Normalize the search text (collapse whitespace)
-  const searchText = annotation.selectedText.replace(/\s+/g, ' ').trim();
+  const searchText = annotation.selectedText;
   if (!searchText) return;
 
-  const walker = doc.createTreeWalker(
-    doc.body,
-    NodeFilter.SHOW_TEXT,
-    null
-  );
+  // Strategy 1: Try exact match in single text node
+  if (tryHighlightSingleNode(doc, annotation, searchText)) return;
+
+  // Strategy 2: Try normalized whitespace match
+  const normalizedSearch = searchText.replace(/\s+/g, ' ').trim();
+  if (normalizedSearch !== searchText && tryHighlightSingleNode(doc, annotation, normalizedSearch)) return;
+
+  // Strategy 3: Try to find and highlight across multiple nodes using text position
+  if (tryHighlightByPosition(doc, annotation)) return;
+
+  // If all strategies fail, log warning
+  console.warn('Could not highlight annotation:', searchText.substring(0, 30));
+}
+
+// Try to highlight text within a single text node
+function tryHighlightSingleNode(doc: Document, annotation: TextAnnotation, searchText: string): boolean {
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null);
 
   let node: Node | null;
   while ((node = walker.nextNode())) {
     const text = node.textContent || '';
-    // Try exact match first
-    let index = text.indexOf(annotation.selectedText);
+    const index = text.indexOf(searchText);
 
-    // If not found, try normalized match
-    if (index === -1) {
-      const normalizedText = text.replace(/\s+/g, ' ');
-      index = normalizedText.indexOf(searchText);
-    }
-
-    if (index !== -1 && text.length >= index + annotation.selectedText.length) {
+    if (index !== -1) {
       try {
         const range = doc.createRange();
         range.setStart(node, index);
-        range.setEnd(node, Math.min(index + annotation.selectedText.length, text.length));
+        range.setEnd(node, index + searchText.length);
 
         const highlight = doc.createElement('mark');
         highlight.className = `pl-highlight pl-${annotation.type}`;
@@ -301,22 +305,140 @@ function highlightText(doc: Document, annotation: TextAnnotation) {
 
         range.surroundContents(highlight);
 
-        // Add a small label showing the annotation type
         const label = doc.createElement('span');
         label.className = `pl-annotation-label ${annotation.type}`;
         label.textContent = annotation.type === 'relevant' ? 'R' : 'A';
         highlight.appendChild(label);
 
-        return; // Successfully highlighted
+        return true;
       } catch {
-        // surroundContents can fail if range spans multiple nodes - continue searching
         continue;
       }
     }
   }
+  return false;
+}
 
-  // If we get here, we couldn't find/highlight the text
-  console.warn('Could not highlight annotation:', annotation.selectedText.substring(0, 30));
+// Try to highlight text that spans multiple nodes by finding start/end positions
+function tryHighlightByPosition(doc: Document, annotation: TextAnnotation): boolean {
+  const searchText = annotation.selectedText;
+  const normalizedSearch = searchText.replace(/\s+/g, ' ');
+
+  // Build a map of text content to nodes
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null);
+  const textNodes: { node: Node; start: number; end: number }[] = [];
+  let totalOffset = 0;
+  let fullText = '';
+
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const text = node.textContent || '';
+    if (text.trim()) { // Skip empty nodes
+      textNodes.push({ node, start: totalOffset, end: totalOffset + text.length });
+      fullText += text;
+      totalOffset += text.length;
+    }
+  }
+
+  // Try to find the text in the concatenated content
+  let matchIndex = fullText.indexOf(searchText);
+  if (matchIndex === -1) {
+    // Try normalized
+    const normalizedFull = fullText.replace(/\s+/g, ' ');
+    matchIndex = normalizedFull.indexOf(normalizedSearch);
+  }
+
+  if (matchIndex === -1) return false;
+
+  const matchEnd = matchIndex + searchText.length;
+
+  // Find which nodes contain the start and end
+  let startNode: Node | null = null;
+  let startOffset = 0;
+  let endNode: Node | null = null;
+  let endOffset = 0;
+
+  for (const { node, start, end } of textNodes) {
+    if (!startNode && matchIndex >= start && matchIndex < end) {
+      startNode = node;
+      startOffset = matchIndex - start;
+    }
+    if (matchEnd > start && matchEnd <= end) {
+      endNode = node;
+      endOffset = matchEnd - start;
+      break;
+    }
+  }
+
+  if (!startNode || !endNode) return false;
+
+  // If same node, use simple approach
+  if (startNode === endNode) {
+    try {
+      const range = doc.createRange();
+      range.setStart(startNode, startOffset);
+      range.setEnd(endNode, endOffset);
+
+      const highlight = doc.createElement('mark');
+      highlight.className = `pl-highlight pl-${annotation.type}`;
+      highlight.dataset.annotationId = annotation.id;
+      highlight.dataset.annotationType = annotation.type;
+
+      range.surroundContents(highlight);
+
+      const label = doc.createElement('span');
+      label.className = `pl-annotation-label ${annotation.type}`;
+      label.textContent = annotation.type === 'relevant' ? 'R' : 'A';
+      highlight.appendChild(label);
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Multi-node: highlight each part separately
+  try {
+    let inRange = false;
+    for (const { node, start, end } of textNodes) {
+      if (node === startNode) {
+        inRange = true;
+        wrapPartialNode(doc, node, startOffset, (node.textContent || '').length, annotation);
+      } else if (node === endNode) {
+        wrapPartialNode(doc, node, 0, endOffset, annotation);
+        break;
+      } else if (inRange) {
+        wrapPartialNode(doc, node, 0, (node.textContent || '').length, annotation);
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Wrap part of a text node in a highlight
+function wrapPartialNode(doc: Document, node: Node, start: number, end: number, annotation: TextAnnotation) {
+  const text = node.textContent || '';
+  if (start >= end || start >= text.length) return;
+
+  const range = doc.createRange();
+  range.setStart(node, start);
+  range.setEnd(node, Math.min(end, text.length));
+
+  const highlight = doc.createElement('mark');
+  highlight.className = `pl-highlight pl-${annotation.type}`;
+  highlight.dataset.annotationId = annotation.id;
+  highlight.dataset.annotationType = annotation.type;
+
+  try {
+    range.surroundContents(highlight);
+  } catch {
+    // If surroundContents fails, try extracting and inserting
+    const fragment = range.extractContents();
+    highlight.appendChild(fragment);
+    range.insertNode(highlight);
+  }
 }
 
 // Get annotation color
