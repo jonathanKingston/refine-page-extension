@@ -54,6 +54,7 @@ async function loadSnapshot(snapshotId: string) {
     }
 
     currentSnapshot = snapshot;
+    currentQuestionId = snapshot.questions.length > 0 ? snapshot.questions[0].id : null;
     updateUI();
   } catch (error) {
     console.error('Failed to load snapshot:', error);
@@ -81,6 +82,7 @@ function updateUI() {
     // Set up selection handling after iframe loads
     iframe.onload = () => {
       setupIframeSelection(iframe);
+      injectAnnotationStyles(iframe);
       renderAnnotationsInIframe(iframe);
     };
   }
@@ -100,8 +102,63 @@ function updateUI() {
   // Update evaluation form
   updateEvaluationForm();
 
+  // Update review notes
+  const notesInput = document.getElementById('review-notes') as HTMLTextAreaElement;
+  if (notesInput && currentSnapshot.reviewNotes) {
+    notesInput.value = currentSnapshot.reviewNotes;
+  }
+
   // Update snapshot navigation active state
   updateSnapshotNavActive();
+}
+
+// Inject annotation styles into iframe
+function injectAnnotationStyles(iframe: HTMLIFrameElement) {
+  const doc = iframe.contentDocument;
+  if (!doc) return;
+
+  const style = doc.createElement('style');
+  style.id = 'pl-annotation-styles';
+  style.textContent = `
+    .pl-highlight {
+      padding: 2px 0;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .pl-highlight:hover {
+      filter: brightness(0.9);
+    }
+    .pl-highlight.pl-relevant {
+      background-color: rgba(34, 197, 94, 0.4) !important;
+      border-bottom: 2px solid rgb(34, 197, 94);
+    }
+    .pl-highlight.pl-answer {
+      background-color: rgba(59, 130, 246, 0.4) !important;
+      border-bottom: 2px solid rgb(59, 130, 246);
+    }
+    .pl-highlight.pl-no_content {
+      background-color: rgba(156, 163, 175, 0.4) !important;
+      border-bottom: 2px solid rgb(156, 163, 175);
+    }
+    .pl-highlight.pl-selected {
+      outline: 3px solid #f59e0b;
+      outline-offset: 2px;
+    }
+    .pl-annotation-label {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 1px 4px;
+      border-radius: 3px;
+      margin-left: 2px;
+      vertical-align: super;
+      color: white;
+    }
+    .pl-annotation-label.relevant { background: rgb(34, 197, 94); }
+    .pl-annotation-label.answer { background: rgb(59, 130, 246); }
+  `;
+  doc.head?.appendChild(style);
 }
 
 // Setup text selection in iframe
@@ -195,6 +252,9 @@ function renderAnnotationsInIframe(iframe: HTMLIFrameElement) {
     }
   });
 
+  // Remove existing labels
+  doc.querySelectorAll('.pl-annotation-label').forEach(el => el.remove());
+
   // Add highlights for each annotation
   for (const annotation of currentSnapshot.annotations.text) {
     highlightText(doc, annotation);
@@ -203,7 +263,6 @@ function renderAnnotationsInIframe(iframe: HTMLIFrameElement) {
 
 // Highlight text in document
 function highlightText(doc: Document, annotation: TextAnnotation) {
-  // Simple implementation - find and highlight the text
   const walker = doc.createTreeWalker(
     doc.body,
     NodeFilter.SHOW_TEXT,
@@ -221,15 +280,23 @@ function highlightText(doc: Document, annotation: TextAnnotation) {
 
       const highlight = doc.createElement('mark');
       highlight.className = `pl-highlight pl-${annotation.type}`;
-      highlight.style.backgroundColor = getAnnotationColor(annotation.type);
-      highlight.style.padding = '2px';
-      highlight.style.borderRadius = '2px';
       highlight.dataset.annotationId = annotation.id;
+      highlight.dataset.annotationType = annotation.type;
+      highlight.title = `${annotation.type}: "${annotation.selectedText.substring(0, 50)}..."`;
 
       try {
         range.surroundContents(highlight);
+
+        // Add a small label showing the annotation type
+        const label = doc.createElement('span');
+        label.className = `pl-annotation-label ${annotation.type}`;
+        label.textContent = annotation.type === 'relevant' ? 'R' : 'A';
+        highlight.appendChild(label);
       } catch {
-        // Range may span multiple nodes
+        // Range may span multiple nodes - try alternative approach
+        const fragment = range.extractContents();
+        highlight.appendChild(fragment);
+        range.insertNode(highlight);
       }
       break;
     }
@@ -240,13 +307,32 @@ function highlightText(doc: Document, annotation: TextAnnotation) {
 function getAnnotationColor(type: AnnotationType): string {
   switch (type) {
     case 'relevant':
-      return 'rgba(34, 197, 94, 0.3)';
+      return 'rgba(34, 197, 94, 0.4)';
     case 'answer':
-      return 'rgba(59, 130, 246, 0.3)';
+      return 'rgba(59, 130, 246, 0.4)';
     case 'no_content':
-      return 'rgba(156, 163, 175, 0.3)';
+      return 'rgba(156, 163, 175, 0.4)';
     default:
-      return 'rgba(156, 163, 175, 0.3)';
+      return 'rgba(156, 163, 175, 0.4)';
+  }
+}
+
+// Scroll to and highlight annotation in iframe
+function scrollToAnnotation(annotationId: string) {
+  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+  const doc = iframe?.contentDocument;
+  if (!doc) return;
+
+  // Remove previous selection highlight
+  doc.querySelectorAll('.pl-highlight.pl-selected').forEach(el => {
+    el.classList.remove('pl-selected');
+  });
+
+  // Find and highlight the annotation
+  const highlight = doc.querySelector(`[data-annotation-id="${annotationId}"]`);
+  if (highlight) {
+    highlight.classList.add('pl-selected');
+    highlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }
 
@@ -332,12 +418,27 @@ function renderAnnotationList() {
       (a) => `
       <div class="annotation-item" data-id="${a.id}">
         <span class="type-indicator ${a.type}"></span>
-        <span class="annotation-text">${escapeHtml(a.selectedText)}</span>
+        <span class="annotation-text" title="${escapeHtml(a.selectedText)}">${escapeHtml(a.selectedText.substring(0, 40))}${a.selectedText.length > 40 ? '...' : ''}</span>
         <button class="annotation-delete" data-id="${a.id}" title="Delete">×</button>
       </div>
     `
     )
     .join('');
+
+  // Add click handlers to scroll to annotation
+  listEl.querySelectorAll('.annotation-item').forEach((item) => {
+    item.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).classList.contains('annotation-delete')) return;
+      const id = (item as HTMLElement).dataset.id;
+      if (id) {
+        // Highlight the item in the list
+        listEl.querySelectorAll('.annotation-item').forEach(i => i.classList.remove('selected'));
+        item.classList.add('selected');
+        // Scroll to in page
+        scrollToAnnotation(id);
+      }
+    });
+  });
 
   // Add delete handlers
   listEl.querySelectorAll('.annotation-delete').forEach((btn) => {
@@ -384,6 +485,11 @@ function updateStatusDisplay() {
 
 // Update evaluation form
 function updateEvaluationForm() {
+  // Clear all radios first
+  document.querySelectorAll('input[name="correctness"]').forEach((r) => (r as HTMLInputElement).checked = false);
+  document.querySelectorAll('input[name="in-page"]').forEach((r) => (r as HTMLInputElement).checked = false);
+  document.querySelectorAll('input[name="quality"]').forEach((r) => (r as HTMLInputElement).checked = false);
+
   if (!currentSnapshot || !currentQuestionId) return;
 
   const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
@@ -423,9 +529,43 @@ async function saveCurrentSnapshot() {
       id: currentSnapshot.id,
       updates: currentSnapshot,
     });
+    showNotification('Saved');
   } catch (error) {
     console.error('Failed to save snapshot:', error);
+    showNotification('Save failed', 'error');
   }
+}
+
+// Show notification
+function showNotification(message: string, type: 'success' | 'error' = 'success') {
+  // Check if notification container exists
+  let container = document.getElementById('notification-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'notification-container';
+    container.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 10000;';
+    document.body.appendChild(container);
+  }
+
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    padding: 12px 20px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    color: white;
+    font-size: 14px;
+    background: ${type === 'success' ? '#059669' : '#dc2626'};
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    animation: slideIn 0.3s ease;
+  `;
+  notification.textContent = message;
+  container.appendChild(notification);
+
+  setTimeout(() => {
+    notification.style.opacity = '0';
+    notification.style.transition = 'opacity 0.3s';
+    setTimeout(() => notification.remove(), 300);
+  }, 2000);
 }
 
 // Load all snapshots for navigation
@@ -528,12 +668,142 @@ function addQuestion() {
 
   clearQuestionForm();
   saveCurrentSnapshot();
+
+  // Focus the query input
+  const queryInput = document.getElementById('query-input') as HTMLTextAreaElement;
+  queryInput?.focus();
+}
+
+// Set tool
+function setTool(tool: 'select' | AnnotationType) {
+  currentTool = tool;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector(`.tool-btn[data-tool="${tool}"]`);
+  btn?.classList.add('active');
+}
+
+// Set evaluation value
+function setEvaluationValue(name: string, value: string) {
+  if (!currentSnapshot || !currentQuestionId) return;
+  const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+  if (!question) return;
+
+  const radio = document.querySelector(`input[name="${name}"][value="${value}"]`) as HTMLInputElement;
+  if (radio) {
+    radio.checked = true;
+
+    if (name === 'correctness') {
+      question.evaluation.answerCorrectness = value as AnswerCorrectness;
+    } else if (name === 'in-page') {
+      question.evaluation.answerInPage = value as AnswerInPage;
+    } else if (name === 'quality') {
+      question.evaluation.pageQuality = value as PageQuality;
+    }
+
+    saveCurrentSnapshot();
+  }
+}
+
+// Setup keyboard shortcuts
+function setupKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    // Don't trigger shortcuts when typing in inputs
+    if ((e.target as HTMLElement).tagName === 'INPUT' ||
+        (e.target as HTMLElement).tagName === 'TEXTAREA' ||
+        (e.target as HTMLElement).tagName === 'SELECT') {
+      return;
+    }
+
+    // Annotation tools
+    if (e.key === '1' || e.key === 'r') {
+      e.preventDefault();
+      setTool('relevant');
+    } else if (e.key === '2' || e.key === 'a') {
+      e.preventDefault();
+      setTool('answer');
+    } else if (e.key === '3') {
+      e.preventDefault();
+      setTool('no_content');
+    } else if (e.key === 'Escape' || e.key === '0' || e.key === 's') {
+      e.preventDefault();
+      setTool('select');
+    }
+
+    // Evaluation shortcuts (when a question is selected)
+    if (currentQuestionId) {
+      // Answer correctness
+      if (e.key === 'c') {
+        e.preventDefault();
+        setEvaluationValue('correctness', 'correct');
+      } else if (e.key === 'i') {
+        e.preventDefault();
+        setEvaluationValue('correctness', 'incorrect');
+      } else if (e.key === 'p') {
+        e.preventDefault();
+        setEvaluationValue('correctness', 'partial');
+      }
+
+      // Answer in page
+      if (e.key === 'y') {
+        e.preventDefault();
+        setEvaluationValue('in-page', 'yes');
+      } else if (e.key === 'n') {
+        e.preventDefault();
+        setEvaluationValue('in-page', 'no');
+      }
+
+      // Page quality
+      if (e.key === 'g') {
+        e.preventDefault();
+        setEvaluationValue('quality', 'good');
+      } else if (e.key === 'b') {
+        e.preventDefault();
+        setEvaluationValue('quality', 'broken');
+      }
+    }
+
+    // Other shortcuts
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === 's') {
+        e.preventDefault();
+        saveCurrentSnapshot();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        // Approve and go to next
+        if (currentSnapshot) {
+          currentSnapshot.status = 'approved';
+          updateStatusDisplay();
+          saveCurrentSnapshot();
+          loadAllSnapshots();
+          // Load next pending
+          const nextPending = allSnapshots.find(s => s.status === 'pending' && s.id !== currentSnapshot?.id);
+          if (nextPending) {
+            loadSnapshot(nextPending.id);
+          }
+        }
+      }
+    }
+
+    // Zoom
+    if (e.key === '+' || e.key === '=') {
+      e.preventDefault();
+      zoomLevel = Math.min(200, zoomLevel + 10);
+      applyZoom();
+    } else if (e.key === '-') {
+      e.preventDefault();
+      zoomLevel = Math.max(50, zoomLevel - 10);
+      applyZoom();
+    }
+  });
 }
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   const params = getUrlParams();
   const snapshotId = params.get('id');
+
+  // Setup keyboard shortcuts
+  setupKeyboardShortcuts();
 
   // Load snapshot list
   await loadAllSnapshots();
@@ -549,9 +819,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Tool buttons
   document.querySelectorAll('.tool-btn[data-tool]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentTool = (btn as HTMLElement).dataset.tool as typeof currentTool;
+      setTool((btn as HTMLElement).dataset.tool as typeof currentTool);
     });
   });
 

@@ -463,6 +463,17 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.annotation-item:hover {
+  background: var(--color-bg);
+}
+
+.annotation-item.selected {
+  background: #fef3c7;
+  border-left: 3px solid #f59e0b;
 }
 
 .annotation-item:last-child {
@@ -705,4 +716,27 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
+}
+
+/* Notification animations */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Keyboard shortcut hints */
+.shortcut-hint {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-left: 4px;
+  padding: 1px 4px;
+  background: var(--color-bg);
+  border-radius: 3px;
+  font-family: monospace;
 }
