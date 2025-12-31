@@ -100,17 +100,24 @@ async function importData(data: ExportData): Promise<{ imported: number; skipped
   return { imported, skipped };
 }
 
+// Known message types that we handle
+const KNOWN_MESSAGE_TYPES = [
+  'GET_ALL_SNAPSHOTS',
+  'GET_SNAPSHOT',
+  'SAVE_SNAPSHOT',
+  'UPDATE_SNAPSHOT',
+  'DELETE_SNAPSHOT',
+  'EXPORT_DATA',
+  'IMPORT_DATA',
+  'OPEN_VIEWER',
+  'CAPTURE_PAGE',
+];
+
 // Message handlers
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Ignore messages without a type or from SingleFile internal messaging
-  if (!message || !message.type) {
-    return false;
-  }
-
-  // Ignore SingleFile internal messages (lazy loading coordination)
-  const singleFileMessages = ['idleTimeout', 'maxTimeout', 'loadDeferredImages'];
-  if (singleFileMessages.includes(message.type)) {
-    return false;
+  // Only handle messages we recognize - ignore everything else
+  if (!message || !message.type || !KNOWN_MESSAGE_TYPES.includes(message.type)) {
+    return false; // Don't send async response for unknown messages
   }
 
   const handleMessage = async () => {
@@ -139,13 +146,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return importData(message.payload.data);
 
       case 'OPEN_VIEWER':
-        // Open the viewer in a new tab with the snapshot ID
         const viewerUrl = chrome.runtime.getURL(`viewer.html?id=${message.payload.snapshotId}`);
         await chrome.tabs.create({ url: viewerUrl });
         return { success: true };
 
       case 'CAPTURE_PAGE':
-        // Send message to content script to capture the page
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab?.id) {
           const response = await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_PAGE' });
@@ -154,17 +159,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         throw new Error('No active tab found');
 
       default:
-        // Log unknown messages for debugging but don't throw
-        console.warn('Unknown message type:', message.type);
         return { error: `Unknown message type: ${message.type}` };
     }
   };
 
   handleMessage()
-    .then(sendResponse)
+    .then((result) => {
+      try {
+        sendResponse(result);
+      } catch {
+        // Channel may have closed - ignore
+      }
+    })
     .catch((error) => {
       console.error('Background script error:', error);
-      sendResponse({ error: error.message });
+      try {
+        sendResponse({ error: error.message });
+      } catch {
+        // Channel may have closed - ignore
+      }
     });
 
   return true; // Indicates async response
