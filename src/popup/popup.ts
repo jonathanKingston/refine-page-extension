@@ -3,6 +3,7 @@
  */
 
 import type { Snapshot, ExportData, ExportedSnapshot } from '@/types';
+import JSZip from 'jszip';
 
 // Direct storage access functions to bypass message size limits
 async function getSnapshotIndex(): Promise<string[]> {
@@ -179,7 +180,7 @@ async function capturePage() {
   }
 }
 
-// Export all data - uses direct storage access to bypass message size limits
+// Export all data as ZIP - uses direct storage access to bypass message size limits
 async function exportData() {
   try {
     showStatus('Exporting data...', 'loading');
@@ -188,40 +189,95 @@ async function exportData() {
     const snapshots = await getAllSnapshotsFromStorage();
     const baseViewerUrl = chrome.runtime.getURL('viewer.html');
 
-    // Add viewer URLs to each snapshot
-    const exportedSnapshots: ExportedSnapshot[] = snapshots.map((snapshot) => ({
-      ...snapshot,
-      viewerUrl: `${baseViewerUrl}?id=${snapshot.id}`,
-    }));
+    // Create ZIP file
+    const zip = new JSZip();
+    const htmlFolder = zip.folder('html');
 
-    const data: ExportData = {
+    // Create index with metadata (without HTML content)
+    const indexSnapshots = snapshots.map((snapshot) => {
+      // Extract everything except the HTML for the index
+      const { html, ...metadata } = snapshot;
+      return {
+        ...metadata,
+        htmlFile: `html/${snapshot.id}.html`,
+        viewerUrl: `${baseViewerUrl}?id=${snapshot.id}`,
+      };
+    });
+
+    const indexData: ExportData = {
       version: '1.0.0',
       exportedAt: new Date().toISOString(),
       extensionId: chrome.runtime.id,
-      snapshots: exportedSnapshots,
+      snapshots: indexSnapshots as ExportedSnapshot[],
     };
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    // Add index.json to ZIP
+    zip.file('index.json', JSON.stringify(indexData, null, 2));
+
+    // Add each snapshot's HTML as a separate file
+    for (const snapshot of snapshots) {
+      htmlFolder?.file(`${snapshot.id}.html`, snapshot.html);
+    }
+
+    // Generate ZIP blob
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = `page-labeller-export-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `page-labeller-export-${new Date().toISOString().split('T')[0]}.zip`;
     a.click();
 
     URL.revokeObjectURL(url);
-    showStatus(`Exported ${data.snapshots.length} snapshots`, 'success');
+    showStatus(`Exported ${snapshots.length} snapshots`, 'success');
   } catch (error) {
     showStatus(`Export failed: ${(error as Error).message}`, 'error');
   }
 }
 
-// Import data
+// Import data - supports both ZIP (new) and JSON (legacy) formats
 async function importData(file: File) {
   try {
     showStatus('Importing data...', 'loading');
-    const text = await file.text();
-    const data = JSON.parse(text) as ExportData;
+
+    let data: ExportData;
+
+    if (file.name.endsWith('.zip')) {
+      // Handle ZIP format
+      const zip = await JSZip.loadAsync(file);
+
+      // Read index.json
+      const indexFile = zip.file('index.json');
+      if (!indexFile) {
+        throw new Error('Invalid ZIP: missing index.json');
+      }
+      const indexJson = await indexFile.async('string');
+      data = JSON.parse(indexJson) as ExportData;
+
+      // Reconstruct snapshots with HTML content
+      const snapshotsWithHtml: Snapshot[] = [];
+      for (const snapshotMeta of data.snapshots) {
+        const meta = snapshotMeta as ExportedSnapshot & { htmlFile?: string };
+        const htmlFile = meta.htmlFile || `html/${meta.id}.html`;
+        const htmlZipFile = zip.file(htmlFile);
+
+        if (htmlZipFile) {
+          const html = await htmlZipFile.async('string');
+          snapshotsWithHtml.push({
+            ...meta,
+            html,
+          } as Snapshot);
+        } else {
+          console.warn(`Missing HTML file for snapshot ${meta.id}`);
+        }
+      }
+
+      data.snapshots = snapshotsWithHtml as ExportedSnapshot[];
+    } else {
+      // Handle legacy JSON format
+      const text = await file.text();
+      data = JSON.parse(text) as ExportData;
+    }
 
     if (!data.version || !data.snapshots) {
       throw new Error('Invalid export file format');

@@ -24,6 +24,14 @@ import '@annotorious/annotorious/annotorious.css';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyAnnotator = any;
 
+// Strip CSP meta tags from HTML to allow our annotation scripts to run
+function stripCspFromHtml(html: string): string {
+  // Remove Content-Security-Policy meta tags
+  return html
+    .replace(/<meta[^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '')
+    .replace(/<meta[^>]*content=["'][^"']*script-src[^"']*["'][^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '');
+}
+
 // Lightweight snapshot summary (without HTML) for listing
 interface SnapshotSummary {
   id: string;
@@ -159,8 +167,11 @@ function updateUI() {
   // Load HTML into iframe
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
   if (iframe) {
+    // Strip CSP meta tags from HTML to allow our injected scripts to run
+    const htmlWithoutCsp = stripCspFromHtml(currentSnapshot.html);
+
     // Create blob URL for the HTML content
-    const blob = new Blob([currentSnapshot.html], { type: 'text/html' });
+    const blob = new Blob([htmlWithoutCsp], { type: 'text/html' });
     const blobUrl = URL.createObjectURL(blob);
     iframe.src = blobUrl;
 
