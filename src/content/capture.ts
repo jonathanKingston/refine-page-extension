@@ -118,10 +118,10 @@ function makeInert(html: string): string {
   meta.setAttribute('data-captured-at', new Date().toISOString());
   doc.head?.appendChild(meta);
 
-  // Add strict CSP meta tag
+  // Add strict CSP meta tag - allow inline styles since SingleFile inlines everything
   const cspMeta = doc.createElement('meta');
   cspMeta.setAttribute('http-equiv', 'Content-Security-Policy');
-  cspMeta.setAttribute('content', "default-src 'self' data: blob:; script-src 'none'; frame-src 'none'; object-src 'none';");
+  cspMeta.setAttribute('content', "default-src 'self' data: blob:; script-src 'none'; style-src 'unsafe-inline' data: blob:; font-src data: blob:; img-src 'self' data: blob:; frame-src 'none'; object-src 'none';");
   doc.head?.insertBefore(cspMeta, doc.head.firstChild);
 
   // Add inert styles
