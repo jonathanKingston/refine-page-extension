@@ -636,6 +636,8 @@ function convertToW3CText(annotation: TextAnnotation): unknown {
       annotation: annotation.id,
       selector: [{
         quote: annotation.selectedText,
+        start: annotation.startOffset,
+        end: annotation.endOffset,
       }]
     }
   };
@@ -649,15 +651,21 @@ function convertFromW3CText(w3c: any, type: AnnotationType): TextAnnotation | nu
     // Handle Recogito v3 format which uses different field names
     const selectors = w3c.target?.selector;
     let selectedText = '';
+    let startOffset = 0;
+    let endOffset = 0;
 
     if (Array.isArray(selectors) && selectors.length > 0) {
       // Recogito v3 format - selector array with quote/start/end
       const selector = selectors[0];
       // Recogito uses 'quote' field for the selected text
       selectedText = selector.quote || selector.exact || '';
+      startOffset = selector.start || 0;
+      endOffset = selector.end || 0;
     } else if (selectors?.quote) {
       // Single selector with quote
       selectedText = selectors.quote;
+      startOffset = selectors.start || 0;
+      endOffset = selectors.end || 0;
     } else if (selectors?.exact) {
       // W3C format with exact
       selectedText = selectors.exact;
@@ -671,12 +679,12 @@ function convertFromW3CText(w3c: any, type: AnnotationType): TextAnnotation | nu
     const annotation: TextAnnotation = {
       id: w3c.id || generateId(),
       type,
-      startOffset: 0,
-      endOffset: 0,
+      startOffset,
+      endOffset,
       selectedText,
       selector: {
         type: 'text-position',
-        value: '0:0',
+        value: `${startOffset}:${endOffset}`,
       },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
