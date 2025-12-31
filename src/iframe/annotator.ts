@@ -177,6 +177,33 @@ function reapplyAllStyles() {
   });
 }
 
+// Apply custom styling to region (image) annotations
+function applyRegionAnnotationStyle(annotationId: string, tool: string) {
+  // Annotorious uses SVG elements with data-annotation attribute
+  setTimeout(() => {
+    // Find annotation elements by data attribute
+    const elements = document.querySelectorAll(`[data-annotation="${annotationId}"], g[data-id="${annotationId}"]`);
+
+    if (elements.length === 0) {
+      // Try finding in the SVG layer - Annotorious uses g elements with the annotation ID
+      const allGroups = document.querySelectorAll('.a9s-annotationlayer g');
+      allGroups.forEach(g => {
+        // Check if this group's annotation matches
+        const dataId = g.getAttribute('data-id') || g.id;
+        if (dataId === annotationId) {
+          g.classList.add('a9s-annotation', `annotation-${tool}`);
+          console.log('[Iframe Annotator] Applied style to region annotation via group search:', annotationId);
+        }
+      });
+    } else {
+      elements.forEach(el => {
+        el.classList.add(`annotation-${tool}`);
+      });
+      console.log('[Iframe Annotator] Applied style to region annotation:', annotationId, 'tool:', tool);
+    }
+  }, 50);
+}
+
 
 // MutationObserver to re-apply styles when Recogito re-renders
 let styleObserver: MutationObserver | null = null;
@@ -327,13 +354,12 @@ function initializeImageAnnotators(container: HTMLElement) {
       const imgId = img.id || `img-${index}`;
       img.id = imgId;
 
-      // Capture computed dimensions before Annotorious wraps the image
+      // Capture original dimensions and display style before Annotorious wraps
       const rect = img.getBoundingClientRect();
       const computedStyle = window.getComputedStyle(img);
-      const width = rect.width > 0 ? rect.width :
-                    (computedStyle.width && computedStyle.width !== 'auto' ? parseFloat(computedStyle.width) : img.naturalWidth);
-      const height = rect.height > 0 ? rect.height :
-                     (computedStyle.height && computedStyle.height !== 'auto' ? parseFloat(computedStyle.height) : img.naturalHeight);
+      const originalWidth = rect.width;
+      const originalHeight = rect.height;
+      const originalDisplay = computedStyle.display;
 
       // Store original parent for reference
       const originalParent = img.parentElement;
@@ -342,22 +368,33 @@ function initializeImageAnnotators(container: HTMLElement) {
         drawingEnabled: currentTool !== 'select',
       });
 
-      // Fix wrapper dimensions - Annotorious wraps the image in a container
+      // Check if Annotorious wrapped the image and if dimensions collapsed
       const wrapper = img.parentElement;
-      if (wrapper && wrapper !== originalParent && width > 0 && height > 0) {
-        wrapper.style.cssText = `
-          display: inline-block !important;
-          width: ${width}px !important;
-          height: ${height}px !important;
-          position: relative !important;
-          max-width: 100% !important;
-        `;
-        img.style.cssText = `
-          width: 100% !important;
-          height: 100% !important;
-          object-fit: contain !important;
-          display: block !important;
-        `;
+      if (wrapper && wrapper !== originalParent) {
+        const wrapperRect = wrapper.getBoundingClientRect();
+
+        // Only apply explicit dimensions if the wrapper collapsed (much smaller than original)
+        const collapsed = wrapperRect.width < originalWidth * 0.5 || wrapperRect.height < originalHeight * 0.5;
+
+        if (collapsed && originalWidth > 0 && originalHeight > 0) {
+          console.log('[Iframe Annotator] Fixing collapsed wrapper for:', imgId, 'original:', originalWidth, 'x', originalHeight);
+          wrapper.style.cssText = `
+            display: ${originalDisplay === 'inline' ? 'inline-block' : originalDisplay} !important;
+            width: ${originalWidth}px !important;
+            height: ${originalHeight}px !important;
+            position: relative !important;
+            max-width: 100% !important;
+          `;
+          img.style.cssText = `
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: contain !important;
+            display: block !important;
+          `;
+        } else {
+          // Just ensure the wrapper has position relative for the annotation layer
+          wrapper.style.position = 'relative';
+        }
       }
 
       // Handle region annotation creation
@@ -366,7 +403,14 @@ function initializeImageAnnotators(container: HTMLElement) {
 
         console.log('[Iframe Annotator] Region annotation created:', annotation);
 
+        const ann = annotation as { id?: string };
         regionAnnotationIndex++;
+
+        // Apply styling to the annotation element
+        if (ann.id) {
+          applyRegionAnnotationStyle(ann.id, currentTool);
+        }
+
         const serialized = serializeAnnotation(annotation);
 
         window.parent.postMessage({
@@ -649,6 +693,55 @@ function injectAnnotationStyles() {
     .has-index.pl-selected::before {
       background: #f59e0b !important;
     }
+
+    /* ========================================
+       Annotorious (Image Annotation) Styles
+       ======================================== */
+
+    /* Annotorious layer container */
+    .a9s-annotationlayer {
+      pointer-events: auto !important;
+      z-index: 100 !important;
+    }
+
+    /* Default annotation shape styling */
+    .a9s-annotation .a9s-inner {
+      fill: rgba(34, 197, 94, 0.2) !important;
+      stroke: rgb(34, 197, 94) !important;
+      stroke-width: 2px !important;
+    }
+
+    /* Relevant annotation (green) */
+    .a9s-annotation.annotation-relevant .a9s-inner {
+      fill: rgba(34, 197, 94, 0.25) !important;
+      stroke: rgb(34, 197, 94) !important;
+      stroke-width: 2px !important;
+    }
+
+    /* Answer annotation (blue) */
+    .a9s-annotation.annotation-answer .a9s-inner {
+      fill: rgba(59, 130, 246, 0.25) !important;
+      stroke: rgb(59, 130, 246) !important;
+      stroke-width: 2px !important;
+    }
+
+    /* Hover effect on image annotations */
+    .a9s-annotation:hover .a9s-inner {
+      stroke-width: 3px !important;
+      filter: brightness(0.9) !important;
+    }
+
+    /* Selected image annotation */
+    .a9s-annotation.selected .a9s-inner,
+    .a9s-annotation.a9s-selected .a9s-inner {
+      stroke: #f59e0b !important;
+      stroke-width: 3px !important;
+    }
+
+    /* Drawing/creation mode */
+    .a9s-annotation.a9s-drawing .a9s-inner {
+      stroke-dasharray: 5, 5 !important;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -677,12 +770,12 @@ function handleMessage(event: MessageEvent) {
         initializeAnnotator(container);
 
         // Initialize image annotators after a brief delay to allow images to load
+        // Send ANNOTATOR_READY only after both text and image annotators are ready
         setTimeout(() => {
           initializeImageAnnotators(container);
+          // Signal ready after all annotators are initialized
+          window.parent.postMessage({ type: 'ANNOTATOR_READY' }, '*');
         }, 100);
-
-        // Signal ready
-        window.parent.postMessage({ type: 'ANNOTATOR_READY' }, '*');
       }
       break;
     }
@@ -784,13 +877,18 @@ function handleMessage(event: MessageEvent) {
         type?: string;
       }>;
       console.log('[Iframe Annotator] LOAD_REGION_ANNOTATIONS received:', regionAnnotations);
+      console.log('[Iframe Annotator] Available image annotators:', Array.from(imageAnnotators.keys()));
 
       if (regionAnnotations?.length) {
         regionAnnotationIndex = regionAnnotations.length;
 
         regionAnnotations.forEach(ann => {
           const imageAnnotator = imageAnnotators.get(ann.imageId);
-          if (imageAnnotator && ann.id) {
+          if (!imageAnnotator) {
+            console.warn('[Iframe Annotator] No image annotator found for:', ann.imageId);
+            return;
+          }
+          if (ann.id) {
             try {
               // Create W3C format annotation for Annotorious
               const w3cAnnotation = {
@@ -813,6 +911,11 @@ function handleMessage(event: MessageEvent) {
               };
               imageAnnotator.addAnnotation(w3cAnnotation);
               console.log('[Iframe Annotator] Loaded region annotation:', ann.id);
+
+              // Apply styling after a short delay to let Annotorious render
+              if (ann.type) {
+                applyRegionAnnotationStyle(ann.id, ann.type);
+              }
             } catch (e) {
               console.warn('[Iframe Annotator] Error loading region annotation:', e);
             }

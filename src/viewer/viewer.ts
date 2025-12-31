@@ -670,28 +670,73 @@ function convertFromW3CText(w3c: any, type: AnnotationType): TextAnnotation | nu
 }
 
 // Convert W3C region annotation to our format
-function convertFromW3CRegion(w3c: any, type: AnnotationType, targetSelector: string): RegionAnnotation | null {
+function convertFromW3CRegion(w3c: unknown, type: AnnotationType, targetSelector: string): RegionAnnotation | null {
   try {
-    const selector = w3c.target?.selector;
-    if (!selector) return null;
+    console.log('Converting region annotation:', JSON.stringify(w3c, null, 2));
 
-    // Parse xywh fragment
+    const annotation = w3c as {
+      id?: string;
+      target?: {
+        selector?: unknown;
+      };
+    };
+
+    const selector = annotation.target?.selector;
+    if (!selector) {
+      console.warn('No selector found in region annotation');
+      return null;
+    }
+
+    // Parse bounds from different selector formats
     let bounds = { x: 0, y: 0, width: 0, height: 0 };
 
-    if (selector.type === 'FragmentSelector') {
-      const match = selector.value?.match(/xywh=(?:percent:)?([^,]+),([^,]+),([^,]+),([^,]+)/);
-      if (match) {
-        bounds = {
-          x: parseFloat(match[1]),
-          y: parseFloat(match[2]),
-          width: parseFloat(match[3]),
-          height: parseFloat(match[4]),
-        };
+    // Handle array of selectors (Annotorious v3 format)
+    const selectorArray = Array.isArray(selector) ? selector : [selector];
+
+    for (const sel of selectorArray) {
+      const s = sel as { type?: string; value?: string; geometry?: { x: number; y: number; width: number; height: number; bounds?: { minX: number; minY: number; maxX: number; maxY: number } } };
+
+      // FragmentSelector with xywh format
+      if (s.type === 'FragmentSelector' && s.value) {
+        const match = s.value.match(/xywh=(?:percent:)?([^,]+),([^,]+),([^,]+),([^,]+)/);
+        if (match) {
+          bounds = {
+            x: parseFloat(match[1]),
+            y: parseFloat(match[2]),
+            width: parseFloat(match[3]),
+            height: parseFloat(match[4]),
+          };
+          break;
+        }
+      }
+
+      // SvgSelector - extract from geometry if available
+      if (s.type === 'SvgSelector' && s.geometry) {
+        if (s.geometry.bounds) {
+          // Use bounds object
+          bounds = {
+            x: s.geometry.bounds.minX,
+            y: s.geometry.bounds.minY,
+            width: s.geometry.bounds.maxX - s.geometry.bounds.minX,
+            height: s.geometry.bounds.maxY - s.geometry.bounds.minY,
+          };
+        } else {
+          // Use direct geometry
+          bounds = {
+            x: s.geometry.x || 0,
+            y: s.geometry.y || 0,
+            width: s.geometry.width || 0,
+            height: s.geometry.height || 0,
+          };
+        }
+        break;
       }
     }
 
+    console.log('Extracted bounds:', bounds);
+
     return {
-      id: w3c.id || generateId(),
+      id: annotation.id || generateId(),
       type,
       bounds,
       targetSelector,
