@@ -15,7 +15,45 @@ interface AnnotatorMessage {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let annotator: any = null;
 let currentTool: 'select' | 'relevant' | 'answer' = 'select';
-let isReady = false;
+
+// Color mapping for annotation types
+const ANNOTATION_COLORS: Record<string, string> = {
+  relevant: 'rgba(34, 197, 94, 0.4)',  // green
+  answer: 'rgba(59, 130, 246, 0.4)',    // blue
+};
+
+// Serialize annotation to remove non-cloneable objects (like Range)
+function serializeAnnotation(annotation: unknown): unknown {
+  // Deep clone by converting to JSON and back - removes non-serializable objects
+  try {
+    return JSON.parse(JSON.stringify(annotation));
+  } catch (e) {
+    console.warn('[Iframe Annotator] Failed to serialize annotation:', e);
+    // Manual extraction of key fields
+    const ann = annotation as Record<string, unknown>;
+    return {
+      '@context': ann['@context'],
+      type: ann.type,
+      id: ann.id,
+      body: ann.body,
+      target: ann.target,
+    };
+  }
+}
+
+// Apply custom styling to annotations based on tool type
+function applyAnnotationStyle(annotationId: string, tool: string) {
+  // Find the annotation elements and apply color
+  setTimeout(() => {
+    const color = ANNOTATION_COLORS[tool] || ANNOTATION_COLORS.relevant;
+    // Recogito uses data attributes on highlight spans
+    const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
+    elements.forEach(el => {
+      (el as HTMLElement).style.backgroundColor = color;
+      el.classList.add(`annotation-${tool}`);
+    });
+  }, 50);
+}
 
 // Initialize annotator on the content
 function initializeAnnotator(container: HTMLElement) {
@@ -29,6 +67,9 @@ function initializeAnnotator(container: HTMLElement) {
       console.warn('[Iframe Annotator] Error destroying previous annotator:', e);
     }
   }
+
+  // Add custom styles for annotation colors
+  injectAnnotationStyles();
 
   annotator = createTextAnnotator(container, {
     annotatingEnabled: currentTool !== 'select',
@@ -46,9 +87,18 @@ function initializeAnnotator(container: HTMLElement) {
 
     console.log('[Iframe Annotator] Annotation created:', annotation);
 
+    // Serialize to remove non-cloneable objects
+    const serialized = serializeAnnotation(annotation);
+    const ann = annotation as { id?: string };
+
+    // Apply styling
+    if (ann.id) {
+      applyAnnotationStyle(ann.id, currentTool);
+    }
+
     window.parent.postMessage({
       type: 'ANNOTATION_CREATED',
-      payload: { annotation, tool: currentTool }
+      payload: { annotation: serialized, tool: currentTool }
     }, '*');
   });
 
@@ -56,11 +106,41 @@ function initializeAnnotator(container: HTMLElement) {
   annotator.on('deleteAnnotation', (annotation: unknown) => {
     console.log('[Iframe Annotator] Annotation deleted:', annotation);
 
+    const serialized = serializeAnnotation(annotation);
+
     window.parent.postMessage({
       type: 'ANNOTATION_DELETED',
-      payload: { annotation }
+      payload: { annotation: serialized }
     }, '*');
   });
+}
+
+// Inject custom styles for annotation colors
+function injectAnnotationStyles() {
+  if (document.getElementById('pl-annotation-styles')) return;
+
+  const style = document.createElement('style');
+  style.id = 'pl-annotation-styles';
+  style.textContent = `
+    /* Custom annotation colors */
+    .annotation-relevant,
+    [data-annotation].annotation-relevant {
+      background-color: rgba(34, 197, 94, 0.4) !important;
+    }
+    .annotation-answer,
+    [data-annotation].annotation-answer {
+      background-color: rgba(59, 130, 246, 0.4) !important;
+    }
+    /* Recogito highlight overrides */
+    .r6o-annotation {
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .r6o-annotation:hover {
+      filter: brightness(0.9);
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 // Handle messages from parent
@@ -103,10 +183,24 @@ function handleMessage(event: MessageEvent) {
 
     case 'LOAD_ANNOTATIONS':
       if (annotator) {
-        const annotations = message.payload as unknown[];
+        const annotations = message.payload as Array<{
+          id?: string;
+          body?: Array<{ value?: string }>;
+        }>;
         if (annotations?.length) {
           annotator.setAnnotations(annotations);
           console.log('[Iframe Annotator] Loaded', annotations.length, 'annotations');
+          // Apply styles to loaded annotations
+          setTimeout(() => {
+            for (const ann of annotations) {
+              if (ann.id) {
+                // Extract type from body
+                const typeBody = ann.body?.find(b => b.value === 'relevant' || b.value === 'answer');
+                const tool = typeBody?.value || 'relevant';
+                applyAnnotationStyle(ann.id, tool);
+              }
+            }
+          }, 100);
         }
       }
       break;
