@@ -123,7 +123,7 @@ function copyStaticFiles() {
   manifest.web_accessible_resources[0].resources = [
     'viewer.html', 'viewer.js', 'viewer.css',
     'snapshot.html', 'snapshot.js',
-    'iframe-annotator.js'
+    'iframe.html', 'iframe-annotator.js'
   ];
 
   writeFileSync(join(distDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
@@ -142,6 +142,9 @@ function copyStaticFiles() {
   const snapshotHtml = readFileSync(join(srcDir, 'snapshot/snapshot.html'), 'utf-8')
     .replace('src="snapshot.ts"', 'src="snapshot.js"');
   writeFileSync(join(distDir, 'snapshot.html'), snapshotHtml);
+
+  // Copy iframe.html (used for annotation in iframe context)
+  copyFileSync(join(srcDir, 'iframe/iframe.html'), join(distDir, 'iframe.html'));
 
   // Copy CSS files
   if (existsSync(join(srcDir, 'popup/popup.css'))) {

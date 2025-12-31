@@ -2,7 +2,7 @@
  * Popup script for Page Labeller extension
  */
 
-import type { Snapshot, ExportData, ExportedSnapshot } from '@/types';
+import type { Snapshot, ExportData, ExportedSnapshot, ZipExportData, ZipIndexSnapshot } from '@/types';
 import JSZip from 'jszip';
 
 // Direct storage access functions to bypass message size limits
@@ -204,11 +204,11 @@ async function exportData() {
       };
     });
 
-    const indexData: ExportData = {
+    const indexData: ZipExportData = {
       version: '1.0.0',
       exportedAt: new Date().toISOString(),
       extensionId: chrome.runtime.id,
-      snapshots: indexSnapshots as ExportedSnapshot[],
+      snapshots: indexSnapshots as ZipIndexSnapshot[],
     };
 
     // Add index.json to ZIP
@@ -252,27 +252,33 @@ async function importData(file: File) {
         throw new Error('Invalid ZIP: missing index.json');
       }
       const indexJson = await indexFile.async('string');
-      data = JSON.parse(indexJson) as ExportData;
+      const zipData = JSON.parse(indexJson) as ZipExportData;
 
       // Reconstruct snapshots with HTML content
-      const snapshotsWithHtml: Snapshot[] = [];
-      for (const snapshotMeta of data.snapshots) {
-        const meta = snapshotMeta as ExportedSnapshot & { htmlFile?: string };
-        const htmlFile = meta.htmlFile || `html/${meta.id}.html`;
+      const snapshotsWithHtml: ExportedSnapshot[] = [];
+      for (const snapshotMeta of zipData.snapshots) {
+        const htmlFile = snapshotMeta.htmlFile || `html/${snapshotMeta.id}.html`;
         const htmlZipFile = zip.file(htmlFile);
 
         if (htmlZipFile) {
           const html = await htmlZipFile.async('string');
+          // Reconstruct full snapshot with HTML
+          const { htmlFile: _, ...rest } = snapshotMeta;
           snapshotsWithHtml.push({
-            ...meta,
+            ...rest,
             html,
-          } as Snapshot);
+          } as ExportedSnapshot);
         } else {
-          console.warn(`Missing HTML file for snapshot ${meta.id}`);
+          console.warn(`Missing HTML file for snapshot ${snapshotMeta.id}`);
         }
       }
 
-      data.snapshots = snapshotsWithHtml as ExportedSnapshot[];
+      data = {
+        version: zipData.version,
+        exportedAt: zipData.exportedAt,
+        extensionId: zipData.extensionId,
+        snapshots: snapshotsWithHtml,
+      };
     } else {
       // Handle legacy JSON format
       const text = await file.text();

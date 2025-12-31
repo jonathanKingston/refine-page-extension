@@ -164,21 +164,20 @@ function updateUI() {
     titleEl.textContent = currentSnapshot.title || currentSnapshot.url;
   }
 
-  // Load HTML into iframe
+  // Load iframe with our annotator page
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
   if (iframe) {
-    // Strip CSP meta tags from HTML to allow our injected scripts to run
+    // Strip CSP meta tags from HTML
     const htmlWithoutCsp = stripCspFromHtml(currentSnapshot.html);
 
-    // Create blob URL for the HTML content
-    const blob = new Blob([htmlWithoutCsp], { type: 'text/html' });
-    const blobUrl = URL.createObjectURL(blob);
-    iframe.src = blobUrl;
+    // Use our iframe.html page which has the annotator script
+    const iframeUrl = chrome.runtime.getURL('iframe.html');
 
-    // Set up annotation handling after iframe loads
-    iframe.onload = () => {
-      initializeAnnotators(iframe);
-    };
+    // Set up message handling before loading iframe
+    setupIframeMessageHandler(iframe, htmlWithoutCsp);
+
+    // Load the iframe page
+    iframe.src = iframeUrl;
   }
 
   // Update question selector
@@ -209,6 +208,7 @@ function updateUI() {
 // Track if iframe annotator is ready
 let iframeAnnotatorReady = false;
 let pendingIframeMessages: Array<{type: string; payload?: unknown}> = [];
+let currentMessageHandler: ((event: MessageEvent) => void) | null = null;
 
 // Send message to iframe annotator
 function sendToIframe(iframe: HTMLIFrameElement, type: string, payload?: unknown) {
@@ -222,24 +222,20 @@ function sendToIframe(iframe: HTMLIFrameElement, type: string, payload?: unknown
   }
 }
 
-// Initialize annotation libraries on iframe content
-function initializeAnnotators(iframe: HTMLIFrameElement) {
-  const doc = iframe.contentDocument;
-  if (!doc || !currentSnapshot) return;
+// Set up message handler for iframe communication
+function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: string) {
+  console.log('Setting up iframe message handler');
 
-  console.log('Initializing annotators on iframe document:', doc);
-
-  // Reset iframe annotator state
+  // Reset state
   iframeAnnotatorReady = false;
   pendingIframeMessages = [];
 
-  // Inject annotation styles into iframe (for image annotator and manual highlights)
-  injectAnnotationStyles(doc);
+  // Remove previous handler if exists
+  if (currentMessageHandler) {
+    window.removeEventListener('message', currentMessageHandler);
+  }
 
-  // Inject the iframe annotator script (inline to avoid CSP issues)
-  injectAnnotatorScript(doc);
-
-  // Listen for messages from iframe annotator
+  // Create message handler
   const messageHandler = (event: MessageEvent) => {
     // Only accept messages from our iframe
     if (event.source !== iframe.contentWindow) return;
@@ -247,11 +243,21 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
     const message = event.data;
     if (!message?.type) return;
 
-    console.log('Message from iframe:', message.type, message.payload);
+    console.log('Message from iframe:', message.type);
 
     switch (message.type) {
+      case 'IFRAME_LOADED':
+        // Iframe is ready, send the HTML content
+        console.log('Iframe loaded, sending HTML content...');
+        iframe.contentWindow?.postMessage({
+          type: 'LOAD_HTML',
+          payload: { html: htmlContent }
+        }, '*');
+        break;
+
       case 'ANNOTATOR_READY':
         iframeAnnotatorReady = true;
+        console.log('Annotator ready');
         // Send any pending messages
         pendingIframeMessages.forEach(msg => {
           iframe.contentWindow?.postMessage(msg, '*');
@@ -263,6 +269,11 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
         if (currentSnapshot?.annotations.text.length) {
           const w3cAnnotations = currentSnapshot.annotations.text.map(a => convertToW3CText(a));
           sendToIframe(iframe, 'LOAD_ANNOTATIONS', w3cAnnotations);
+        }
+        // Initialize image annotators on the iframe content
+        const iframeDoc = iframe.contentDocument;
+        if (iframeDoc) {
+          initializeImageAnnotators(iframeDoc);
         }
         break;
 
@@ -276,41 +287,9 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
     }
   };
 
+  // Store and attach the handler
+  currentMessageHandler = messageHandler;
   window.addEventListener('message', messageHandler);
-
-  // Store handler for cleanup
-  (iframe as any)._messageHandler = messageHandler;
-
-  // Forward keyboard events from iframe to parent for shortcuts
-  doc.addEventListener('keydown', (e) => {
-    const clonedEvent = new KeyboardEvent('keydown', {
-      key: e.key,
-      code: e.code,
-      ctrlKey: e.ctrlKey,
-      shiftKey: e.shiftKey,
-      altKey: e.altKey,
-      metaKey: e.metaKey,
-      bubbles: true,
-    });
-    document.dispatchEvent(clonedEvent);
-  });
-
-  // Add click handler for annotation highlights to scroll sidebar
-  doc.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    const highlight = target.closest('[data-annotation], [data-id], [data-annotation-id], .pl-highlight, .r6o-annotation');
-    if (highlight) {
-      const annotationId = (highlight as HTMLElement).dataset.annotation ||
-                          (highlight as HTMLElement).dataset.id ||
-                          (highlight as HTMLElement).dataset.annotationId;
-      if (annotationId) {
-        scrollSidebarToAnnotation(annotationId);
-      }
-    }
-  });
-
-  // Initialize image annotators for each image
-  initializeImageAnnotators(doc);
 }
 
 // Handle annotation created from iframe
@@ -354,24 +333,6 @@ function handleAnnotationDeleted(payload: { annotation: unknown }) {
   updateAnnotationCounts();
   renderAnnotationList();
   saveCurrentSnapshot();
-}
-
-// Inject the annotator script inline into iframe
-async function injectAnnotatorScript(doc: Document) {
-  try {
-    // Fetch the pre-built iframe annotator script
-    const scriptUrl = chrome.runtime.getURL('iframe-annotator.js');
-    const response = await fetch(scriptUrl);
-    const scriptContent = await response.text();
-
-    // Create inline script element
-    const script = doc.createElement('script');
-    script.textContent = scriptContent;
-    doc.head.appendChild(script);
-    console.log('Iframe annotator script injected inline');
-  } catch (error) {
-    console.error('Failed to inject iframe annotator script:', error);
-  }
 }
 
 // Inject CSS for annotation styling into iframe

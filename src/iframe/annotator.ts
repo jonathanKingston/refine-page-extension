@@ -12,15 +12,31 @@ interface AnnotatorMessage {
   payload?: unknown;
 }
 
-// Initialize when DOM is ready
-function initialize() {
-  console.log('[Iframe Annotator] Initializing...');
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let annotator: any = null;
+let currentTool: 'select' | 'relevant' | 'answer' = 'select';
+let isReady = false;
 
-  let currentTool: 'select' | 'relevant' | 'answer' = 'select';
+// Initialize annotator on the content
+function initializeAnnotator(container: HTMLElement) {
+  console.log('[Iframe Annotator] Initializing annotator on container');
 
-  const annotator = createTextAnnotator(document.body, {
-    annotatingEnabled: false,
+  // Destroy existing annotator if any
+  if (annotator) {
+    try {
+      annotator.destroy();
+    } catch (e) {
+      console.warn('[Iframe Annotator] Error destroying previous annotator:', e);
+    }
+  }
+
+  annotator = createTextAnnotator(container, {
+    annotatingEnabled: currentTool !== 'select',
   });
+
+  if (currentTool !== 'select') {
+    annotator.setAnnotatingMode('CREATE_NEW');
+  }
 
   console.log('[Iframe Annotator] Text annotator created');
 
@@ -30,7 +46,6 @@ function initialize() {
 
     console.log('[Iframe Annotator] Annotation created:', annotation);
 
-    // Send to parent
     window.parent.postMessage({
       type: 'ANNOTATION_CREATED',
       payload: { annotation, tool: currentTool }
@@ -46,63 +61,67 @@ function initialize() {
       payload: { annotation }
     }, '*');
   });
+}
 
-  // Handle annotation selection
-  annotator.on('selectionChanged', (annotations: unknown[]) => {
-    window.parent.postMessage({
-      type: 'SELECTION_CHANGED',
-      payload: { annotations }
-    }, '*');
-  });
+// Handle messages from parent
+function handleMessage(event: MessageEvent) {
+  const message = event.data as AnnotatorMessage;
+  if (!message?.type) return;
 
-  // Listen for messages from parent
-  window.addEventListener('message', (event) => {
-    const message = event.data as AnnotatorMessage;
-    if (!message?.type) return;
+  console.log('[Iframe Annotator] Received message:', message.type);
 
-    console.log('[Iframe Annotator] Received message:', message.type);
+  switch (message.type) {
+    case 'LOAD_HTML': {
+      // Load HTML content into the page
+      const { html } = message.payload as { html: string };
+      const container = document.getElementById('content-container');
+      if (container && html) {
+        // Insert the HTML content
+        container.innerHTML = html;
+        console.log('[Iframe Annotator] HTML content loaded');
 
-    switch (message.type) {
-      case 'SET_TOOL':
-        currentTool = message.payload as 'select' | 'relevant' | 'answer';
+        // Initialize annotator on the loaded content
+        initializeAnnotator(container);
+
+        // Signal ready
+        window.parent.postMessage({ type: 'ANNOTATOR_READY' }, '*');
+      }
+      break;
+    }
+
+    case 'SET_TOOL':
+      currentTool = message.payload as 'select' | 'relevant' | 'answer';
+      if (annotator) {
         const enabled = currentTool !== 'select';
         annotator.setAnnotatingEnabled(enabled);
         if (enabled) {
           annotator.setAnnotatingMode('CREATE_NEW');
         }
         console.log('[Iframe Annotator] Tool set to:', currentTool, 'enabled:', enabled);
-        break;
+      }
+      break;
 
-      case 'LOAD_ANNOTATIONS':
+    case 'LOAD_ANNOTATIONS':
+      if (annotator) {
         const annotations = message.payload as unknown[];
         if (annotations?.length) {
           annotator.setAnnotations(annotations);
           console.log('[Iframe Annotator] Loaded', annotations.length, 'annotations');
         }
-        break;
+      }
+      break;
 
-      case 'CLEAR_ANNOTATIONS':
+    case 'CLEAR_ANNOTATIONS':
+      if (annotator) {
         annotator.clearAnnotations();
-        break;
-
-      case 'ADD_ANNOTATION':
-        annotator.addAnnotation(message.payload);
-        break;
-
-      case 'REMOVE_ANNOTATION':
-        annotator.removeAnnotation(message.payload as string);
-        break;
-    }
-  });
-
-  // Signal to parent that we're ready
-  window.parent.postMessage({ type: 'ANNOTATOR_READY' }, '*');
-  console.log('[Iframe Annotator] Ready');
+      }
+      break;
+  }
 }
 
-// Wait for DOM
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initialize);
-} else {
-  initialize();
-}
+// Initialize
+console.log('[Iframe Annotator] Script loaded, waiting for messages...');
+window.addEventListener('message', handleMessage);
+
+// Signal that the iframe is ready to receive content
+window.parent.postMessage({ type: 'IFRAME_LOADED' }, '*');

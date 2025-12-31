@@ -151,12 +151,26 @@ export interface ExportedSnapshot extends Snapshot {
   viewerUrl?: string;
 }
 
+// Snapshot metadata for ZIP index (HTML stored separately)
+export interface ZipIndexSnapshot extends Omit<Snapshot, 'html'> {
+  htmlFile: string;
+  viewerUrl?: string;
+}
+
 // Export format for backup/portability
 export interface ExportData {
   version: string;
   exportedAt: string;
   extensionId?: string;
   snapshots: ExportedSnapshot[];
+}
+
+// ZIP export format with HTML in separate files
+export interface ZipExportData {
+  version: string;
+  exportedAt: string;
+  extensionId?: string;
+  snapshots: ZipIndexSnapshot[];
 }
 
 // Messages between extension components
