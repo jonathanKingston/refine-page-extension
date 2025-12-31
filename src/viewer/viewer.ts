@@ -266,8 +266,10 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
         // Send current tool state
         sendToIframe(iframe, 'SET_TOOL', currentTool);
         // Load existing annotations
+        console.log('Current snapshot annotations:', currentSnapshot?.annotations.text.length || 0);
         if (currentSnapshot?.annotations.text.length) {
           const w3cAnnotations = currentSnapshot.annotations.text.map(a => convertToW3CText(a));
+          console.log('Sending annotations to iframe:', w3cAnnotations);
           sendToIframe(iframe, 'LOAD_ANNOTATIONS', w3cAnnotations);
         }
         // Initialize image annotators on the iframe content

@@ -147,19 +147,33 @@ function initializeAnnotator(container: HTMLElement) {
 
 // Highlight a specific annotation and scroll to it
 function highlightAnnotation(annotationId: string) {
+  console.log('[Iframe Annotator] Highlighting annotation:', annotationId);
+
   // Remove previous selection
   document.querySelectorAll('.selected, .pl-selected').forEach(el => {
     el.classList.remove('selected', 'pl-selected');
   });
 
-  // Find and highlight the annotation
-  const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
-  if (elements.length > 0) {
-    elements.forEach(el => {
-      el.classList.add('selected', 'pl-selected');
-    });
-    elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // Find and highlight the annotation - try multiple selectors
+  const selectors = [
+    `[data-annotation="${annotationId}"]`,
+    `[data-id="${annotationId}"]`,
+    `.r6o-annotation[data-annotation="${annotationId}"]`,
+  ];
+
+  for (const selector of selectors) {
+    const elements = document.querySelectorAll(selector);
+    console.log('[Iframe Annotator] Trying selector:', selector, 'found:', elements.length);
+    if (elements.length > 0) {
+      elements.forEach(el => {
+        el.classList.add('selected', 'pl-selected');
+      });
+      elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
   }
+
+  console.log('[Iframe Annotator] No elements found for annotation:', annotationId);
 }
 
 // Inject custom styles for annotation colors
@@ -289,10 +303,16 @@ function handleMessage(event: MessageEvent) {
           id?: string;
           bodies?: Array<{ value?: string }>;
         }>;
+        console.log('[Iframe Annotator] LOAD_ANNOTATIONS received:', annotations);
         if (annotations?.length) {
           // Reset annotation index and set to count of loaded annotations
           annotationIndex = annotations.length;
-          annotator.setAnnotations(annotations);
+          try {
+            annotator.setAnnotations(annotations);
+            console.log('[Iframe Annotator] setAnnotations called successfully');
+          } catch (e) {
+            console.error('[Iframe Annotator] setAnnotations error:', e);
+          }
           console.log('[Iframe Annotator] Loaded', annotations.length, 'annotations');
           // Apply styles to loaded annotations with numbers
           setTimeout(() => {
@@ -301,6 +321,7 @@ function handleMessage(event: MessageEvent) {
                 // Extract type from bodies (Recogito v3 format)
                 const typeBody = ann.bodies?.find(b => b.value === 'relevant' || b.value === 'answer');
                 const tool = typeBody?.value || 'relevant';
+                console.log('[Iframe Annotator] Applying style to', ann.id, 'tool:', tool, 'index:', idx + 1);
                 applyAnnotationStyle(ann.id, tool, idx + 1);
               }
             });
