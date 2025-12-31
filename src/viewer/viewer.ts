@@ -613,21 +613,19 @@ function loadExistingRegionAnnotations(annotator: AnyAnnotator, imgId: string) {
   }
 }
 
-// Convert our text annotation format to W3C format for Recogito
+// Convert our text annotation format to Recogito v3 format
 function convertToW3CText(annotation: TextAnnotation): unknown {
   return {
-    '@context': 'http://www.w3.org/ns/anno.jsonld',
-    type: 'Annotation',
     id: annotation.id,
-    body: [{
+    bodies: [{
       type: 'TextualBody',
       purpose: 'tagging',
       value: annotation.type,
     }],
     target: {
+      annotation: annotation.id,
       selector: [{
-        type: 'TextQuoteSelector',
-        exact: annotation.selectedText,
+        quote: annotation.selectedText,
       }]
     }
   };
@@ -638,26 +636,21 @@ function convertFromW3CText(w3c: any, type: AnnotationType): TextAnnotation | nu
   try {
     console.log('Converting annotation:', JSON.stringify(w3c, null, 2));
 
-    // Handle both Recogito v3 format (bodies/target.selector array) and W3C format
+    // Handle Recogito v3 format which uses different field names
     const selectors = w3c.target?.selector;
     let selectedText = '';
 
-    if (Array.isArray(selectors)) {
-      // Recogito v3 format - try TextQuoteSelector first, then TextPositionSelector
-      const quoteSelector = selectors.find((s: any) => s.type === 'TextQuoteSelector');
-      if (quoteSelector) {
-        selectedText = quoteSelector.exact || '';
-      } else {
-        // Try to get text from TextPositionSelector - but we need the actual text
-        const posSelector = selectors.find((s: any) => s.type === 'TextPositionSelector');
-        if (posSelector) {
-          // We'll need to extract text differently - for now use a placeholder
-          selectedText = '[Selected text]';
-        }
-      }
-    } else if (selectors?.type === 'TextQuoteSelector') {
-      // W3C format
-      selectedText = selectors.exact || '';
+    if (Array.isArray(selectors) && selectors.length > 0) {
+      // Recogito v3 format - selector array with quote/start/end
+      const selector = selectors[0];
+      // Recogito uses 'quote' field for the selected text
+      selectedText = selector.quote || selector.exact || '';
+    } else if (selectors?.quote) {
+      // Single selector with quote
+      selectedText = selectors.quote;
+    } else if (selectors?.exact) {
+      // W3C format with exact
+      selectedText = selectors.exact;
     }
 
     if (!selectedText) {
