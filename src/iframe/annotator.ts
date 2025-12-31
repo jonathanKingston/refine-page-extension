@@ -61,13 +61,6 @@ function applyAnnotationStyle(annotationId: string, tool: string, index?: number
   }, 50);
 }
 
-// Get style for annotation based on type
-function getAnnotationStyle(tool: string): { fill: string; fillOpacity: number } {
-  if (tool === 'answer') {
-    return { fill: '#3b82f6', fillOpacity: 0.4 }; // blue
-  }
-  return { fill: '#22c55e', fillOpacity: 0.4 }; // green (relevant)
-}
 
 // Initialize annotator on the content
 function initializeAnnotator(container: HTMLElement) {
@@ -85,10 +78,10 @@ function initializeAnnotator(container: HTMLElement) {
   // Add custom styles for annotation colors
   injectAnnotationStyles();
 
+  // Don't use style function - it would apply currentTool color to ALL annotations
+  // Instead we apply colors per-annotation via applyAnnotationStyle
   annotator = createTextAnnotator(container, {
     annotatingEnabled: currentTool !== 'select',
-    // Style function to color annotations based on current tool
-    style: () => getAnnotationStyle(currentTool),
   });
 
   if (currentTool !== 'select') {
@@ -186,36 +179,38 @@ function injectAnnotationStyles() {
     /* Custom annotation colors for relevant (green) */
     .annotation-relevant,
     [data-annotation].annotation-relevant {
-      background-color: rgba(34, 197, 94, 0.4) !important;
+      background-color: rgba(34, 197, 94, 0.35) !important;
       border-bottom: 2px solid rgb(34, 197, 94) !important;
     }
     /* Custom annotation colors for answer (blue) */
     .annotation-answer,
     [data-annotation].annotation-answer {
-      background-color: rgba(59, 130, 246, 0.4) !important;
+      background-color: rgba(59, 130, 246, 0.35) !important;
       border-bottom: 2px solid rgb(59, 130, 246) !important;
     }
-    /* Number badge for annotations */
+    /* Number badge for annotations - always visible */
     .has-index {
       position: relative;
     }
     .has-index::before {
       content: attr(data-annotation-index);
       position: absolute;
-      top: -8px;
-      left: -2px;
+      top: -10px;
+      left: -4px;
       background: #374151;
       color: white;
       font-size: 10px;
       font-weight: bold;
-      min-width: 14px;
-      height: 14px;
-      line-height: 14px;
+      min-width: 16px;
+      height: 16px;
+      line-height: 16px;
       text-align: center;
-      border-radius: 7px;
-      padding: 0 3px;
+      border-radius: 8px;
+      padding: 0 4px;
       z-index: 1001;
       font-family: system-ui, -apple-system, sans-serif;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      pointer-events: none;
     }
     .has-index.annotation-relevant::before {
       background: rgb(22, 163, 74);
@@ -223,19 +218,18 @@ function injectAnnotationStyles() {
     .has-index.annotation-answer::before {
       background: rgb(37, 99, 235);
     }
-    /* Recogito highlight layer styling */
-    .r6o-annotation,
-    .r6o-span-highlight-layer .r6o-annotation {
+    /* Hover effect on annotations */
+    [data-annotation] {
       cursor: pointer;
-      transition: all 0.2s ease;
-      border-radius: 2px;
+      transition: all 0.15s ease;
     }
-    .r6o-annotation:hover {
-      filter: brightness(0.85);
+    [data-annotation]:hover {
+      filter: brightness(0.9);
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
     }
     /* Selected annotation */
-    .r6o-annotation.selected,
-    [data-annotation].selected {
+    [data-annotation].selected,
+    [data-annotation].pl-selected {
       outline: 2px solid #f59e0b !important;
       outline-offset: 1px;
     }
@@ -243,13 +237,14 @@ function injectAnnotationStyles() {
     .has-index.pl-selected::before {
       background: #f59e0b !important;
     }
-    /* Make sure annotations are visible */
+    /* Make sure annotation layers work correctly */
     .r6o-canvas-highlight-layer,
     .r6o-span-highlight-layer {
       pointer-events: none;
       z-index: 1000;
     }
-    .r6o-span-highlight-layer .r6o-annotation {
+    .r6o-span-highlight-layer .r6o-annotation,
+    .r6o-span-highlight-layer [data-annotation] {
       pointer-events: auto;
     }
   `;
