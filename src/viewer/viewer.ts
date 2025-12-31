@@ -164,6 +164,12 @@ function updateUI() {
     titleEl.textContent = currentSnapshot.title || currentSnapshot.url;
   }
 
+  // Update open URL button
+  const openUrlBtn = document.getElementById('open-url-btn') as HTMLAnchorElement;
+  if (openUrlBtn && currentSnapshot.url) {
+    openUrlBtn.href = currentSnapshot.url;
+  }
+
   // Load iframe with our annotator page
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
   if (iframe) {

@@ -72,6 +72,27 @@ body {
   white-space: nowrap;
 }
 
+.open-url-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--color-text-muted);
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.open-url-icon:hover {
+  color: var(--color-primary);
+  background: var(--color-bg);
+}
+
+.open-url-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
 .header-actions {
   display: flex;
   gap: 8px;
@@ -496,10 +517,14 @@ body {
   padding: 8px 12px;
   border-bottom: 1px solid var(--color-border);
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 10px;
   cursor: pointer;
   transition: background 0.15s ease;
+}
+
+.annotation-item .type-indicator {
+  flex-shrink: 0;
 }
 
 .annotation-item:hover {
@@ -751,6 +776,36 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
+}
+
+/* Sidebar scrollbar - more subtle */
+.sidebar::-webkit-scrollbar,
+.sidebar-right::-webkit-scrollbar,
+.snapshot-nav::-webkit-scrollbar,
+.annotation-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.sidebar-right::-webkit-scrollbar-track,
+.snapshot-nav::-webkit-scrollbar-track,
+.annotation-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.sidebar-right::-webkit-scrollbar-thumb,
+.snapshot-nav::-webkit-scrollbar-thumb,
+.annotation-list::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.4);
+  border-radius: 2px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover,
+.sidebar-right::-webkit-scrollbar-thumb:hover,
+.snapshot-nav::-webkit-scrollbar-thumb:hover,
+.annotation-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.7);
 }
 
 /* Notification animations */
