@@ -501,6 +501,11 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
+  // Don't intercept when modifier keys are held (allow Ctrl+R, Cmd+R, etc.)
+  if (e.ctrlKey || e.metaKey || e.altKey) {
+    return;
+  }
+
   // Tool switching shortcuts
   if (e.key === '1' || e.key === 'r') {
     e.preventDefault();

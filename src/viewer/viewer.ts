@@ -271,12 +271,18 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
         pendingIframeMessages = [];
         // Send current tool state
         sendToIframe(iframe, 'SET_TOOL', currentTool);
-        // Load existing annotations
-        console.log('Current snapshot annotations:', currentSnapshot?.annotations.text.length || 0);
-        if (currentSnapshot?.annotations.text.length) {
-          const w3cAnnotations = currentSnapshot.annotations.text.map(a => convertToW3CText(a));
-          console.log('Sending annotations to iframe:', w3cAnnotations);
-          sendToIframe(iframe, 'LOAD_ANNOTATIONS', w3cAnnotations);
+        // Load annotations for current question only
+        if (currentSnapshot && currentQuestionId) {
+          const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+          if (question) {
+            const annotationIds = new Set(question.annotationIds);
+            const questionAnnotations = currentSnapshot.annotations.text.filter(a => annotationIds.has(a.id));
+            console.log('Loading annotations for question:', currentQuestionId, 'count:', questionAnnotations.length);
+            if (questionAnnotations.length > 0) {
+              const w3cAnnotations = questionAnnotations.map(a => convertToW3CText(a));
+              sendToIframe(iframe, 'LOAD_ANNOTATIONS', w3cAnnotations);
+            }
+          }
         }
         // Initialize image annotators on the iframe content
         const iframeDoc = iframe.contentDocument;
@@ -817,6 +823,24 @@ function scrollSidebarToAnnotation(annotationId: string) {
   }
 }
 
+// Sync iframe annotations to show only current question's annotations
+function syncIframeAnnotations() {
+  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+  if (!iframe || !iframeAnnotatorReady) return;
+
+  // Clear all annotations in iframe first
+  sendToIframe(iframe, 'CLEAR_ANNOTATIONS', {});
+
+  // Get annotations for current question
+  const { text: textAnnotations } = getAnnotationsForCurrentQuestion();
+
+  // Load only this question's annotations
+  if (textAnnotations.length > 0) {
+    const w3cAnnotations = textAnnotations.map(a => convertToW3CText(a));
+    sendToIframe(iframe, 'LOAD_ANNOTATIONS', w3cAnnotations);
+  }
+}
+
 // Update question selector
 function updateQuestionSelector() {
   if (!currentSnapshot) return;
@@ -868,12 +892,12 @@ function clearQuestionForm() {
   if (answerInput) answerInput.value = '';
 }
 
-// Update annotation counts
+// Update annotation counts (for current question)
 function updateAnnotationCounts() {
   if (!currentSnapshot) return;
 
-  const textAnnotations = currentSnapshot.annotations.text;
-  const regionAnnotations = currentSnapshot.annotations.region;
+  // Get annotations for current question only
+  const { text: textAnnotations, region: regionAnnotations } = getAnnotationsForCurrentQuestion();
   const allAnnotations = [...textAnnotations, ...regionAnnotations];
 
   const relevantCount = allAnnotations.filter(a => a.type === 'relevant').length;
@@ -886,13 +910,40 @@ function updateAnnotationCounts() {
   if (answerEl) answerEl.textContent = String(answerCount);
 }
 
+// Get annotations for the current question
+function getAnnotationsForCurrentQuestion(): { text: typeof currentSnapshot.annotations.text; region: typeof currentSnapshot.annotations.region } {
+  if (!currentSnapshot) return { text: [], region: [] };
+
+  // If no question selected, show no annotations
+  if (!currentQuestionId) {
+    return { text: [], region: [] };
+  }
+
+  const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+  if (!question) {
+    return { text: [], region: [] };
+  }
+
+  // Filter annotations to only those linked to this question
+  const annotationIds = new Set(question.annotationIds);
+  return {
+    text: currentSnapshot.annotations.text.filter(a => annotationIds.has(a.id)),
+    region: currentSnapshot.annotations.region.filter(a => annotationIds.has(a.id)),
+  };
+}
+
 // Render annotation list
 function renderAnnotationList() {
   const listEl = document.getElementById('annotation-list');
   if (!listEl || !currentSnapshot) return;
 
-  const textAnnotations = currentSnapshot.annotations.text;
-  const regionAnnotations = currentSnapshot.annotations.region;
+  // Get annotations for current question only
+  const { text: textAnnotations, region: regionAnnotations } = getAnnotationsForCurrentQuestion();
+
+  if (!currentQuestionId) {
+    listEl.innerHTML = '<div class="empty-state">Select a question to see its annotations.</div>';
+    return;
+  }
 
   if (textAnnotations.length === 0 && regionAnnotations.length === 0) {
     listEl.innerHTML = '<div class="empty-state">No annotations yet. Select text or draw on images to annotate.</div>';
@@ -1272,13 +1323,36 @@ function setEvaluationValue(name: string, value: string) {
 // Setup keyboard shortcuts
 function setupKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
+    // Skip if in input fields
     if ((e.target as HTMLElement).tagName === 'INPUT' ||
         (e.target as HTMLElement).tagName === 'TEXTAREA' ||
         (e.target as HTMLElement).tagName === 'SELECT') {
       return;
     }
 
-    // Annotation tools
+    // Handle Ctrl/Cmd shortcuts first (before single-key shortcuts)
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === 's') {
+        e.preventDefault();
+        saveCurrentSnapshot(true);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentSnapshot) {
+          currentSnapshot.status = 'approved';
+          updateStatusDisplay();
+          saveCurrentSnapshot();
+          loadAllSnapshots();
+          const nextPending = allSnapshots.find(s => s.status === 'pending' && s.id !== currentSnapshot?.id);
+          if (nextPending) {
+            loadSnapshot(nextPending.id);
+          }
+        }
+      }
+      // Don't process single-key shortcuts when modifier is held
+      return;
+    }
+
+    // Annotation tools (only when no modifier keys)
     if (e.key === '1' || e.key === 'r') {
       e.preventDefault();
       setTool('relevant');
@@ -1317,26 +1391,6 @@ function setupKeyboardShortcuts() {
       } else if (e.key === 'b') {
         e.preventDefault();
         setEvaluationValue('quality', 'broken');
-      }
-    }
-
-    // Other shortcuts
-    if (e.ctrlKey || e.metaKey) {
-      if (e.key === 's') {
-        e.preventDefault();
-        saveCurrentSnapshot(true);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (currentSnapshot) {
-          currentSnapshot.status = 'approved';
-          updateStatusDisplay();
-          saveCurrentSnapshot();
-          loadAllSnapshots();
-          const nextPending = allSnapshots.find(s => s.status === 'pending' && s.id !== currentSnapshot?.id);
-          if (nextPending) {
-            loadSnapshot(nextPending.id);
-          }
-        }
       }
     }
 
@@ -1407,6 +1461,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentQuestionId = questionSelect.value || null;
     updateQuestionForm();
     updateEvaluationForm();
+    // Update annotation list and counts for the new question
+    updateAnnotationCounts();
+    renderAnnotationList();
+    // Sync iframe to show only this question's annotations
+    syncIframeAnnotations();
   });
 
   // Add question button
