@@ -100,27 +100,14 @@ async function importData(data: ExportData): Promise<{ imported: number; skipped
   return { imported, skipped };
 }
 
-// Known message types that we handle
-const KNOWN_MESSAGE_TYPES = [
-  'GET_ALL_SNAPSHOTS',
-  'GET_SNAPSHOT',
-  'SAVE_SNAPSHOT',
-  'UPDATE_SNAPSHOT',
-  'DELETE_SNAPSHOT',
-  'EXPORT_DATA',
-  'IMPORT_DATA',
-  'OPEN_VIEWER',
-  'CAPTURE_PAGE',
-];
-
 // Message handlers
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Only handle messages we recognize - ignore everything else
-  if (!message || !message.type || !KNOWN_MESSAGE_TYPES.includes(message.type)) {
-    return false; // Don't send async response for unknown messages
+  // Skip messages without a type (e.g., from other extensions or SingleFile internals)
+  if (!message?.type) {
+    return false;
   }
 
-  const handleMessage = async () => {
+  const handleMessage = async (): Promise<unknown> => {
     switch (message.type) {
       case 'GET_ALL_SNAPSHOTS':
         return getAllSnapshots();
@@ -150,7 +137,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await chrome.tabs.create({ url: viewerUrl });
         return { success: true };
 
-      case 'CAPTURE_PAGE':
+      case 'CAPTURE_PAGE': {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab?.id) {
           throw new Error('No active tab found');
@@ -160,42 +147,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return response;
         } catch (error) {
           // Content script not loaded - try injecting it first
+          console.log('Content script not loaded, injecting...');
           if ((error as Error).message?.includes('Could not establish connection')) {
-            try {
-              await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                files: ['content.js'],
-              });
-              // Try again after injection
-              const response = await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_PAGE' });
-              return response;
-            } catch (injectError) {
-              throw new Error('Cannot capture this page. Try refreshing the page first.');
-            }
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['content.js'],
+            });
+            // Wait a moment for script to initialize
+            await new Promise(resolve => setTimeout(resolve, 100));
+            // Try again after injection
+            const response = await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_PAGE' });
+            return response;
           }
           throw error;
         }
+      }
 
       default:
-        return { error: `Unknown message type: ${message.type}` };
+        // Unknown message type - don't handle it
+        return undefined;
     }
   };
 
+  // Check if this is a message type we handle
+  const knownTypes = ['GET_ALL_SNAPSHOTS', 'GET_SNAPSHOT', 'SAVE_SNAPSHOT', 'UPDATE_SNAPSHOT',
+                      'DELETE_SNAPSHOT', 'EXPORT_DATA', 'IMPORT_DATA', 'OPEN_VIEWER', 'CAPTURE_PAGE'];
+  if (!knownTypes.includes(message.type)) {
+    return false; // Let other listeners handle it
+  }
+
   handleMessage()
-    .then((result) => {
-      try {
-        sendResponse(result);
-      } catch {
-        // Channel may have closed - ignore
-      }
-    })
+    .then(sendResponse)
     .catch((error) => {
       console.error('Background script error:', error);
-      try {
-        sendResponse({ error: error.message });
-      } catch {
-        // Channel may have closed - ignore
-      }
+      sendResponse({ error: error.message });
     });
 
   return true; // Indicates async response
