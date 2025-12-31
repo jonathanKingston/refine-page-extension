@@ -12,7 +12,7 @@ const SINGLE_FILE_OPTIONS = {
   removeHiddenElements: false,
   removeUnusedStyles: true,
   removeUnusedFonts: true,
-  removeFrames: false,
+  removeFrames: true,  // Remove iframes to speed up capture
   removeImports: true,
   removeScripts: true,
   removeAlternativeFonts: true,
@@ -20,12 +20,8 @@ const SINGLE_FILE_OPTIONS = {
   removeAlternativeImages: true,
   groupDuplicateImages: true,
 
-  // Image handling - disabled to prevent hanging on lazy images
+  // Disable deferred/lazy image loading entirely
   loadDeferredImages: false,
-  loadDeferredImagesMaxIdleTime: 500,
-  loadDeferredImagesBlockCookies: true,
-  loadDeferredImagesBlockStorage: true,
-  loadDeferredImagesKeepZoomLevel: false,
 
   // Compression/Output
   compressHTML: false,
@@ -51,7 +47,7 @@ const SINGLE_FILE_OPTIONS = {
   // Other options
   saveRawPage: false,
   saveOriginalURLs: false,
-  networkTimeout: 10000,
+  networkTimeout: 5000,  // 5 second timeout for individual resources
   maxResourceSizeEnabled: false,
 };
 
@@ -155,13 +151,16 @@ export async function capturePage(): Promise<Snapshot> {
   const startTime = Date.now();
 
   // Initialize and run SingleFile
+  console.log('Page Labeller: Initializing SingleFile...');
   singlefile.init(INIT_OPTIONS);
 
+  console.log('Page Labeller: Running SingleFile getPageData...');
   const pageData = await withTimeout(
     singlefile.getPageData(SINGLE_FILE_OPTIONS, INIT_OPTIONS, document, window),
-    15000,
-    'Capture timed out after 15 seconds'
+    30000,  // 30 second timeout
+    'Capture timed out after 30 seconds'
   );
+  console.log('Page Labeller: SingleFile completed');
 
   if (!pageData?.content) {
     throw new Error('SingleFile returned empty content');
