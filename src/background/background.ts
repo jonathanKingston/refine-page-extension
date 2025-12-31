@@ -152,11 +152,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case 'CAPTURE_PAGE':
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab?.id) {
+        if (!tab?.id) {
+          throw new Error('No active tab found');
+        }
+        try {
           const response = await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_PAGE' });
           return response;
+        } catch (error) {
+          // Content script not loaded - try injecting it first
+          if ((error as Error).message?.includes('Could not establish connection')) {
+            try {
+              await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: ['content.js'],
+              });
+              // Try again after injection
+              const response = await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_PAGE' });
+              return response;
+            } catch (injectError) {
+              throw new Error('Cannot capture this page. Try refreshing the page first.');
+            }
+          }
+          throw error;
         }
-        throw new Error('No active tab found');
 
       default:
         return { error: `Unknown message type: ${message.type}` };

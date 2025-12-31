@@ -82,7 +82,7 @@ function copyStaticFiles() {
   const manifest = JSON.parse(readFileSync(join(rootDir, 'manifest.json'), 'utf-8'));
 
   // Update paths in manifest for dist
-  manifest.background.service_worker = 'background.js';
+  manifest.background = { service_worker: 'background.js' }; // Remove "type": "module" since we use IIFE
   manifest.content_scripts[0].js = ['content.js'];
   manifest.action.default_popup = 'popup.html';
   manifest.web_accessible_resources[0].resources = [
