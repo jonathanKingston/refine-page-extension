@@ -238,6 +238,9 @@ function highlightAnnotation(annotationId: string) {
           const viewportHeight = window.innerHeight;
           const scrollTarget = Math.max(0, topValue - viewportHeight / 2 + 50);
 
+          // Try multiple scroll targets for compatibility
+          document.documentElement.scrollTop = scrollTarget;
+          document.body.scrollTop = scrollTarget;
           window.scrollTo({
             top: scrollTarget,
             behavior: 'smooth'
