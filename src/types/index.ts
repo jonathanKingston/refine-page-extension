@@ -4,7 +4,7 @@
  */
 
 // Annotation types/purposes matching Label Studio style
-export type AnnotationPurpose = 'relevant' | 'answer' | 'no_content';
+export type AnnotationPurpose = 'relevant' | 'answer';
 
 // W3C Web Annotation selectors
 export interface TextQuoteSelector {
@@ -146,11 +146,17 @@ export interface Snapshot {
   tags: string[];
 }
 
+// Snapshot with viewer URL for export
+export interface ExportedSnapshot extends Snapshot {
+  viewerUrl?: string;
+}
+
 // Export format for backup/portability
 export interface ExportData {
   version: string;
   exportedAt: string;
-  snapshots: Snapshot[];
+  extensionId?: string;
+  snapshots: ExportedSnapshot[];
 }
 
 // Messages between extension components

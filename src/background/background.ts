@@ -3,7 +3,7 @@
  * Handles cross-component communication and storage operations
  */
 
-import type { Snapshot, ExportData } from '@/types';
+import type { Snapshot, ExportData, ExportedSnapshot } from '@/types';
 
 // Generate unique ID
 function generateId(): string {
@@ -30,6 +30,19 @@ async function getSnapshot(id: string): Promise<Snapshot | undefined> {
   return result[key];
 }
 
+// Lightweight snapshot summary for listing (excludes HTML to avoid message size limits)
+interface SnapshotSummary {
+  id: string;
+  url: string;
+  title: string;
+  status: Snapshot['status'];
+  capturedAt: string;
+  updatedAt: string;
+  tags: string[];
+  annotationCount: { text: number; region: number };
+  questionCount: number;
+}
+
 async function getAllSnapshots(): Promise<Snapshot[]> {
   const indexResult = await chrome.storage.local.get('snapshotIndex');
   const index: string[] = indexResult.snapshotIndex || [];
@@ -43,6 +56,37 @@ async function getAllSnapshots(): Promise<Snapshot[]> {
   }
 
   return snapshots.sort((a, b) =>
+    new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()
+  );
+}
+
+// Get lightweight summaries for listing - avoids 64MB message limit
+async function getAllSnapshotSummaries(): Promise<SnapshotSummary[]> {
+  const indexResult = await chrome.storage.local.get('snapshotIndex');
+  const index: string[] = indexResult.snapshotIndex || [];
+
+  const summaries: SnapshotSummary[] = [];
+  for (const id of index) {
+    const snapshot = await getSnapshot(id);
+    if (snapshot) {
+      summaries.push({
+        id: snapshot.id,
+        url: snapshot.url,
+        title: snapshot.title,
+        status: snapshot.status,
+        capturedAt: snapshot.capturedAt,
+        updatedAt: snapshot.updatedAt,
+        tags: snapshot.tags,
+        annotationCount: {
+          text: snapshot.annotations.text.length,
+          region: snapshot.annotations.region.length,
+        },
+        questionCount: snapshot.questions.length,
+      });
+    }
+  }
+
+  return summaries.sort((a, b) =>
     new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()
   );
 }
@@ -75,10 +119,20 @@ async function updateSnapshot(id: string, updates: Partial<Snapshot>): Promise<S
 // Export all data
 async function exportAllData(): Promise<ExportData> {
   const snapshots = await getAllSnapshots();
+  const extensionId = chrome.runtime.id;
+  const baseViewerUrl = chrome.runtime.getURL('viewer.html');
+
+  // Add viewer URLs to each snapshot
+  const exportedSnapshots: ExportedSnapshot[] = snapshots.map((snapshot) => ({
+    ...snapshot,
+    viewerUrl: `${baseViewerUrl}?id=${snapshot.id}`,
+  }));
+
   return {
     version: '1.0.0',
     exportedAt: new Date().toISOString(),
-    snapshots,
+    extensionId,
+    snapshots: exportedSnapshots,
   };
 }
 
@@ -110,7 +164,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handleMessage = async (): Promise<unknown> => {
     switch (message.type) {
       case 'GET_ALL_SNAPSHOTS':
-        return getAllSnapshots();
+        return getAllSnapshotSummaries(); // Use lightweight summaries to avoid 64MB limit
 
       case 'GET_SNAPSHOT':
         return getSnapshot(message.payload.id);

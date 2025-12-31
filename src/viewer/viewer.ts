@@ -24,12 +24,25 @@ import '@annotorious/annotorious/annotorious.css';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyAnnotator = any;
 
+// Lightweight snapshot summary (without HTML) for listing
+interface SnapshotSummary {
+  id: string;
+  url: string;
+  title: string;
+  status: Snapshot['status'];
+  capturedAt: string;
+  updatedAt: string;
+  tags: string[];
+  annotationCount: { text: number; region: number };
+  questionCount: number;
+}
+
 // State
 let currentSnapshot: Snapshot | null = null;
 let currentQuestionId: string | null = null;
 let currentTool: 'select' | AnnotationType = 'select';
 let zoomLevel = 100;
-let allSnapshots: Snapshot[] = [];
+let allSnapshots: SnapshotSummary[] = [];
 
 // Annotation library instances
 let textAnnotator: AnyAnnotator = null;
@@ -39,7 +52,6 @@ let imageAnnotators: Map<string, AnyAnnotator> = new Map();
 const ANNOTATION_COLORS: Record<AnnotationType, string> = {
   relevant: '#22c55e',
   answer: '#3b82f6',
-  no_content: '#9ca3af',
 };
 
 // Generate unique ID
@@ -155,6 +167,36 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
   // Inject annotation styles into iframe
   injectAnnotationStyles(doc);
 
+  // Forward keyboard events from iframe to parent for shortcuts
+  doc.addEventListener('keydown', (e) => {
+    // Clone the event and dispatch to parent document
+    const clonedEvent = new KeyboardEvent('keydown', {
+      key: e.key,
+      code: e.code,
+      ctrlKey: e.ctrlKey,
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      metaKey: e.metaKey,
+      bubbles: true,
+    });
+    document.dispatchEvent(clonedEvent);
+  });
+
+  // Add click handler for annotation highlights to scroll sidebar
+  doc.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    // Check if clicked on an annotation highlight
+    const highlight = target.closest('[data-annotation], [data-id], [data-annotation-id], .pl-highlight, .r6o-annotation');
+    if (highlight) {
+      const annotationId = (highlight as HTMLElement).dataset.annotation ||
+                          (highlight as HTMLElement).dataset.id ||
+                          (highlight as HTMLElement).dataset.annotationId;
+      if (annotationId) {
+        scrollSidebarToAnnotation(annotationId);
+      }
+    }
+  });
+
   // Initialize text annotator on the document body
   try {
     textAnnotator = createTextAnnotator(doc.body, {
@@ -238,10 +280,6 @@ function injectAnnotationStyles(doc: Document) {
       background-color: rgba(59, 130, 246, 0.4) !important;
       border-bottom: 2px solid rgb(59, 130, 246);
     }
-    .r6o-annotation.no_content {
-      background-color: rgba(156, 163, 175, 0.4) !important;
-      border-bottom: 2px solid rgb(156, 163, 175);
-    }
     .r6o-annotation.selected {
       outline: 3px solid #f59e0b;
       outline-offset: 2px;
@@ -258,10 +296,6 @@ function injectAnnotationStyles(doc: Document) {
     .a9s-annotation.answer .a9s-inner {
       stroke: rgb(59, 130, 246) !important;
       fill: rgba(59, 130, 246, 0.2) !important;
-    }
-    .a9s-annotation.no_content .a9s-inner {
-      stroke: rgb(156, 163, 175) !important;
-      fill: rgba(156, 163, 175, 0.2) !important;
     }
     .a9s-annotation.selected .a9s-inner {
       stroke-width: 3px !important;
@@ -284,10 +318,6 @@ function injectAnnotationStyles(doc: Document) {
     .pl-highlight.pl-answer {
       background-color: rgba(59, 130, 246, 0.4) !important;
       border-bottom: 2px solid rgb(59, 130, 246);
-    }
-    .pl-highlight.pl-no_content {
-      background-color: rgba(156, 163, 175, 0.4) !important;
-      border-bottom: 2px solid rgb(156, 163, 175);
     }
     .pl-highlight.pl-selected {
       outline: 3px solid #f59e0b;
@@ -546,7 +576,7 @@ function highlightTextManually(doc: Document, annotation: TextAnnotation) {
   }
 }
 
-// Scroll to and highlight annotation
+// Scroll to and highlight annotation in iframe
 function scrollToAnnotation(annotationId: string) {
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
   const doc = iframe?.contentDocument;
@@ -571,6 +601,23 @@ function scrollToAnnotation(annotationId: string) {
       highlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
+  }
+}
+
+// Scroll sidebar annotation list to show the annotation
+function scrollSidebarToAnnotation(annotationId: string) {
+  const listEl = document.getElementById('annotation-list');
+  if (!listEl) return;
+
+  // Find the annotation item in the sidebar
+  const item = listEl.querySelector(`.annotation-item[data-id="${annotationId}"]`);
+  if (item) {
+    // Remove previous selection
+    listEl.querySelectorAll('.annotation-item').forEach(i => i.classList.remove('selected'));
+    // Add selection to this item
+    item.classList.add('selected');
+    // Scroll into view
+    item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
 
@@ -838,7 +885,7 @@ function showNotification(message: string, type: 'success' | 'error' = 'success'
 // Load all snapshots for navigation
 async function loadAllSnapshots(filter: string = 'all') {
   try {
-    const snapshots = await sendMessage<Snapshot[]>('GET_ALL_SNAPSHOTS');
+    const snapshots = await sendMessage<SnapshotSummary[]>('GET_ALL_SNAPSHOTS');
     allSnapshots = snapshots;
 
     let filtered = snapshots;
@@ -855,7 +902,7 @@ async function loadAllSnapshots(filter: string = 'all') {
 }
 
 // Render snapshot navigation
-function renderSnapshotNav(snapshots: Snapshot[]) {
+function renderSnapshotNav(snapshots: SnapshotSummary[]) {
   const navEl = document.getElementById('snapshot-nav');
   if (!navEl) return;
 
@@ -1040,9 +1087,6 @@ function setupKeyboardShortcuts() {
     } else if (e.key === '2' || e.key === 'a') {
       e.preventDefault();
       setTool('answer');
-    } else if (e.key === '3') {
-      e.preventDefault();
-      setTool('no_content');
     } else if (e.key === 'Escape' || e.key === '0' || e.key === 's') {
       e.preventDefault();
       setTool('select');
