@@ -243,16 +243,18 @@ function renderAnnotationsInIframe(iframe: HTMLIFrameElement) {
   const doc = iframe.contentDocument;
   if (!doc || !currentSnapshot) return;
 
-  // Remove existing highlights
+  // Remove existing highlights (but preserve text content without labels)
   doc.querySelectorAll('.pl-highlight').forEach(el => {
     const parent = el.parentNode;
     if (parent) {
+      // Remove the label first to avoid including R/A in text
+      el.querySelectorAll('.pl-annotation-label').forEach(label => label.remove());
       parent.replaceChild(doc.createTextNode(el.textContent || ''), el);
       parent.normalize();
     }
   });
 
-  // Remove existing labels
+  // Remove any orphaned labels
   doc.querySelectorAll('.pl-annotation-label').forEach(el => el.remove());
 
   // Add highlights for each annotation
@@ -261,8 +263,12 @@ function renderAnnotationsInIframe(iframe: HTMLIFrameElement) {
   }
 }
 
-// Highlight text in document
+// Highlight text in document - handles text that may span multiple nodes
 function highlightText(doc: Document, annotation: TextAnnotation) {
+  // Normalize the search text (collapse whitespace)
+  const searchText = annotation.selectedText.replace(/\s+/g, ' ').trim();
+  if (!searchText) return;
+
   const walker = doc.createTreeWalker(
     doc.body,
     NodeFilter.SHOW_TEXT,
@@ -272,19 +278,27 @@ function highlightText(doc: Document, annotation: TextAnnotation) {
   let node: Node | null;
   while ((node = walker.nextNode())) {
     const text = node.textContent || '';
-    const index = text.indexOf(annotation.selectedText);
-    if (index !== -1) {
-      const range = doc.createRange();
-      range.setStart(node, index);
-      range.setEnd(node, index + annotation.selectedText.length);
+    // Try exact match first
+    let index = text.indexOf(annotation.selectedText);
 
-      const highlight = doc.createElement('mark');
-      highlight.className = `pl-highlight pl-${annotation.type}`;
-      highlight.dataset.annotationId = annotation.id;
-      highlight.dataset.annotationType = annotation.type;
-      highlight.title = `${annotation.type}: "${annotation.selectedText.substring(0, 50)}..."`;
+    // If not found, try normalized match
+    if (index === -1) {
+      const normalizedText = text.replace(/\s+/g, ' ');
+      index = normalizedText.indexOf(searchText);
+    }
 
+    if (index !== -1 && text.length >= index + annotation.selectedText.length) {
       try {
+        const range = doc.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, Math.min(index + annotation.selectedText.length, text.length));
+
+        const highlight = doc.createElement('mark');
+        highlight.className = `pl-highlight pl-${annotation.type}`;
+        highlight.dataset.annotationId = annotation.id;
+        highlight.dataset.annotationType = annotation.type;
+        highlight.title = `${annotation.type}: "${annotation.selectedText.substring(0, 50)}${annotation.selectedText.length > 50 ? '...' : ''}"`;
+
         range.surroundContents(highlight);
 
         // Add a small label showing the annotation type
@@ -292,15 +306,17 @@ function highlightText(doc: Document, annotation: TextAnnotation) {
         label.className = `pl-annotation-label ${annotation.type}`;
         label.textContent = annotation.type === 'relevant' ? 'R' : 'A';
         highlight.appendChild(label);
+
+        return; // Successfully highlighted
       } catch {
-        // Range may span multiple nodes - try alternative approach
-        const fragment = range.extractContents();
-        highlight.appendChild(fragment);
-        range.insertNode(highlight);
+        // surroundContents can fail if range spans multiple nodes - continue searching
+        continue;
       }
-      break;
     }
   }
+
+  // If we get here, we couldn't find/highlight the text
+  console.warn('Could not highlight annotation:', annotation.selectedText.substring(0, 30));
 }
 
 // Get annotation color
