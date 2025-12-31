@@ -54,10 +54,17 @@ function applyAnnotationStyle(annotationId: string, tool: string, index?: number
 
   // Find the annotation elements and apply color
   const color = ANNOTATION_COLORS[tool] || ANNOTATION_COLORS.relevant;
+  const borderColor = tool === 'answer' ? 'rgb(59, 130, 246)' : 'rgb(34, 197, 94)';
   // Recogito uses data attributes on highlight spans
   const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
   elements.forEach((el, i) => {
-    (el as HTMLElement).style.backgroundColor = color;
+    const htmlEl = el as HTMLElement;
+    // Apply inline styles with highest priority
+    htmlEl.style.setProperty('background-color', color, 'important');
+    htmlEl.style.setProperty('background', color, 'important');
+    htmlEl.style.setProperty('border-bottom', `2px solid ${borderColor}`, 'important');
+    htmlEl.style.setProperty('opacity', '1', 'important');
+    htmlEl.style.setProperty('visibility', 'visible', 'important');
     el.classList.add(`annotation-${tool}`);
     // Add number badge to first element only
     if (i === 0 && index !== undefined) {
@@ -73,15 +80,19 @@ function reapplyAllStyles() {
     const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
     if (elements.length > 0) {
       const color = ANNOTATION_COLORS[meta.tool] || ANNOTATION_COLORS.relevant;
+      const borderColor = meta.tool === 'answer' ? 'rgb(59, 130, 246)' : 'rgb(34, 197, 94)';
       elements.forEach((el, i) => {
-        // Only apply if not already styled
-        if (!el.classList.contains(`annotation-${meta.tool}`)) {
-          (el as HTMLElement).style.backgroundColor = color;
-          el.classList.add(`annotation-${meta.tool}`);
-          if (i === 0) {
-            el.setAttribute('data-annotation-index', String(meta.index));
-            el.classList.add('has-index');
-          }
+        const htmlEl = el as HTMLElement;
+        // Always re-apply inline styles to override any page CSS
+        htmlEl.style.setProperty('background-color', color, 'important');
+        htmlEl.style.setProperty('background', color, 'important');
+        htmlEl.style.setProperty('border-bottom', `2px solid ${borderColor}`, 'important');
+        htmlEl.style.setProperty('opacity', '1', 'important');
+        htmlEl.style.setProperty('visibility', 'visible', 'important');
+        el.classList.add(`annotation-${meta.tool}`);
+        if (i === 0) {
+          el.setAttribute('data-annotation-index', String(meta.index));
+          el.classList.add('has-index');
         }
       });
     }
@@ -228,63 +239,92 @@ function injectAnnotationStyles() {
 
   const style = document.createElement('style');
   style.id = 'pl-annotation-styles';
+  // Use very high specificity selectors to override page styles
   style.textContent = `
-    /* Custom annotation colors for relevant (green) */
-    .annotation-relevant,
-    [data-annotation].annotation-relevant {
-      background-color: rgba(34, 197, 94, 0.35) !important;
-      border-bottom: 2px solid rgb(34, 197, 94) !important;
+    /* Reset any page styles that might hide annotations */
+    .r6o-annotatable,
+    .r6o-annotatable *,
+    #content-container,
+    #content-container * {
+      /* Ensure visibility */
+      visibility: visible !important;
     }
-    /* Custom annotation colors for answer (blue) */
-    .annotation-answer,
-    [data-annotation].annotation-answer {
-      background-color: rgba(59, 130, 246, 0.35) !important;
+
+    /* Custom annotation colors for relevant (green) - high specificity */
+    #content-container .annotation-relevant,
+    #content-container [data-annotation].annotation-relevant,
+    body .annotation-relevant,
+    body [data-annotation].annotation-relevant,
+    .r6o-span-highlight-layer .annotation-relevant,
+    .annotation-relevant {
+      background-color: rgba(34, 197, 94, 0.5) !important;
+      background: rgba(34, 197, 94, 0.5) !important;
+      border-bottom: 2px solid rgb(34, 197, 94) !important;
+      color: inherit !important;
+      opacity: 1 !important;
+      display: inline !important;
+    }
+    /* Custom annotation colors for answer (blue) - high specificity */
+    #content-container .annotation-answer,
+    #content-container [data-annotation].annotation-answer,
+    body .annotation-answer,
+    body [data-annotation].annotation-answer,
+    .r6o-span-highlight-layer .annotation-answer,
+    .annotation-answer {
+      background-color: rgba(59, 130, 246, 0.5) !important;
+      background: rgba(59, 130, 246, 0.5) !important;
       border-bottom: 2px solid rgb(59, 130, 246) !important;
+      color: inherit !important;
+      opacity: 1 !important;
+      display: inline !important;
     }
     /* Number badge for annotations - always visible */
     .has-index {
-      position: relative;
+      position: relative !important;
     }
     .has-index::before {
-      content: attr(data-annotation-index);
-      position: absolute;
-      top: -10px;
-      left: -4px;
-      background: #374151;
-      color: white;
-      font-size: 10px;
-      font-weight: bold;
-      min-width: 16px;
-      height: 16px;
-      line-height: 16px;
-      text-align: center;
-      border-radius: 8px;
-      padding: 0 4px;
-      z-index: 1001;
-      font-family: system-ui, -apple-system, sans-serif;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-      pointer-events: none;
+      content: attr(data-annotation-index) !important;
+      position: absolute !important;
+      top: -12px !important;
+      left: -6px !important;
+      background: #374151 !important;
+      color: white !important;
+      font-size: 10px !important;
+      font-weight: bold !important;
+      min-width: 16px !important;
+      height: 16px !important;
+      line-height: 16px !important;
+      text-align: center !important;
+      border-radius: 8px !important;
+      padding: 0 4px !important;
+      z-index: 2147483647 !important;
+      font-family: system-ui, -apple-system, sans-serif !important;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.4) !important;
+      pointer-events: none !important;
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
     }
     .has-index.annotation-relevant::before {
-      background: rgb(22, 163, 74);
+      background: rgb(22, 163, 74) !important;
     }
     .has-index.annotation-answer::before {
-      background: rgb(37, 99, 235);
+      background: rgb(37, 99, 235) !important;
     }
     /* Hover effect on annotations */
     [data-annotation] {
-      cursor: pointer;
-      transition: all 0.15s ease;
+      cursor: pointer !important;
+      transition: all 0.15s ease !important;
     }
     [data-annotation]:hover {
-      filter: brightness(0.9);
-      box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
+      filter: brightness(0.85) !important;
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.15) !important;
     }
     /* Selected annotation */
     [data-annotation].selected,
     [data-annotation].pl-selected {
-      outline: 2px solid #f59e0b !important;
-      outline-offset: 1px;
+      outline: 3px solid #f59e0b !important;
+      outline-offset: 1px !important;
     }
     .has-index.selected::before,
     .has-index.pl-selected::before {
@@ -293,12 +333,20 @@ function injectAnnotationStyles() {
     /* Make sure annotation layers work correctly */
     .r6o-canvas-highlight-layer,
     .r6o-span-highlight-layer {
-      pointer-events: none;
-      z-index: 1000;
+      pointer-events: none !important;
+      z-index: 2147483646 !important;
+      position: absolute !important;
+      overflow: visible !important;
     }
     .r6o-span-highlight-layer .r6o-annotation,
     .r6o-span-highlight-layer [data-annotation] {
-      pointer-events: auto;
+      pointer-events: auto !important;
+      overflow: visible !important;
+    }
+    /* Ensure Recogito annotations are visible over page content */
+    .r6o-annotation {
+      z-index: 1000 !important;
+      overflow: visible !important;
     }
   `;
   document.head.appendChild(style);
