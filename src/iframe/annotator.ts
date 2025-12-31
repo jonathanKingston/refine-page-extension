@@ -401,9 +401,9 @@ function initializeImageAnnotators(container: HTMLElement) {
       imageAnnotator.on('createAnnotation', (annotation: unknown) => {
         if (currentTool === 'select') return;
 
-        console.log('[Iframe Annotator] Region annotation created:', annotation);
+        console.log('[Iframe Annotator] Region annotation created (raw):', JSON.stringify(annotation, null, 2));
 
-        const ann = annotation as { id?: string };
+        const ann = annotation as { id?: string; target?: unknown };
         regionAnnotationIndex++;
 
         // Apply styling to the annotation element
@@ -412,6 +412,7 @@ function initializeImageAnnotators(container: HTMLElement) {
         }
 
         const serialized = serializeAnnotation(annotation);
+        console.log('[Iframe Annotator] Region annotation serialized:', JSON.stringify(serialized, null, 2));
 
         window.parent.postMessage({
           type: 'REGION_ANNOTATION_CREATED',
@@ -525,9 +526,13 @@ function highlightAnnotation(annotationId: string) {
 
   // DOM elements don't exist (annotation is off-screen) - search for text instead
   const searchText = annotationText.get(annotationId);
+  console.log('[Iframe Annotator] Text stored for annotation:', annotationId, '=', searchText?.substring(0, 50));
+
   if (searchText) {
-    console.log('[Iframe Annotator] Searching for text:', searchText.substring(0, 50));
+    console.log('[Iframe Annotator] Searching for text in document:', searchText.substring(0, 50));
     const textNode = findTextInDocument(searchText);
+    console.log('[Iframe Annotator] Text node found:', !!textNode);
+
     if (textNode) {
       // Create a range and scroll to it
       const range = document.createRange();
@@ -535,6 +540,7 @@ function highlightAnnotation(annotationId: string) {
       const rect = range.getBoundingClientRect();
       const scrollTarget = window.scrollY + rect.top - window.innerHeight / 2;
 
+      console.log('[Iframe Annotator] Scrolling to text at:', scrollTarget, 'rect.top:', rect.top);
       document.documentElement.scrollTop = scrollTarget;
       document.body.scrollTop = scrollTarget;
       window.scrollTo({
@@ -551,24 +557,66 @@ function highlightAnnotation(annotationId: string) {
 
 // Find text content in the document
 function findTextInDocument(searchText: string): { node: Node; offset: number } | null {
+  // Normalize the search text - collapse whitespace
+  const normalizedSearch = searchText.replace(/\s+/g, ' ').trim();
+
+  // Try different search strategies
+  const searchStrategies = [
+    normalizedSearch,                           // Full normalized text
+    normalizedSearch.substring(0, 50),          // First 50 chars
+    normalizedSearch.substring(0, 30),          // First 30 chars
+    normalizedSearch.split(' ').slice(0, 5).join(' '), // First 5 words
+  ];
+
   const walker = document.createTreeWalker(
     document.body,
     NodeFilter.SHOW_TEXT,
     null
   );
 
+  // Build a map of text content for searching
+  const textNodes: Array<{ node: Node; text: string; normalizedText: string }> = [];
   let node: Node | null;
   while ((node = walker.nextNode())) {
     const text = node.textContent || '';
-    const index = text.indexOf(searchText);
-    if (index !== -1) {
-      return { node, offset: index };
-    }
-    // Also try partial match for long texts
-    if (searchText.length > 20 && text.includes(searchText.substring(0, 20))) {
-      return { node, offset: text.indexOf(searchText.substring(0, 20)) };
+    if (text.trim()) {
+      textNodes.push({
+        node,
+        text,
+        normalizedText: text.replace(/\s+/g, ' ')
+      });
     }
   }
+
+  // Try each search strategy
+  for (const searchStr of searchStrategies) {
+    if (!searchStr || searchStr.length < 5) continue;
+
+    for (const { node, text, normalizedText } of textNodes) {
+      // Try exact match
+      let index = text.indexOf(searchStr);
+      if (index !== -1) {
+        console.log('[Iframe Annotator] Found exact match for:', searchStr.substring(0, 30));
+        return { node, offset: index };
+      }
+
+      // Try normalized match
+      index = normalizedText.indexOf(searchStr);
+      if (index !== -1) {
+        console.log('[Iframe Annotator] Found normalized match for:', searchStr.substring(0, 30));
+        return { node, offset: index };
+      }
+
+      // Try case-insensitive match
+      index = normalizedText.toLowerCase().indexOf(searchStr.toLowerCase());
+      if (index !== -1) {
+        console.log('[Iframe Annotator] Found case-insensitive match for:', searchStr.substring(0, 30));
+        return { node, offset: index };
+      }
+    }
+  }
+
+  console.log('[Iframe Annotator] No text match found for any strategy');
   return null;
 }
 
