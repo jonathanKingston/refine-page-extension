@@ -205,11 +205,87 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
   // Inject annotation styles into iframe
   injectAnnotationStyles(doc);
 
-  // Debug: listen for native selection changes
-  doc.addEventListener('selectionchange', () => {
+  // Handle text selection manually since Recogito can't work across iframe boundary
+  doc.addEventListener('mouseup', () => {
+    if (currentTool === 'select' || !currentSnapshot) return;
+
     const selection = doc.getSelection();
-    if (selection && selection.toString().trim()) {
-      console.log('Native selection detected:', selection.toString().substring(0, 50));
+    if (!selection || selection.isCollapsed) return;
+
+    const text = selection.toString().trim();
+    if (!text) return;
+
+    console.log('Creating annotation for selection:', text.substring(0, 50));
+
+    // Create annotation from selection
+    const range = selection.getRangeAt(0);
+    const id = `text-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Wrap selection in highlight span
+    try {
+      const highlight = doc.createElement('span');
+      highlight.className = `pl-highlight pl-${currentTool}`;
+      highlight.dataset.annotationId = id;
+      range.surroundContents(highlight);
+
+      // Create our annotation record
+      const textAnnotation: TextAnnotation = {
+        id,
+        type: currentTool as AnnotationType,
+        text,
+        selector: {
+          type: 'TextQuoteSelector',
+          exact: text,
+        },
+        createdAt: new Date().toISOString(),
+      };
+
+      currentSnapshot.annotations.text.push(textAnnotation);
+
+      // Link to current question if one is selected
+      if (currentQuestionId) {
+        const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+        if (question) {
+          question.annotationIds.push(id);
+        }
+      }
+
+      // Clear selection
+      selection.removeAllRanges();
+
+      // Update UI
+      updateAnnotationCounts();
+      renderAnnotationList();
+      saveCurrentSnapshot();
+
+      console.log('Annotation created:', id);
+    } catch (error) {
+      console.warn('Could not wrap selection (may span multiple elements):', error);
+      // For complex selections spanning multiple elements, just record the text
+      const textAnnotation: TextAnnotation = {
+        id,
+        type: currentTool as AnnotationType,
+        text,
+        selector: {
+          type: 'TextQuoteSelector',
+          exact: text,
+        },
+        createdAt: new Date().toISOString(),
+      };
+
+      currentSnapshot.annotations.text.push(textAnnotation);
+
+      if (currentQuestionId) {
+        const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+        if (question) {
+          question.annotationIds.push(id);
+        }
+      }
+
+      selection.removeAllRanges();
+      updateAnnotationCounts();
+      renderAnnotationList();
+      saveCurrentSnapshot();
     }
   });
 
@@ -243,73 +319,10 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
     }
   });
 
-  // Initialize text annotator on the document body
-  try {
-    console.log('Creating text annotator on:', doc.body);
-    textAnnotator = createTextAnnotator(doc.body, {
-      // Start with annotation enabled and mode set
-      annotatingEnabled: true,
-    });
-    console.log('Text annotator created:', textAnnotator);
-
-    // Set mode to CREATE_NEW immediately
-    textAnnotator.setAnnotatingMode('CREATE_NEW');
-    console.log('Set annotating mode to CREATE_NEW');
-
-    // Debug: listen to selection changes
-    textAnnotator.on('selectionChanged', (selection: any) => {
-      console.log('Selection changed:', selection);
-    });
-
-    // Handle text annotation creation
-    textAnnotator.on('createAnnotation', (annotation: any) => {
-      if (currentTool === 'select' || !currentSnapshot) return;
-
-      // Convert to our format
-      const textAnnotation = convertFromW3CText(annotation, currentTool);
-      if (textAnnotation) {
-        currentSnapshot.annotations.text.push(textAnnotation);
-
-        // Link to current question if one is selected
-        if (currentQuestionId) {
-          const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-          if (question) {
-            question.annotationIds.push(textAnnotation.id);
-          }
-        }
-
-        // Update our annotation styling
-        updateAnnotationAppearance(annotation.id, currentTool);
-
-        // Update UI
-        updateAnnotationCounts();
-        renderAnnotationList();
-        saveCurrentSnapshot();
-      }
-    });
-
-    textAnnotator.on('deleteAnnotation', (annotation: any) => {
-      if (!currentSnapshot) return;
-      const id = annotation.id;
-      currentSnapshot.annotations.text = currentSnapshot.annotations.text.filter(a => a.id !== id);
-
-      // Remove from questions
-      for (const question of currentSnapshot.questions) {
-        question.annotationIds = question.annotationIds.filter(aid => aid !== id);
-      }
-
-      updateAnnotationCounts();
-      renderAnnotationList();
-      saveCurrentSnapshot();
-    });
-
-    // Load existing text annotations
-    loadExistingTextAnnotations();
-  } catch (error) {
-    console.error('Failed to initialize text annotator:', error);
-    // Fallback to manual highlighting
-    renderAnnotationsManually(doc);
-  }
+  // Skip Recogito text annotator - it doesn't work across iframe boundaries
+  // We use manual selection handling via mouseup event above instead
+  // Just render existing annotations manually
+  renderAnnotationsManually(doc);
 
   // Initialize image annotators for each image
   initializeImageAnnotators(doc);
@@ -1157,24 +1170,12 @@ function addQuestion() {
 
 // Set tool
 function setTool(tool: 'select' | AnnotationType) {
-  console.log('setTool called with:', tool);
   currentTool = tool;
   document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector(`.tool-btn[data-tool="${tool}"]`);
   btn?.classList.add('active');
 
-  // Update annotator enabled state
-  if (textAnnotator) {
-    const enabled = tool !== 'select';
-    console.log('Enabling text annotator:', enabled);
-    textAnnotator.setAnnotatingEnabled(enabled);
-    // Set mode to CREATE_NEW so text selections create annotations
-    if (enabled) {
-      textAnnotator.setAnnotatingMode('CREATE_NEW');
-    }
-  } else {
-    console.log('No text annotator available');
-  }
+  // Update image annotator enabled state
   imageAnnotators.forEach(annotator => {
     annotator.setDrawingEnabled(tool !== 'select');
   });
