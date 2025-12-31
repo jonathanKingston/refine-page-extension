@@ -1146,8 +1146,13 @@ function setTool(tool: 'select' | AnnotationType) {
 
   // Update annotator enabled state
   if (textAnnotator) {
-    console.log('Enabling text annotator:', tool !== 'select', textAnnotator);
-    textAnnotator.setAnnotatingEnabled(tool !== 'select');
+    const enabled = tool !== 'select';
+    console.log('Enabling text annotator:', enabled);
+    textAnnotator.setAnnotatingEnabled(enabled);
+    // Set mode to CREATE_NEW so text selections create annotations
+    if (enabled) {
+      textAnnotator.setAnnotatingMode('CREATE_NEW');
+    }
   } else {
     console.log('No text annotator available');
   }
