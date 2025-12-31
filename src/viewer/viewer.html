@@ -22,17 +22,30 @@
         </a>
       </div>
       <div class="header-actions">
-        <button id="save-btn" class="btn btn-primary">Save</button>
-        <button id="back-btn" class="btn btn-secondary">Back to List</button>
+        <span class="save-status" id="save-status">Changes saved</span>
       </div>
     </header>
 
     <!-- Main Content -->
     <div class="viewer-main">
+      <!-- Toggle button for left sidebar (visible when collapsed) -->
+      <button class="sidebar-toggle sidebar-toggle-left" id="toggle-left-sidebar" title="Toggle snapshots panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 18l6-6-6-6"/>
+        </svg>
+      </button>
+
       <!-- Sidebar - Snapshot List -->
       <aside class="sidebar sidebar-left" id="snapshot-sidebar">
         <div class="sidebar-header">
-          <h2>Snapshots</h2>
+          <div class="sidebar-header-row">
+            <h2>Snapshots</h2>
+            <button class="sidebar-collapse-btn" id="collapse-left-sidebar" title="Collapse panel">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 18l-6-6 6-6"/>
+              </svg>
+            </button>
+          </div>
           <div class="filter-tabs">
             <button class="filter-tab active" data-filter="all">All</button>
             <button class="filter-tab" data-filter="pending">Pending</button>
@@ -75,8 +88,21 @@
         </div>
       </main>
 
+      <!-- Toggle button for right sidebar (visible when collapsed) -->
+      <button class="sidebar-toggle sidebar-toggle-right" id="toggle-right-sidebar" title="Toggle labeling panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </button>
+
       <!-- Right Sidebar - Labeling Panel -->
       <aside class="sidebar sidebar-right" id="labeling-sidebar">
+        <!-- Collapse button -->
+        <button class="sidebar-collapse-btn sidebar-collapse-right" id="collapse-right-sidebar" title="Collapse panel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </button>
         <!-- Goal Banner -->
         <div class="goal-banner">
           <strong>Goal:</strong> Label relevant content and answer locations in the page snapshot

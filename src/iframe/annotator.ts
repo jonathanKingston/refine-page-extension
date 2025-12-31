@@ -938,26 +938,35 @@ function handleMessage(event: MessageEvent) {
           }
           if (ann.id) {
             try {
-              // Create W3C format annotation for Annotorious
-              const w3cAnnotation = {
-                '@context': 'http://www.w3.org/ns/anno.jsonld',
-                type: 'Annotation',
+              // Create annotation in Annotorious native format (RECTANGLE)
+              const annotoriousAnnotation = {
                 id: ann.id,
-                body: [{
+                bodies: [{
                   type: 'TextualBody',
                   purpose: 'tagging',
                   value: ann.type || 'relevant',
                 }],
                 target: {
-                  source: ann.imageId,
+                  annotation: ann.id,
                   selector: {
-                    type: 'FragmentSelector',
-                    conformsTo: 'http://www.w3.org/TR/media-frags/',
-                    value: `xywh=percent:${ann.bounds.x},${ann.bounds.y},${ann.bounds.width},${ann.bounds.height}`,
+                    type: 'RECTANGLE',
+                    geometry: {
+                      x: ann.bounds.x,
+                      y: ann.bounds.y,
+                      w: ann.bounds.width,
+                      h: ann.bounds.height,
+                      bounds: {
+                        minX: ann.bounds.x,
+                        minY: ann.bounds.y,
+                        maxX: ann.bounds.x + ann.bounds.width,
+                        maxY: ann.bounds.y + ann.bounds.height,
+                      },
+                    },
                   },
                 },
               };
-              imageAnnotator.addAnnotation(w3cAnnotation);
+              console.log('[Iframe Annotator] Adding region annotation:', JSON.stringify(annotoriousAnnotation, null, 2));
+              imageAnnotator.addAnnotation(annotoriousAnnotation);
               console.log('[Iframe Annotator] Loaded region annotation:', ann.id);
 
               // Apply styling after a short delay to let Annotorious render

@@ -830,3 +830,135 @@ body {
   border-radius: 3px;
   font-family: monospace;
 }
+
+/* Sidebar Toggle Buttons */
+.sidebar-toggle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 48px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0 6px 6px 0;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.sidebar-toggle:hover {
+  background: var(--color-bg);
+  border-color: var(--color-primary);
+}
+
+.sidebar-toggle svg {
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-muted);
+}
+
+.sidebar-toggle-left {
+  left: 0;
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+}
+
+.sidebar-toggle-right {
+  right: 0;
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+}
+
+.sidebar-toggle-right svg {
+  transform: rotate(180deg);
+}
+
+/* Sidebar collapse button inside sidebar */
+.sidebar-collapse-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.sidebar-collapse-btn:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.sidebar-collapse-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.sidebar-collapse-right {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+}
+
+.sidebar-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.sidebar-header-row h2 {
+  margin-bottom: 0;
+}
+
+/* Collapsed sidebar states */
+.sidebar.collapsed {
+  display: none;
+}
+
+.viewer-main.left-collapsed .sidebar-toggle-left {
+  display: flex;
+}
+
+.viewer-main.right-collapsed .sidebar-toggle-right {
+  display: flex;
+}
+
+/* Save status indicator */
+.save-status {
+  font-size: 12px;
+  color: var(--color-success);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.save-status::before {
+  content: '✓';
+}
+
+.save-status.saving {
+  color: var(--color-text-muted);
+}
+
+.save-status.saving::before {
+  content: '…';
+}
+
+/* Right sidebar needs position relative for absolute collapse button */
+.sidebar-right {
+  position: relative;
+}
+
+/* Adjust goal banner to accommodate collapse button */
+.sidebar-right .goal-banner {
+  padding-left: 36px;
+}

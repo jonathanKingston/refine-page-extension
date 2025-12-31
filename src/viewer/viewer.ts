@@ -690,11 +690,46 @@ function convertFromW3CRegion(w3c: unknown, type: AnnotationType, targetSelector
     // Parse bounds from different selector formats
     let bounds = { x: 0, y: 0, width: 0, height: 0 };
 
-    // Handle array of selectors (Annotorious v3 format)
+    // Handle array of selectors or single selector
     const selectorArray = Array.isArray(selector) ? selector : [selector];
 
     for (const sel of selectorArray) {
-      const s = sel as { type?: string; value?: string; geometry?: { x: number; y: number; width: number; height: number; bounds?: { minX: number; minY: number; maxX: number; maxY: number } } };
+      const s = sel as {
+        type?: string;
+        value?: string;
+        geometry?: {
+          x?: number;
+          y?: number;
+          w?: number;
+          h?: number;
+          width?: number;
+          height?: number;
+          bounds?: { minX: number; minY: number; maxX: number; maxY: number };
+        };
+      };
+
+      // Annotorious RECTANGLE type - has geometry with x, y, w, h
+      if (s.type === 'RECTANGLE' && s.geometry) {
+        if (s.geometry.w !== undefined && s.geometry.h !== undefined) {
+          bounds = {
+            x: s.geometry.x || 0,
+            y: s.geometry.y || 0,
+            width: s.geometry.w,
+            height: s.geometry.h,
+          };
+          console.log('Extracted bounds from RECTANGLE geometry:', bounds);
+          break;
+        } else if (s.geometry.bounds) {
+          bounds = {
+            x: s.geometry.bounds.minX,
+            y: s.geometry.bounds.minY,
+            width: s.geometry.bounds.maxX - s.geometry.bounds.minX,
+            height: s.geometry.bounds.maxY - s.geometry.bounds.minY,
+          };
+          console.log('Extracted bounds from RECTANGLE bounds:', bounds);
+          break;
+        }
+      }
 
       // FragmentSelector with xywh format
       if (s.type === 'FragmentSelector' && s.value) {
@@ -706,6 +741,7 @@ function convertFromW3CRegion(w3c: unknown, type: AnnotationType, targetSelector
             width: parseFloat(match[3]),
             height: parseFloat(match[4]),
           };
+          console.log('Extracted bounds from FragmentSelector:', bounds);
           break;
         }
       }
@@ -713,7 +749,6 @@ function convertFromW3CRegion(w3c: unknown, type: AnnotationType, targetSelector
       // SvgSelector - extract from geometry if available
       if (s.type === 'SvgSelector' && s.geometry) {
         if (s.geometry.bounds) {
-          // Use bounds object
           bounds = {
             x: s.geometry.bounds.minX,
             y: s.geometry.bounds.minY,
@@ -721,19 +756,19 @@ function convertFromW3CRegion(w3c: unknown, type: AnnotationType, targetSelector
             height: s.geometry.bounds.maxY - s.geometry.bounds.minY,
           };
         } else {
-          // Use direct geometry
           bounds = {
             x: s.geometry.x || 0,
             y: s.geometry.y || 0,
-            width: s.geometry.width || 0,
-            height: s.geometry.height || 0,
+            width: s.geometry.width || s.geometry.w || 0,
+            height: s.geometry.height || s.geometry.h || 0,
           };
         }
+        console.log('Extracted bounds from SvgSelector:', bounds);
         break;
       }
     }
 
-    console.log('Extracted bounds:', bounds);
+    console.log('Final extracted bounds:', bounds);
 
     return {
       id: annotation.id || generateId(),
@@ -1569,14 +1604,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Save button
-  document.getElementById('save-btn')?.addEventListener('click', () => saveCurrentSnapshot(true));
-
   // Submit button
   document.getElementById('submit-btn')?.addEventListener('click', () => saveCurrentSnapshot(true));
 
-  // Back button
-  document.getElementById('back-btn')?.addEventListener('click', () => {
-    window.close();
+  // Sidebar toggle functionality
+  const viewerMain = document.querySelector('.viewer-main');
+  const leftSidebar = document.getElementById('snapshot-sidebar');
+  const rightSidebar = document.getElementById('labeling-sidebar');
+
+  // Left sidebar toggle
+  document.getElementById('collapse-left-sidebar')?.addEventListener('click', () => {
+    leftSidebar?.classList.add('collapsed');
+    viewerMain?.classList.add('left-collapsed');
+  });
+
+  document.getElementById('toggle-left-sidebar')?.addEventListener('click', () => {
+    leftSidebar?.classList.remove('collapsed');
+    viewerMain?.classList.remove('left-collapsed');
+  });
+
+  // Right sidebar toggle
+  document.getElementById('collapse-right-sidebar')?.addEventListener('click', () => {
+    rightSidebar?.classList.add('collapsed');
+    viewerMain?.classList.add('right-collapsed');
+  });
+
+  document.getElementById('toggle-right-sidebar')?.addEventListener('click', () => {
+    rightSidebar?.classList.remove('collapsed');
+    viewerMain?.classList.remove('right-collapsed');
   });
 });
