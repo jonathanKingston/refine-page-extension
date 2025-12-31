@@ -14,15 +14,10 @@ import type {
   PageQuality,
 } from '@/types';
 
-// Import annotation libraries
-import { createTextAnnotator } from '@recogito/text-annotator';
-import { createImageAnnotator } from '@annotorious/annotorious';
+// Import annotation library types (actual annotators are now in iframe)
 import '@recogito/text-annotator/text-annotator.css';
 import '@annotorious/annotorious/annotorious.css';
 
-// Use any for annotator types to avoid complex type conflicts
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyAnnotator = any;
 
 // Strip CSP meta tags from HTML to allow our annotation scripts to run
 function stripCspFromHtml(html: string): string {
@@ -52,9 +47,7 @@ let currentTool: 'select' | AnnotationType = 'select';
 let zoomLevel = 100;
 let allSnapshots: SnapshotSummary[] = [];
 
-// Annotation library instances
-let textAnnotator: AnyAnnotator = null;
-let imageAnnotators: Map<string, AnyAnnotator> = new Map();
+// Note: Annotation library instances are now managed in the iframe
 
 // Color mapping for annotation types
 const ANNOTATION_COLORS: Record<AnnotationType, string> = {
@@ -155,24 +148,13 @@ async function loadSnapshot(snapshotId: string) {
 
     currentQuestionId = snapshot.questions[0].id;
 
-    // Clean up existing annotators
-    destroyAnnotators();
-
     updateUI();
   } catch (error) {
     console.error('Failed to load snapshot:', error);
   }
 }
 
-// Destroy existing annotators
-function destroyAnnotators() {
-  if (textAnnotator) {
-    textAnnotator.destroy();
-    textAnnotator = null;
-  }
-  imageAnnotators.forEach((annotator) => annotator.destroy());
-  imageAnnotators.clear();
-}
+// Note: Annotators are destroyed automatically when iframe content is replaced
 
 // Update the entire UI
 function updateUI() {
@@ -296,18 +278,26 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
           const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
           if (question) {
             const annotationIds = new Set(question.annotationIds);
-            const questionAnnotations = currentSnapshot.annotations.text.filter(a => annotationIds.has(a.id));
-            console.log('Loading annotations for question:', currentQuestionId, 'count:', questionAnnotations.length);
-            if (questionAnnotations.length > 0) {
-              const w3cAnnotations = questionAnnotations.map(a => convertToW3CText(a));
+            // Load text annotations
+            const questionTextAnnotations = currentSnapshot.annotations.text.filter(a => annotationIds.has(a.id));
+            console.log('Loading text annotations for question:', currentQuestionId, 'count:', questionTextAnnotations.length);
+            if (questionTextAnnotations.length > 0) {
+              const w3cAnnotations = questionTextAnnotations.map(a => convertToW3CText(a));
               sendToIframe(iframe, 'LOAD_ANNOTATIONS', w3cAnnotations);
             }
+            // Load region annotations (image annotators are now in the iframe)
+            const questionRegionAnnotations = currentSnapshot.annotations.region.filter(a => annotationIds.has(a.id));
+            console.log('Loading region annotations for question:', currentQuestionId, 'count:', questionRegionAnnotations.length);
+            if (questionRegionAnnotations.length > 0) {
+              const regionData = questionRegionAnnotations.map(a => ({
+                id: a.id,
+                imageId: a.targetSelector,
+                bounds: a.bounds,
+                type: a.type,
+              }));
+              sendToIframe(iframe, 'LOAD_REGION_ANNOTATIONS', regionData);
+            }
           }
-        }
-        // Initialize image annotators on the iframe content
-        const iframeDoc = iframe.contentDocument;
-        if (iframeDoc) {
-          initializeImageAnnotators(iframeDoc);
         }
         break;
 
@@ -338,6 +328,14 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
         }
         break;
       }
+
+      case 'REGION_ANNOTATION_CREATED':
+        handleRegionAnnotationCreated(message.payload);
+        break;
+
+      case 'REGION_ANNOTATION_DELETED':
+        handleRegionAnnotationDeleted(message.payload);
+        break;
     }
   };
 
@@ -379,6 +377,49 @@ function handleAnnotationDeleted(payload: { annotation: unknown }) {
   if (!id) return;
 
   currentSnapshot.annotations.text = currentSnapshot.annotations.text.filter(a => a.id !== id);
+
+  for (const question of currentSnapshot.questions) {
+    question.annotationIds = question.annotationIds.filter(aid => aid !== id);
+  }
+
+  updateAnnotationCounts();
+  renderAnnotationList();
+  saveCurrentSnapshot();
+}
+
+// Handle region annotation created from iframe
+function handleRegionAnnotationCreated(payload: { annotation: unknown; tool: string; imageId: string }) {
+  if (!currentSnapshot) return;
+
+  const { annotation, tool, imageId } = payload;
+  const regionAnnotation = convertFromW3CRegion(annotation, tool as AnnotationType, imageId);
+
+  if (regionAnnotation) {
+    currentSnapshot.annotations.region.push(regionAnnotation);
+
+    if (currentQuestionId) {
+      const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+      if (question) {
+        question.annotationIds.push(regionAnnotation.id);
+      }
+    }
+
+    updateAnnotationCounts();
+    renderAnnotationList();
+    saveCurrentSnapshot();
+    console.log('Region annotation created:', regionAnnotation.id);
+  }
+}
+
+// Handle region annotation deleted from iframe
+function handleRegionAnnotationDeleted(payload: { annotation: unknown; imageId: string }) {
+  if (!currentSnapshot) return;
+
+  const annotation = payload.annotation as { id?: string };
+  const id = annotation?.id;
+  if (!id) return;
+
+  currentSnapshot.annotations.region = currentSnapshot.annotations.region.filter(a => a.id !== id);
 
   for (const question of currentSnapshot.questions) {
     question.annotationIds = question.annotationIds.filter(aid => aid !== id);
@@ -537,135 +578,7 @@ function updateAnnotationAppearance(annotationId: string, type: AnnotationType) 
   }, 50);
 }
 
-// Initialize image annotators for each image in the document
-function initializeImageAnnotators(doc: Document) {
-  if (!currentSnapshot) return;
-
-  const images = doc.querySelectorAll('img');
-  images.forEach((img, index) => {
-    // Skip tiny images (icons, etc.)
-    if (img.naturalWidth < 100 || img.naturalHeight < 100) return;
-
-    try {
-      const imgId = img.id || `img-${index}`;
-      img.id = imgId;
-
-      // Capture computed dimensions before Annotorious wraps the image
-      // Use bounding rect if available, fall back to natural dimensions
-      const rect = img.getBoundingClientRect();
-      const computedStyle = doc.defaultView?.getComputedStyle(img);
-      const width = rect.width > 0 ? rect.width :
-                    (computedStyle?.width && computedStyle.width !== 'auto' ? parseFloat(computedStyle.width) : img.naturalWidth);
-      const height = rect.height > 0 ? rect.height :
-                     (computedStyle?.height && computedStyle.height !== 'auto' ? parseFloat(computedStyle.height) : img.naturalHeight);
-
-      // Store original parent for reference
-      const originalParent = img.parentElement;
-
-      const annotator = createImageAnnotator(img, {
-        drawingEnabled: currentTool !== 'select',
-      });
-
-      // Fix wrapper dimensions - Annotorious wraps the image in a container
-      // that can collapse if the image's CSS layout depends on parent elements
-      const wrapper = img.parentElement;
-      if (wrapper && wrapper !== originalParent && width > 0 && height > 0) {
-        // Set explicit dimensions on the wrapper to prevent collapse
-        wrapper.style.cssText = `
-          display: inline-block !important;
-          width: ${width}px !important;
-          height: ${height}px !important;
-          position: relative !important;
-          max-width: 100% !important;
-        `;
-        // Ensure the image fills the wrapper properly
-        img.style.cssText = `
-          width: 100% !important;
-          height: 100% !important;
-          object-fit: contain !important;
-          display: block !important;
-        `;
-      }
-
-      annotator.on('createAnnotation', (annotation: any) => {
-        if (currentTool === 'select' || !currentSnapshot) return;
-
-        const regionAnnotation = convertFromW3CRegion(annotation, currentTool, imgId);
-        if (regionAnnotation) {
-          currentSnapshot.annotations.region.push(regionAnnotation);
-
-          if (currentQuestionId) {
-            const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-            if (question) {
-              question.annotationIds.push(regionAnnotation.id);
-            }
-          }
-
-          updateAnnotationCounts();
-          renderAnnotationList();
-          saveCurrentSnapshot();
-        }
-      });
-
-      annotator.on('deleteAnnotation', (annotation: any) => {
-        if (!currentSnapshot) return;
-        const id = annotation.id;
-        currentSnapshot.annotations.region = currentSnapshot.annotations.region.filter(a => a.id !== id);
-
-        for (const question of currentSnapshot.questions) {
-          question.annotationIds = question.annotationIds.filter(aid => aid !== id);
-        }
-
-        updateAnnotationCounts();
-        renderAnnotationList();
-        saveCurrentSnapshot();
-      });
-
-      // Load existing region annotations for this image
-      loadExistingRegionAnnotations(annotator, imgId);
-
-      imageAnnotators.set(imgId, annotator);
-    } catch (error) {
-      console.warn('Failed to initialize image annotator:', error);
-    }
-  });
-}
-
-// Load existing region annotations for an image
-function loadExistingRegionAnnotations(annotator: AnyAnnotator, imgId: string) {
-  if (!currentSnapshot) return;
-
-  const regionAnnotations = currentSnapshot.annotations.region.filter(
-    a => a.targetSelector === imgId
-  );
-
-  for (const annotation of regionAnnotations) {
-    try {
-      const w3cAnnotation = {
-        '@context': 'http://www.w3.org/ns/anno.jsonld',
-        type: 'Annotation',
-        id: annotation.id,
-        body: [{
-          type: 'TextualBody',
-          purpose: 'tagging',
-          value: annotation.type,
-        }],
-        target: {
-          source: imgId,
-          selector: {
-            type: 'FragmentSelector',
-            conformsTo: 'http://www.w3.org/TR/media-frags/',
-            value: `xywh=percent:${annotation.bounds.x},${annotation.bounds.y},${annotation.bounds.width},${annotation.bounds.height}`,
-          },
-        },
-      };
-
-      annotator.addAnnotation(w3cAnnotation);
-    } catch (error) {
-      console.warn('Failed to load region annotation:', error);
-    }
-  }
-}
+// Note: Image annotators are now initialized inside the iframe
 
 // Convert our text annotation format to Recogito v3 format
 function convertToW3CText(annotation: TextAnnotation): unknown {
@@ -864,14 +777,26 @@ function syncIframeAnnotations() {
 
   // Clear all annotations in iframe first
   sendToIframe(iframe, 'CLEAR_ANNOTATIONS', {});
+  sendToIframe(iframe, 'CLEAR_REGION_ANNOTATIONS', {});
 
   // Get annotations for current question
-  const { text: textAnnotations } = getAnnotationsForCurrentQuestion();
+  const { text: textAnnotations, region: regionAnnotations } = getAnnotationsForCurrentQuestion();
 
-  // Load only this question's annotations
+  // Load only this question's text annotations
   if (textAnnotations.length > 0) {
     const w3cAnnotations = textAnnotations.map(a => convertToW3CText(a));
     sendToIframe(iframe, 'LOAD_ANNOTATIONS', w3cAnnotations);
+  }
+
+  // Load only this question's region annotations
+  if (regionAnnotations.length > 0) {
+    const regionData = regionAnnotations.map(a => ({
+      id: a.id,
+      imageId: a.targetSelector,
+      bounds: a.bounds,
+      type: a.type,
+    }));
+    sendToIframe(iframe, 'LOAD_REGION_ANNOTATIONS', regionData);
   }
 }
 
@@ -1037,23 +962,25 @@ function renderAnnotationList() {
 function deleteAnnotation(id: string, type: 'text' | 'region') {
   if (!currentSnapshot) return;
 
+  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+
   if (type === 'text') {
     currentSnapshot.annotations.text = currentSnapshot.annotations.text.filter(a => a.id !== id);
     // Tell iframe to remove the annotation
-    const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
     if (iframe) {
       sendToIframe(iframe, 'REMOVE_ANNOTATION', { annotationId: id });
     }
   } else {
+    // Find the region annotation to get the imageId
+    const regionAnn = currentSnapshot.annotations.region.find(a => a.id === id);
     currentSnapshot.annotations.region = currentSnapshot.annotations.region.filter(a => a.id !== id);
-    // Also remove from image annotators
-    imageAnnotators.forEach(annotator => {
-      try {
-        annotator.removeAnnotation(id);
-      } catch (e) {
-        // Ignore
-      }
-    });
+    // Tell iframe to remove the region annotation
+    if (iframe) {
+      sendToIframe(iframe, 'REMOVE_REGION_ANNOTATION', {
+        annotationId: id,
+        imageId: regionAnn?.targetSelector
+      });
+    }
   }
 
   // Remove from questions
@@ -1243,7 +1170,6 @@ async function deleteSnapshotById(id: string) {
     showNotification('Snapshot deleted');
 
     if (currentSnapshot?.id === id) {
-      destroyAnnotators();
       currentSnapshot = null;
       const remaining = allSnapshots.filter(s => s.id !== id);
       if (remaining.length > 0) {
@@ -1320,12 +1246,7 @@ function setTool(tool: 'select' | AnnotationType) {
   const btn = document.querySelector(`.tool-btn[data-tool="${tool}"]`);
   btn?.classList.add('active');
 
-  // Update image annotator enabled state
-  imageAnnotators.forEach(annotator => {
-    annotator.setDrawingEnabled(tool !== 'select');
-  });
-
-  // Notify iframe annotator of tool change
+  // Notify iframe annotator of tool change (handles both text and image annotators)
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
   if (iframe) {
     sendToIframe(iframe, 'SET_TOOL', tool);

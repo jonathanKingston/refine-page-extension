@@ -1,10 +1,12 @@
 /**
  * Annotator script that runs inside the iframe context
- * This allows Recogito to properly detect text selections
+ * This allows Recogito and Annotorious to properly detect text and image selections
  */
 
 import { createTextAnnotator } from '@recogito/text-annotator';
+import { createImageAnnotator } from '@annotorious/annotorious';
 import '@recogito/text-annotator/text-annotator.css';
+import '@annotorious/annotorious/annotorious.css';
 
 // Types for messages
 interface AnnotatorMessage {
@@ -14,8 +16,11 @@ interface AnnotatorMessage {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let annotator: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const imageAnnotators: Map<string, any> = new Map();
 let currentTool: 'select' | 'relevant' | 'answer' = 'select';
 let annotationIndex = 0; // Track annotation numbers
+let regionAnnotationIndex = 0; // Track region annotation numbers
 
 // Store annotation metadata for re-applying styles after Recogito re-renders
 const annotationMeta: Map<string, { tool: string; index: number }> = new Map();
@@ -28,6 +33,76 @@ const ANNOTATION_COLORS: Record<string, string> = {
   relevant: 'rgba(34, 197, 94, 0.4)',  // green
   answer: 'rgba(59, 130, 246, 0.4)',    // blue
 };
+
+// Block-level elements that should have space/newline between them
+const BLOCK_ELEMENTS = new Set([
+  'DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+  'LI', 'TR', 'TD', 'TH', 'BLOCKQUOTE', 'PRE',
+  'SECTION', 'ARTICLE', 'HEADER', 'FOOTER', 'NAV',
+  'ASIDE', 'MAIN', 'FIGURE', 'FIGCAPTION', 'DT', 'DD'
+]);
+
+// Get normalized text from current selection, adding spaces at element boundaries
+function getNormalizedSelectionText(): string | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+
+  const range = selection.getRangeAt(0);
+  if (range.collapsed) return null;
+
+  // Create a document fragment to walk through
+  const fragment = range.cloneContents();
+
+  // Walk through all text nodes and track their parent elements
+  const textParts: { text: string; isBlock: boolean }[] = [];
+
+  function walkNodes(node: Node, isFirstInBlock: boolean = false) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent || '';
+      if (text.trim()) {
+        textParts.push({ text: text, isBlock: isFirstInBlock });
+      }
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as Element;
+      const isBlock = BLOCK_ELEMENTS.has(el.tagName);
+
+      let first = true;
+      for (const child of Array.from(node.childNodes)) {
+        walkNodes(child, isBlock && first);
+        first = false;
+      }
+    }
+  }
+
+  walkNodes(fragment);
+
+  if (textParts.length === 0) return null;
+
+  // Build normalized text with spaces between elements
+  let result = '';
+  let prevEndsWithSpace = true;
+
+  for (let i = 0; i < textParts.length; i++) {
+    const part = textParts[i];
+    const text = part.text;
+
+    // Add space between parts if:
+    // 1. Previous part didn't end with space and current doesn't start with space
+    // 2. This is a new block element
+    if (i > 0) {
+      const needsSpace = !prevEndsWithSpace && !/^\s/.test(text);
+      if (needsSpace || part.isBlock) {
+        result += ' ';
+      }
+    }
+
+    result += text;
+    prevEndsWithSpace = /\s$/.test(text);
+  }
+
+  // Clean up multiple spaces
+  return result.replace(/\s+/g, ' ').trim();
+}
 
 // Serialize annotation to remove non-cloneable objects (like Range)
 function serializeAnnotation(annotation: unknown): unknown {
@@ -163,9 +238,27 @@ function initializeAnnotator(container: HTMLElement) {
 
     console.log('[Iframe Annotator] Annotation created:', annotation);
 
+    // Get normalized text before selection is cleared (adds spaces at element boundaries)
+    const normalizedText = getNormalizedSelectionText();
+
     // Serialize to remove non-cloneable objects
-    const serialized = serializeAnnotation(annotation);
+    const serialized = serializeAnnotation(annotation) as {
+      target?: {
+        selector?: Array<{ quote?: string }>;
+      };
+    };
     const ann = annotation as { id?: string };
+
+    // Replace the raw text with normalized text if available
+    if (normalizedText && serialized.target?.selector?.[0]) {
+      console.log('[Iframe Annotator] Replacing raw text with normalized:', normalizedText);
+      serialized.target.selector[0].quote = normalizedText;
+    }
+
+    // Store text for scroll functionality
+    if (ann.id && serialized.target?.selector?.[0]?.quote) {
+      annotationText.set(ann.id, serialized.target.selector[0].quote);
+    }
 
     // Increment index and apply styling with number
     annotationIndex++;
@@ -201,6 +294,133 @@ function initializeAnnotator(container: HTMLElement) {
         type: 'ANNOTATION_CLICKED',
         payload: { annotationId: ann.id }
       }, '*');
+    }
+  });
+}
+
+// Initialize image annotators for all images in the container
+function initializeImageAnnotators(container: HTMLElement) {
+  console.log('[Iframe Annotator] Initializing image annotators');
+
+  // Destroy existing image annotators
+  imageAnnotators.forEach(ann => {
+    try {
+      ann.destroy();
+    } catch (e) {
+      console.warn('[Iframe Annotator] Error destroying image annotator:', e);
+    }
+  });
+  imageAnnotators.clear();
+  regionAnnotationIndex = 0;
+
+  const images = container.querySelectorAll('img');
+  console.log('[Iframe Annotator] Found', images.length, 'images');
+
+  images.forEach((img, index) => {
+    // Skip tiny images (icons, etc.)
+    if (img.naturalWidth < 100 || img.naturalHeight < 100) {
+      console.log('[Iframe Annotator] Skipping small image:', img.src?.substring(0, 50));
+      return;
+    }
+
+    try {
+      const imgId = img.id || `img-${index}`;
+      img.id = imgId;
+
+      // Capture computed dimensions before Annotorious wraps the image
+      const rect = img.getBoundingClientRect();
+      const computedStyle = window.getComputedStyle(img);
+      const width = rect.width > 0 ? rect.width :
+                    (computedStyle.width && computedStyle.width !== 'auto' ? parseFloat(computedStyle.width) : img.naturalWidth);
+      const height = rect.height > 0 ? rect.height :
+                     (computedStyle.height && computedStyle.height !== 'auto' ? parseFloat(computedStyle.height) : img.naturalHeight);
+
+      // Store original parent for reference
+      const originalParent = img.parentElement;
+
+      const imageAnnotator = createImageAnnotator(img, {
+        drawingEnabled: currentTool !== 'select',
+      });
+
+      // Fix wrapper dimensions - Annotorious wraps the image in a container
+      const wrapper = img.parentElement;
+      if (wrapper && wrapper !== originalParent && width > 0 && height > 0) {
+        wrapper.style.cssText = `
+          display: inline-block !important;
+          width: ${width}px !important;
+          height: ${height}px !important;
+          position: relative !important;
+          max-width: 100% !important;
+        `;
+        img.style.cssText = `
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: contain !important;
+          display: block !important;
+        `;
+      }
+
+      // Handle region annotation creation
+      imageAnnotator.on('createAnnotation', (annotation: unknown) => {
+        if (currentTool === 'select') return;
+
+        console.log('[Iframe Annotator] Region annotation created:', annotation);
+
+        regionAnnotationIndex++;
+        const serialized = serializeAnnotation(annotation);
+
+        window.parent.postMessage({
+          type: 'REGION_ANNOTATION_CREATED',
+          payload: {
+            annotation: serialized,
+            tool: currentTool,
+            imageId: imgId,
+            index: regionAnnotationIndex
+          }
+        }, '*');
+      });
+
+      // Handle region annotation deletion
+      imageAnnotator.on('deleteAnnotation', (annotation: unknown) => {
+        console.log('[Iframe Annotator] Region annotation deleted:', annotation);
+
+        const serialized = serializeAnnotation(annotation);
+
+        window.parent.postMessage({
+          type: 'REGION_ANNOTATION_DELETED',
+          payload: { annotation: serialized, imageId: imgId }
+        }, '*');
+      });
+
+      // Handle region annotation click
+      imageAnnotator.on('clickAnnotation', (annotation: unknown) => {
+        console.log('[Iframe Annotator] Region annotation clicked:', annotation);
+        const ann = annotation as { id?: string };
+        if (ann.id) {
+          window.parent.postMessage({
+            type: 'ANNOTATION_CLICKED',
+            payload: { annotationId: ann.id }
+          }, '*');
+        }
+      });
+
+      imageAnnotators.set(imgId, imageAnnotator);
+      console.log('[Iframe Annotator] Created image annotator for:', imgId);
+    } catch (error) {
+      console.warn('[Iframe Annotator] Failed to initialize image annotator:', error);
+    }
+  });
+
+  console.log('[Iframe Annotator] Initialized', imageAnnotators.size, 'image annotators');
+}
+
+// Update drawing enabled state for all image annotators
+function updateImageAnnotatorsEnabled(enabled: boolean) {
+  imageAnnotators.forEach(ann => {
+    try {
+      ann.setDrawingEnabled(enabled);
+    } catch (e) {
+      console.warn('[Iframe Annotator] Error setting drawing enabled:', e);
     }
   });
 }
@@ -456,6 +676,11 @@ function handleMessage(event: MessageEvent) {
         // Initialize annotator on the loaded content
         initializeAnnotator(container);
 
+        // Initialize image annotators after a brief delay to allow images to load
+        setTimeout(() => {
+          initializeImageAnnotators(container);
+        }, 100);
+
         // Signal ready
         window.parent.postMessage({ type: 'ANNOTATOR_READY' }, '*');
       }
@@ -472,6 +697,8 @@ function handleMessage(event: MessageEvent) {
         }
         console.log('[Iframe Annotator] Tool set to:', currentTool, 'enabled:', enabled);
       }
+      // Also update image annotators
+      updateImageAnnotatorsEnabled(currentTool !== 'select');
       break;
 
     case 'LOAD_ANNOTATIONS':
@@ -544,6 +771,92 @@ function handleMessage(event: MessageEvent) {
           console.log('[Iframe Annotator] Removed annotation:', annotationId);
         } catch (e) {
           console.warn('[Iframe Annotator] Error removing annotation:', e);
+        }
+      }
+      break;
+    }
+
+    case 'LOAD_REGION_ANNOTATIONS': {
+      const regionAnnotations = message.payload as Array<{
+        id?: string;
+        imageId: string;
+        bounds: { x: number; y: number; width: number; height: number };
+        type?: string;
+      }>;
+      console.log('[Iframe Annotator] LOAD_REGION_ANNOTATIONS received:', regionAnnotations);
+
+      if (regionAnnotations?.length) {
+        regionAnnotationIndex = regionAnnotations.length;
+
+        regionAnnotations.forEach(ann => {
+          const imageAnnotator = imageAnnotators.get(ann.imageId);
+          if (imageAnnotator && ann.id) {
+            try {
+              // Create W3C format annotation for Annotorious
+              const w3cAnnotation = {
+                '@context': 'http://www.w3.org/ns/anno.jsonld',
+                type: 'Annotation',
+                id: ann.id,
+                body: [{
+                  type: 'TextualBody',
+                  purpose: 'tagging',
+                  value: ann.type || 'relevant',
+                }],
+                target: {
+                  source: ann.imageId,
+                  selector: {
+                    type: 'FragmentSelector',
+                    conformsTo: 'http://www.w3.org/TR/media-frags/',
+                    value: `xywh=percent:${ann.bounds.x},${ann.bounds.y},${ann.bounds.width},${ann.bounds.height}`,
+                  },
+                },
+              };
+              imageAnnotator.addAnnotation(w3cAnnotation);
+              console.log('[Iframe Annotator] Loaded region annotation:', ann.id);
+            } catch (e) {
+              console.warn('[Iframe Annotator] Error loading region annotation:', e);
+            }
+          }
+        });
+      }
+      break;
+    }
+
+    case 'CLEAR_REGION_ANNOTATIONS':
+      imageAnnotators.forEach(ann => {
+        try {
+          ann.clearAnnotations();
+        } catch (e) {
+          console.warn('[Iframe Annotator] Error clearing region annotations:', e);
+        }
+      });
+      regionAnnotationIndex = 0;
+      break;
+
+    case 'REMOVE_REGION_ANNOTATION': {
+      const { annotationId, imageId } = message.payload as { annotationId: string; imageId?: string };
+      if (annotationId) {
+        if (imageId) {
+          // Remove from specific image annotator
+          const imageAnnotator = imageAnnotators.get(imageId);
+          if (imageAnnotator) {
+            try {
+              imageAnnotator.removeAnnotation(annotationId);
+              console.log('[Iframe Annotator] Removed region annotation:', annotationId);
+            } catch (e) {
+              console.warn('[Iframe Annotator] Error removing region annotation:', e);
+            }
+          }
+        } else {
+          // Try to remove from all image annotators
+          imageAnnotators.forEach(ann => {
+            try {
+              ann.removeAnnotation(annotationId);
+            } catch (e) {
+              // Ignore - annotation might not be on this image
+            }
+          });
+          console.log('[Iframe Annotator] Removed region annotation from all:', annotationId);
         }
       }
       break;
