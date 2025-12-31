@@ -235,10 +235,12 @@ function initializeAnnotators(iframe: HTMLIFrameElement) {
 
   // Initialize text annotator on the document body
   try {
+    console.log('Creating text annotator on:', doc.body);
     textAnnotator = createTextAnnotator(doc.body, {
       // User can only annotate when tool is set
       annotatingEnabled: currentTool !== 'select',
     });
+    console.log('Text annotator created:', textAnnotator);
 
     // Handle text annotation creation
     textAnnotator.on('createAnnotation', (annotation: any) => {
@@ -1136,6 +1138,7 @@ function addQuestion() {
 
 // Set tool
 function setTool(tool: 'select' | AnnotationType) {
+  console.log('setTool called with:', tool);
   currentTool = tool;
   document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector(`.tool-btn[data-tool="${tool}"]`);
@@ -1143,7 +1146,10 @@ function setTool(tool: 'select' | AnnotationType) {
 
   // Update annotator enabled state
   if (textAnnotator) {
+    console.log('Enabling text annotator:', tool !== 'select', textAnnotator);
     textAnnotator.setAnnotatingEnabled(tool !== 'select');
+  } else {
+    console.log('No text annotator available');
   }
   imageAnnotators.forEach(annotator => {
     annotator.setDrawingEnabled(tool !== 'select');
