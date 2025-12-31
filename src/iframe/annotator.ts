@@ -241,46 +241,68 @@ function injectAnnotationStyles() {
   style.id = 'pl-annotation-styles';
   // Use very high specificity selectors to override page styles
   style.textContent = `
-    /* Reset any page styles that might hide annotations */
-    .r6o-annotatable,
-    .r6o-annotatable *,
-    #content-container,
-    #content-container * {
-      /* Ensure visibility */
+    /* CRITICAL: Fix the highlight layer - disable mix-blend-mode which causes visibility issues */
+    .r6o-span-highlight-layer {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      min-height: 100% !important;
+      height: auto !important;
+      pointer-events: none !important;
+      z-index: 2147483640 !important;
+      overflow: visible !important;
+      mix-blend-mode: normal !important;
+      isolation: isolate !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      clip: auto !important;
+      clip-path: none !important;
+    }
+
+    /* Ensure the annotatable container has proper positioning and doesn't clip */
+    .r6o-annotatable {
+      position: relative !important;
+      overflow: visible !important;
+      clip: auto !important;
+      clip-path: none !important;
+    }
+
+    /* Make annotation spans visible with high z-index */
+    .r6o-span-highlight-layer .r6o-annotation,
+    .r6o-annotation {
+      position: absolute !important;
+      pointer-events: auto !important;
+      overflow: visible !important;
+      z-index: 2147483641 !important;
+      mix-blend-mode: normal !important;
+      opacity: 1 !important;
       visibility: visible !important;
     }
 
-    /* Custom annotation colors for relevant (green) - high specificity */
-    #content-container .annotation-relevant,
-    #content-container [data-annotation].annotation-relevant,
-    body .annotation-relevant,
-    body [data-annotation].annotation-relevant,
-    .r6o-span-highlight-layer .annotation-relevant,
-    .annotation-relevant {
+    /* Custom annotation colors for relevant (green) */
+    .r6o-annotation.annotation-relevant,
+    [data-annotation].annotation-relevant {
       background-color: rgba(34, 197, 94, 0.5) !important;
       background: rgba(34, 197, 94, 0.5) !important;
       border-bottom: 2px solid rgb(34, 197, 94) !important;
-      color: inherit !important;
       opacity: 1 !important;
-      display: inline !important;
+      visibility: visible !important;
     }
-    /* Custom annotation colors for answer (blue) - high specificity */
-    #content-container .annotation-answer,
-    #content-container [data-annotation].annotation-answer,
-    body .annotation-answer,
-    body [data-annotation].annotation-answer,
-    .r6o-span-highlight-layer .annotation-answer,
-    .annotation-answer {
+
+    /* Custom annotation colors for answer (blue) */
+    .r6o-annotation.annotation-answer,
+    [data-annotation].annotation-answer {
       background-color: rgba(59, 130, 246, 0.5) !important;
       background: rgba(59, 130, 246, 0.5) !important;
       border-bottom: 2px solid rgb(59, 130, 246) !important;
-      color: inherit !important;
       opacity: 1 !important;
-      display: inline !important;
+      visibility: visible !important;
     }
-    /* Number badge for annotations - always visible */
+
+    /* Number badge for annotations */
     .has-index {
-      position: relative !important;
+      overflow: visible !important;
     }
     .has-index::before {
       content: attr(data-annotation-index) !important;
@@ -311,16 +333,18 @@ function injectAnnotationStyles() {
     .has-index.annotation-answer::before {
       background: rgb(37, 99, 235) !important;
     }
+
     /* Hover effect on annotations */
-    [data-annotation] {
-      cursor: pointer !important;
-      transition: all 0.15s ease !important;
-    }
+    .r6o-annotation:hover,
     [data-annotation]:hover {
       filter: brightness(0.85) !important;
       box-shadow: 0 0 0 2px rgba(0,0,0,0.15) !important;
+      cursor: pointer !important;
     }
+
     /* Selected annotation */
+    .r6o-annotation.selected,
+    .r6o-annotation.pl-selected,
     [data-annotation].selected,
     [data-annotation].pl-selected {
       outline: 3px solid #f59e0b !important;
@@ -329,24 +353,6 @@ function injectAnnotationStyles() {
     .has-index.selected::before,
     .has-index.pl-selected::before {
       background: #f59e0b !important;
-    }
-    /* Make sure annotation layers work correctly */
-    .r6o-canvas-highlight-layer,
-    .r6o-span-highlight-layer {
-      pointer-events: none !important;
-      z-index: 2147483646 !important;
-      position: absolute !important;
-      overflow: visible !important;
-    }
-    .r6o-span-highlight-layer .r6o-annotation,
-    .r6o-span-highlight-layer [data-annotation] {
-      pointer-events: auto !important;
-      overflow: visible !important;
-    }
-    /* Ensure Recogito annotations are visible over page content */
-    .r6o-annotation {
-      z-index: 1000 !important;
-      overflow: visible !important;
     }
   `;
   document.head.appendChild(style);
