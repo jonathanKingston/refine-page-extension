@@ -391,12 +391,48 @@ function handleMessage(event: MessageEvent) {
       }
       break;
     }
+
+    case 'REMOVE_ANNOTATION': {
+      const { annotationId } = message.payload as { annotationId: string };
+      if (annotator && annotationId) {
+        try {
+          annotator.removeAnnotation(annotationId);
+          // Also remove from our metadata
+          annotationMeta.delete(annotationId);
+          console.log('[Iframe Annotator] Removed annotation:', annotationId);
+        } catch (e) {
+          console.warn('[Iframe Annotator] Error removing annotation:', e);
+        }
+      }
+      break;
+    }
   }
 }
 
 // Initialize
 console.log('[Iframe Annotator] Script loaded, waiting for messages...');
 window.addEventListener('message', handleMessage);
+
+// Forward keyboard shortcuts to parent when iframe has focus
+document.addEventListener('keydown', (e) => {
+  // Don't intercept if user is typing in an input
+  if ((e.target as HTMLElement).tagName === 'INPUT' ||
+      (e.target as HTMLElement).tagName === 'TEXTAREA') {
+    return;
+  }
+
+  // Tool switching shortcuts
+  if (e.key === '1' || e.key === 'r') {
+    e.preventDefault();
+    window.parent.postMessage({ type: 'KEY_PRESSED', payload: { key: 'r' } }, '*');
+  } else if (e.key === '2' || e.key === 'a') {
+    e.preventDefault();
+    window.parent.postMessage({ type: 'KEY_PRESSED', payload: { key: 'a' } }, '*');
+  } else if (e.key === 'Escape' || e.key === '0' || e.key === 's') {
+    e.preventDefault();
+    window.parent.postMessage({ type: 'KEY_PRESSED', payload: { key: 's' } }, '*');
+  }
+});
 
 // Signal that the iframe is ready to receive content
 window.parent.postMessage({ type: 'IFRAME_LOADED' }, '*');

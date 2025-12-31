@@ -294,6 +294,18 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
         }
         break;
       }
+
+      case 'KEY_PRESSED': {
+        const { key } = message.payload as { key: string };
+        if (key === 'r') {
+          setTool('relevant');
+        } else if (key === 'a') {
+          setTool('answer');
+        } else if (key === 's') {
+          setTool('select');
+        }
+        break;
+      }
     }
   };
 
@@ -936,13 +948,10 @@ function deleteAnnotation(id: string, type: 'text' | 'region') {
 
   if (type === 'text') {
     currentSnapshot.annotations.text = currentSnapshot.annotations.text.filter(a => a.id !== id);
-    // Also remove from text annotator
-    if (textAnnotator) {
-      try {
-        textAnnotator.removeAnnotation(id);
-      } catch (e) {
-        // Ignore if annotation not found in annotator
-      }
+    // Tell iframe to remove the annotation
+    const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+    if (iframe) {
+      sendToIframe(iframe, 'REMOVE_ANNOTATION', { annotationId: id });
     }
   } else {
     currentSnapshot.annotations.region = currentSnapshot.annotations.region.filter(a => a.id !== id);
