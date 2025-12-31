@@ -617,19 +617,24 @@ function renderSnapshotNav(snapshots: Snapshot[]) {
     .map(
       (s) => `
       <li data-id="${s.id}" class="${currentSnapshot?.id === s.id ? 'active' : ''}">
-        <div class="nav-item-title">${escapeHtml(s.title || 'Untitled')}</div>
-        <div class="nav-item-meta">
-          <span>${formatDate(s.capturedAt)}</span>
-          <span class="status-badge ${s.status}">${s.status}</span>
+        <div class="nav-item-content">
+          <div class="nav-item-title">${escapeHtml(s.title || 'Untitled')}</div>
+          <div class="nav-item-meta">
+            <span>${formatDate(s.capturedAt)}</span>
+            <span class="status-badge ${s.status}">${s.status}</span>
+          </div>
         </div>
+        <button class="nav-item-delete" data-id="${s.id}" title="Delete snapshot">×</button>
       </li>
     `
     )
     .join('');
 
-  // Add click handlers
+  // Add click handlers for navigation
   navEl.querySelectorAll('li[data-id]').forEach((li) => {
-    li.addEventListener('click', () => {
+    li.addEventListener('click', (e) => {
+      // Don't navigate if clicking delete button
+      if ((e.target as HTMLElement).classList.contains('nav-item-delete')) return;
       const id = (li as HTMLElement).dataset.id;
       if (id) {
         window.history.pushState({}, '', `?id=${id}`);
@@ -637,6 +642,50 @@ function renderSnapshotNav(snapshots: Snapshot[]) {
       }
     });
   });
+
+  // Add click handlers for delete buttons
+  navEl.querySelectorAll('.nav-item-delete').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = (btn as HTMLElement).dataset.id;
+      if (id) {
+        const snapshot = allSnapshots.find(s => s.id === id);
+        const title = snapshot?.title || 'Untitled';
+        if (confirm(`Delete snapshot "${title}"?\n\nThis cannot be undone.`)) {
+          await deleteSnapshotById(id);
+        }
+      }
+    });
+  });
+}
+
+// Delete a snapshot by ID
+async function deleteSnapshotById(id: string) {
+  try {
+    await sendMessage('DELETE_SNAPSHOT', { id });
+    showNotification('Snapshot deleted');
+
+    // If we deleted the current snapshot, load another one
+    if (currentSnapshot?.id === id) {
+      currentSnapshot = null;
+      const remaining = allSnapshots.filter(s => s.id !== id);
+      if (remaining.length > 0) {
+        await loadSnapshot(remaining[0].id);
+      } else {
+        // No snapshots left - clear the UI
+        const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+        if (iframe) iframe.src = 'about:blank';
+        const titleEl = document.getElementById('page-title');
+        if (titleEl) titleEl.textContent = 'No snapshots';
+      }
+    }
+
+    // Reload the navigation
+    await loadAllSnapshots();
+  } catch (error) {
+    console.error('Failed to delete snapshot:', error);
+    showNotification('Failed to delete snapshot', 'error');
+  }
 }
 
 // Update active state in snapshot nav

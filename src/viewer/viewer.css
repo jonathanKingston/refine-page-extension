@@ -153,6 +153,9 @@ body {
   border-bottom: 1px solid var(--color-border);
   cursor: pointer;
   transition: background 0.1s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .snapshot-nav li:hover {
@@ -162,6 +165,11 @@ body {
 .snapshot-nav li.active {
   background: #eff6ff;
   border-left: 3px solid var(--color-primary);
+}
+
+.nav-item-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .nav-item-title {
@@ -178,6 +186,32 @@ body {
   align-items: center;
   font-size: 11px;
   color: var(--color-text-muted);
+}
+
+.nav-item-delete {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.snapshot-nav li:hover .nav-item-delete {
+  opacity: 1;
+}
+
+.nav-item-delete:hover {
+  background: var(--color-danger);
+  color: white;
 }
 
 /* Preview Area */
