@@ -20,11 +20,11 @@ const SINGLE_FILE_OPTIONS = {
   removeAlternativeImages: true,
   groupDuplicateImages: true,
 
-  // Image handling - load lazy images
-  loadDeferredImages: true,
-  loadDeferredImagesMaxIdleTime: 1500,
-  loadDeferredImagesBlockCookies: false,
-  loadDeferredImagesBlockStorage: false,
+  // Image handling - DISABLED to prevent hanging on lazy images
+  loadDeferredImages: false,
+  loadDeferredImagesMaxIdleTime: 500,
+  loadDeferredImagesBlockCookies: true,
+  loadDeferredImagesBlockStorage: true,
   loadDeferredImagesKeepZoomLevel: false,
 
   // Compression/Output
@@ -51,7 +51,7 @@ const SINGLE_FILE_OPTIONS = {
   // Other options
   saveRawPage: false,
   saveOriginalURLs: false,
-  networkTimeout: 30000,      // 30 second timeout for resources
+  networkTimeout: 10000,      // 10 second timeout for resources
   maxResourceSizeEnabled: false,
 };
 
@@ -162,6 +162,25 @@ function makeInert(html: string): string {
   return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
 }
 
+// Helper to add timeout to a promise
+function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, ms);
+
+    promise
+      .then((result) => {
+        clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
 // Capture the current page using SingleFile
 async function captureWithSingleFile(): Promise<string> {
   console.log('Page Labeller: Using SingleFile for capture...');
@@ -170,12 +189,16 @@ async function captureWithSingleFile(): Promise<string> {
     // Initialize SingleFile
     singlefile.init(INIT_OPTIONS);
 
-    // Get page data using SingleFile
-    const pageData = await singlefile.getPageData(
-      SINGLE_FILE_OPTIONS,
-      INIT_OPTIONS,
-      document,
-      window
+    // Get page data using SingleFile with 15 second timeout
+    const pageData = await withTimeout(
+      singlefile.getPageData(
+        SINGLE_FILE_OPTIONS,
+        INIT_OPTIONS,
+        document,
+        window
+      ),
+      15000,
+      'SingleFile capture timed out after 15 seconds'
     );
 
     if (!pageData || !pageData.content) {
