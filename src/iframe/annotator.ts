@@ -225,7 +225,30 @@ function highlightAnnotation(annotationId: string) {
       elements.forEach(el => {
         el.classList.add('selected', 'pl-selected');
       });
-      elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      // Get the first annotation element's position
+      const firstEl = elements[0] as HTMLElement;
+      const topStyle = firstEl.style.top;
+
+      if (topStyle) {
+        // Parse the top value (e.g., "602.453px" -> 602.453)
+        const topValue = parseFloat(topStyle);
+        if (!isNaN(topValue)) {
+          // Scroll the document to center the annotation
+          const viewportHeight = window.innerHeight;
+          const scrollTarget = Math.max(0, topValue - viewportHeight / 2 + 50);
+
+          window.scrollTo({
+            top: scrollTarget,
+            behavior: 'smooth'
+          });
+          console.log('[Iframe Annotator] Scrolling to position:', scrollTarget);
+          return;
+        }
+      }
+
+      // Fallback to scrollIntoView if position parsing fails
+      firstEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
   }
