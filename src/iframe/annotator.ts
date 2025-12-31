@@ -17,6 +17,9 @@ let annotator: any = null;
 let currentTool: 'select' | 'relevant' | 'answer' = 'select';
 let annotationIndex = 0; // Track annotation numbers
 
+// Store annotation metadata for re-applying styles after Recogito re-renders
+const annotationMeta: Map<string, { tool: string; index: number }> = new Map();
+
 // Color mapping for annotation types
 const ANNOTATION_COLORS: Record<string, string> = {
   relevant: 'rgba(34, 197, 94, 0.4)',  // green
@@ -44,23 +47,50 @@ function serializeAnnotation(annotation: unknown): unknown {
 
 // Apply custom styling to annotations based on tool type
 function applyAnnotationStyle(annotationId: string, tool: string, index?: number) {
+  // Store metadata for re-applying after Recogito re-renders
+  if (index !== undefined) {
+    annotationMeta.set(annotationId, { tool, index });
+  }
+
   // Find the annotation elements and apply color
-  setTimeout(() => {
-    const color = ANNOTATION_COLORS[tool] || ANNOTATION_COLORS.relevant;
-    // Recogito uses data attributes on highlight spans
-    const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
-    elements.forEach((el, i) => {
-      (el as HTMLElement).style.backgroundColor = color;
-      el.classList.add(`annotation-${tool}`);
-      // Add number badge to first element only
-      if (i === 0 && index !== undefined) {
-        el.setAttribute('data-annotation-index', String(index));
-        el.classList.add('has-index');
-      }
-    });
-  }, 50);
+  const color = ANNOTATION_COLORS[tool] || ANNOTATION_COLORS.relevant;
+  // Recogito uses data attributes on highlight spans
+  const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
+  elements.forEach((el, i) => {
+    (el as HTMLElement).style.backgroundColor = color;
+    el.classList.add(`annotation-${tool}`);
+    // Add number badge to first element only
+    if (i === 0 && index !== undefined) {
+      el.setAttribute('data-annotation-index', String(index));
+      el.classList.add('has-index');
+    }
+  });
 }
 
+// Re-apply all annotation styles (called by MutationObserver)
+function reapplyAllStyles() {
+  annotationMeta.forEach((meta, annotationId) => {
+    const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
+    if (elements.length > 0) {
+      const color = ANNOTATION_COLORS[meta.tool] || ANNOTATION_COLORS.relevant;
+      elements.forEach((el, i) => {
+        // Only apply if not already styled
+        if (!el.classList.contains(`annotation-${meta.tool}`)) {
+          (el as HTMLElement).style.backgroundColor = color;
+          el.classList.add(`annotation-${meta.tool}`);
+          if (i === 0) {
+            el.setAttribute('data-annotation-index', String(meta.index));
+            el.classList.add('has-index');
+          }
+        }
+      });
+    }
+  });
+}
+
+
+// MutationObserver to re-apply styles when Recogito re-renders
+let styleObserver: MutationObserver | null = null;
 
 // Initialize annotator on the content
 function initializeAnnotator(container: HTMLElement) {
@@ -75,6 +105,14 @@ function initializeAnnotator(container: HTMLElement) {
     }
   }
 
+  // Clear old observer
+  if (styleObserver) {
+    styleObserver.disconnect();
+  }
+
+  // Clear old metadata
+  annotationMeta.clear();
+
   // Add custom styles for annotation colors
   injectAnnotationStyles();
 
@@ -82,6 +120,21 @@ function initializeAnnotator(container: HTMLElement) {
   // Instead we apply colors per-annotation via applyAnnotationStyle
   annotator = createTextAnnotator(container, {
     annotatingEnabled: currentTool !== 'select',
+  });
+
+  // Set up MutationObserver to re-apply styles when Recogito modifies DOM
+  styleObserver = new MutationObserver(() => {
+    // Debounce re-application
+    requestAnimationFrame(() => {
+      reapplyAllStyles();
+    });
+  });
+
+  styleObserver.observe(container, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'style']
   });
 
   if (currentTool !== 'select') {
