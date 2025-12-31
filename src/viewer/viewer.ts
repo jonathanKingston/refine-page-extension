@@ -74,15 +74,51 @@ async function sendMessage<T>(type: string, payload?: unknown): Promise<T> {
   });
 }
 
+// Direct storage access - bypasses message passing to avoid size limits
+async function getSnapshotIndex(): Promise<string[]> {
+  const result = await chrome.storage.local.get('snapshotIndex');
+  return result.snapshotIndex || [];
+}
+
+async function getSnapshotFromStorage(id: string): Promise<Snapshot | null> {
+  const key = `snapshot_${id}`;
+  const result = await chrome.storage.local.get(key);
+  return result[key] || null;
+}
+
+async function getAllSnapshotsFromStorage(): Promise<Snapshot[]> {
+  const index = await getSnapshotIndex();
+  const keys = index.map((id) => `snapshot_${id}`);
+  if (keys.length === 0) return [];
+
+  const result = await chrome.storage.local.get(keys);
+  return keys.map((key) => result[key]).filter(Boolean);
+}
+
+async function getAllSnapshotSummaries(): Promise<SnapshotSummary[]> {
+  const snapshots = await getAllSnapshotsFromStorage();
+  return snapshots.map((s) => ({
+    id: s.id,
+    url: s.url,
+    title: s.title,
+    status: s.status,
+    capturedAt: s.capturedAt,
+    updatedAt: s.updatedAt,
+    tags: s.tags,
+    annotationCount: { text: s.annotations.text.length, region: s.annotations.region.length },
+    questionCount: s.questions.length,
+  }));
+}
+
 // Get URL parameters
 function getUrlParams(): URLSearchParams {
   return new URLSearchParams(window.location.search);
 }
 
-// Load snapshot into preview
+// Load snapshot into preview (direct storage access - no message size limits)
 async function loadSnapshot(snapshotId: string) {
   try {
-    const snapshot = await sendMessage<Snapshot>('GET_SNAPSHOT', { id: snapshotId });
+    const snapshot = await getSnapshotFromStorage(snapshotId);
     if (!snapshot) {
       console.error('Snapshot not found:', snapshotId);
       return;
@@ -263,7 +299,37 @@ function injectAnnotationStyles(doc: Document) {
   const style = doc.createElement('style');
   style.id = 'pl-annotation-styles';
   style.textContent = `
-    /* Text annotator styles */
+    /* Text annotator library CSS (from @recogito/text-annotator) */
+    .r6o-canvas-highlight-layer{position:fixed;top:0;bottom:0;left:0;width:100vw;height:100vh;pointer-events:none}
+    .r6o-canvas-highlight-layer.bg{mix-blend-mode:multiply;z-index:1}
+    .r6o-annotatable .r6o-span-highlight-layer{position:absolute;top:0;left:0;width:100%;height:100%;mix-blend-mode:multiply;pointer-events:none;overflow:hidden;z-index:1}
+    .r6o-annotatable .r6o-span-highlight-layer.hidden{display:none}
+    .r6o-annotatable .r6o-span-highlight-layer .r6o-annotation{position:absolute;display:block;border-style:solid;border-width:0;box-sizing:content-box}
+    .r6o-presence-layer{left:0;position:fixed;top:0;bottom:0;width:100vw;pointer-events:none}
+    .r6o-annotatable{position:relative;-webkit-tap-highlight-color:transparent}
+    .r6o-annotatable.no-focus-outline{outline:none}
+    .hovered *{cursor:pointer}
+    *::selection,::selection{background:#0080ff2e}
+    ::-moz-selection{background:#0080ff2e}
+
+    /* Image annotator library CSS (from @annotorious/annotorious) */
+    .a9s-annotationlayer{box-sizing:border-box;height:100%;left:0;outline:none;position:absolute;top:0;touch-action:none;width:100%;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;-o-user-select:none;user-select:none}
+    .a9s-annotationlayer.hover{cursor:pointer}
+    .a9s-annotationlayer.hidden{display:none}
+    .a9s-annotationlayer ellipse,.a9s-annotationlayer line,.a9s-annotationlayer path,.a9s-annotationlayer polygon,.a9s-annotationlayer rect{fill:transparent;shape-rendering:geometricPrecision;vector-effect:non-scaling-stroke;-webkit-tap-highlight-color:transparent}
+    .a9s-touch-halo{fill:transparent;pointer-events:none;stroke-width:0;transition:fill .15s}
+    .a9s-touch-halo.touched{fill:#fff6}
+    .a9s-handle-buffer{fill:transparent}
+    .a9s-handle [role=button]{cursor:inherit!important}
+    .a9s-handle-dot{fill:#fff;pointer-events:none;stroke:#00000059;stroke-width:1px;vector-effect:non-scaling-stroke}
+    .a9s-handle-dot.selected{fill:#1a1a1a;stroke:none}
+    .a9s-shape-handle,.a9s-handle{cursor:move}
+    .a9s-handle.a9s-corner-handle{cursor:crosshair}
+    .a9s-annotationlayer .a9s-outer{display:none}
+    .a9s-annotationlayer .a9s-inner{fill:#0000001f;stroke:#000;stroke-width:1px}
+    rect.a9s-handle{fill:#000;rx:2px}
+
+    /* Custom text annotator styles */
     .r6o-annotation {
       padding: 2px 0;
       border-radius: 3px;
@@ -285,7 +351,7 @@ function injectAnnotationStyles(doc: Document) {
       outline-offset: 2px;
     }
 
-    /* Image annotator styles */
+    /* Custom image annotator styles */
     .a9s-annotationlayer {
       pointer-events: auto;
     }
@@ -833,8 +899,8 @@ function updateEvaluationForm() {
   }
 }
 
-// Save current snapshot
-async function saveCurrentSnapshot() {
+// Save current snapshot (silent by default, showNotification for explicit saves)
+async function saveCurrentSnapshot(showConfirmation = false) {
   if (!currentSnapshot) return;
 
   currentSnapshot.updatedAt = new Date().toISOString();
@@ -844,7 +910,9 @@ async function saveCurrentSnapshot() {
       id: currentSnapshot.id,
       updates: currentSnapshot,
     });
-    showNotification('Saved');
+    if (showConfirmation) {
+      showNotification('Saved');
+    }
   } catch (error) {
     console.error('Failed to save snapshot:', error);
     showNotification('Save failed', 'error');
@@ -882,10 +950,10 @@ function showNotification(message: string, type: 'success' | 'error' = 'success'
   }, 2000);
 }
 
-// Load all snapshots for navigation
+// Load all snapshots for navigation (direct storage access - no message size limits)
 async function loadAllSnapshots(filter: string = 'all') {
   try {
-    const snapshots = await sendMessage<SnapshotSummary[]>('GET_ALL_SNAPSHOTS');
+    const snapshots = await getAllSnapshotSummaries();
     allSnapshots = snapshots;
 
     let filtered = snapshots;
@@ -1126,7 +1194,7 @@ function setupKeyboardShortcuts() {
     if (e.ctrlKey || e.metaKey) {
       if (e.key === 's') {
         e.preventDefault();
-        saveCurrentSnapshot();
+        saveCurrentSnapshot(true);
       } else if (e.key === 'Enter') {
         e.preventDefault();
         if (currentSnapshot) {
@@ -1313,10 +1381,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Save button
-  document.getElementById('save-btn')?.addEventListener('click', saveCurrentSnapshot);
+  document.getElementById('save-btn')?.addEventListener('click', () => saveCurrentSnapshot(true));
 
   // Submit button
-  document.getElementById('submit-btn')?.addEventListener('click', saveCurrentSnapshot);
+  document.getElementById('submit-btn')?.addEventListener('click', () => saveCurrentSnapshot(true));
 
   // Back button
   document.getElementById('back-btn')?.addEventListener('click', () => {
