@@ -4,107 +4,85 @@
  */
 
 import type { Snapshot, CaptureCompleteMessage, CaptureErrorMessage } from '@/types';
+import * as singlefile from 'single-file-core/single-file.js';
 
-// SingleFile configuration options
+// SingleFile configuration options for high-fidelity capture
 const SINGLE_FILE_OPTIONS = {
+  // Resource handling
   removeHiddenElements: false,
   removeUnusedStyles: true,
   removeUnusedFonts: true,
   removeFrames: false,
   removeImports: true,
-  removeScripts: true,
-  compressHTML: false,
-  compressCSS: false,
+  removeScripts: true,       // Remove scripts for inert snapshot
+  removeAlternativeFonts: true,
+  removeAlternativeMedias: true,
+  removeAlternativeImages: true,
+  groupDuplicateImages: true,
+
+  // Image handling - load lazy images
   loadDeferredImages: true,
   loadDeferredImagesMaxIdleTime: 1500,
   loadDeferredImagesBlockCookies: false,
   loadDeferredImagesBlockStorage: false,
   loadDeferredImagesKeepZoomLevel: false,
-  filenameTemplate: '{page-title}',
-  infobarTemplate: '',
-  includeInfobar: false,
-  confirmInfobarContent: false,
-  autoClose: false,
-  confirmFilename: false,
-  filenameConflictAction: 'uniquify',
-  filenameMaxLength: 192,
-  filenameMaxLengthUnit: 'bytes',
-  filenameReplacedCharacters: ['~', '+', '\\\\', '?', '%', '*', ':', '|', '"', '<', '>', '\x00-\x1f', '\x7F'],
-  filenameReplacementCharacter: '_',
-  contextMenuEnabled: true,
-  tabMenuEnabled: true,
-  browserActionMenuEnabled: true,
-  shadowEnabled: true,
-  logsEnabled: true,
-  progressBarEnabled: true,
-  maxResourceSizeEnabled: false,
-  maxResourceSize: 10,
-  displayInfobar: true,
-  displayStats: false,
-  backgroundSave: true,
-  autoSaveDelay: 1,
-  autoSaveLoad: false,
-  autoSaveUnload: false,
-  autoSaveLoadOrUnload: false,
-  autoSaveDiscard: false,
-  autoSaveRemove: false,
-  autoSaveRepeat: false,
-  autoSaveRepeatDelay: 10,
-  removeAlternativeFonts: true,
-  removeAlternativeMedias: true,
-  removeAlternativeImages: true,
-  groupDuplicateImages: true,
-  saveRawPage: false,
-  saveToClipboard: false,
-  addProof: false,
-  saveToGDrive: false,
-  saveToDropbox: false,
-  saveWithWebDAV: false,
-  webDAVURL: '',
-  webDAVUser: '',
-  webDAVPassword: '',
-  saveToGitHub: false,
-  githubToken: '',
-  githubUser: '',
-  githubRepository: 'SingleFile-Archives',
-  githubBranch: 'main',
-  saveWithCompanion: false,
-  forceWebAuthFlow: false,
-  resolveFragmentIdentifierURLs: false,
-  userScriptEnabled: false,
-  openEditor: false,
-  openSavedPage: false,
-  autoOpenEditor: false,
-  saveCreatedBookmarks: false,
-  allowedBookmarkFolders: [],
-  ignoredBookmarkFolders: [],
-  replaceBookmarkURL: true,
+
+  // Compression/Output
+  compressHTML: false,
+  compressCSS: false,
+  compressContent: false,
+
+  // Metadata
   saveFavicon: true,
-  includeBOM: false,
-  warnUnsavedPage: true,
-  autoSaveExternalSave: false,
   insertMetaNoIndex: false,
-  insertMetaCSP: true,
-  passReferrerOnError: false,
+  insertMetaCSP: true,        // Add CSP to block scripts
   insertSingleFileComment: true,
-  blockMixedContent: false,
-  saveOriginalURLs: false,
-  acceptHeaders: {
-    font: 'application/font-woff2;q=1.0,application/font-woff;q=0.9,*/*;q=0.8',
-    image: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-    stylesheet: 'text/css,*/*;q=0.1',
-    script: '*/*',
-    document: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-  },
-  moveStylesInHead: false,
-  networkTimeout: 0,
-  woleetKey: '',
+  insertCanonicalLink: true,
+
+  // Content blocking for clean capture
   blockImages: false,
   blockStylesheets: false,
   blockFonts: false,
   blockScripts: true,
-  blockVideos: true,
-  blockAudios: true,
+  blockVideos: true,          // Don't include videos
+  blockAudios: true,          // Don't include audio
+  blockMixedContent: false,
+
+  // Other options
+  saveRawPage: false,
+  saveOriginalURLs: false,
+  networkTimeout: 30000,      // 30 second timeout for resources
+  maxResourceSizeEnabled: false,
+};
+
+// Initialize SingleFile with fetch implementation
+const INIT_OPTIONS = {
+  fetch: async (url: string, options?: RequestInit) => {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        credentials: 'omit',
+        mode: 'cors',
+      });
+      return response;
+    } catch (error) {
+      console.warn('SingleFile fetch failed for:', url, error);
+      throw error;
+    }
+  },
+  frameFetch: async (url: string, options?: RequestInit) => {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        credentials: 'omit',
+        mode: 'cors',
+      });
+      return response;
+    } catch (error) {
+      console.warn('SingleFile frame fetch failed for:', url, error);
+      throw error;
+    }
+  },
 };
 
 // Generate unique ID
@@ -120,70 +98,112 @@ function makeInert(html: string): string {
   // Remove all scripts (SingleFile should have done this, but ensure)
   doc.querySelectorAll('script').forEach((el) => el.remove());
 
+  // Remove noscript tags too
+  doc.querySelectorAll('noscript').forEach((el) => el.remove());
+
   // Disable all links by removing href and adding data attribute
   doc.querySelectorAll('a[href]').forEach((link) => {
     const href = link.getAttribute('href');
     if (href) {
       link.setAttribute('data-original-href', href);
       link.removeAttribute('href');
-      link.setAttribute('style', (link.getAttribute('style') || '') + ';cursor:default;pointer-events:none;');
+      link.setAttribute('role', 'link');
+      link.setAttribute('tabindex', '0');
+      // Add inline styles to show it's inactive
+      const existingStyle = link.getAttribute('style') || '';
+      link.setAttribute('style', existingStyle + ';cursor:default;pointer-events:none;');
     }
   });
 
   // Disable all forms
   doc.querySelectorAll('form').forEach((form) => {
+    form.setAttribute('data-original-action', form.getAttribute('action') || '');
+    form.removeAttribute('action');
     form.setAttribute('onsubmit', 'return false;');
-    form.setAttribute('action', 'javascript:void(0);');
   });
 
   // Disable all buttons
-  doc.querySelectorAll('button').forEach((btn) => {
+  doc.querySelectorAll('button, input[type="submit"], input[type="button"]').forEach((btn) => {
     btn.setAttribute('disabled', 'disabled');
   });
 
-  // Disable all inputs
+  // Disable all form inputs
   doc.querySelectorAll('input, select, textarea').forEach((input) => {
     input.setAttribute('disabled', 'disabled');
   });
 
-  // Add meta tag to identify as snapshot
+  // Remove event handler attributes
+  const eventAttrs = ['onclick', 'onmouseover', 'onmouseout', 'onload', 'onerror', 'onsubmit', 'onchange', 'onfocus', 'onblur'];
+  doc.querySelectorAll('*').forEach((el) => {
+    eventAttrs.forEach((attr) => el.removeAttribute(attr));
+  });
+
+  // Add meta tag to identify as Page Labeller snapshot
   const meta = doc.createElement('meta');
   meta.setAttribute('name', 'page-labeller-snapshot');
   meta.setAttribute('content', 'true');
+  meta.setAttribute('data-captured-at', new Date().toISOString());
   doc.head?.appendChild(meta);
 
-  // Add CSP meta tag to block any remaining scripts
+  // Add strict CSP meta tag to block any remaining scripts or frames
   const cspMeta = doc.createElement('meta');
   cspMeta.setAttribute('http-equiv', 'Content-Security-Policy');
-  cspMeta.setAttribute('content', "script-src 'none'; frame-src 'none';");
+  cspMeta.setAttribute('content', "default-src 'self' data: blob:; script-src 'none'; frame-src 'none'; object-src 'none';");
   doc.head?.insertBefore(cspMeta, doc.head.firstChild);
+
+  // Add a style to ensure links look inactive
+  const inertStyle = doc.createElement('style');
+  inertStyle.textContent = `
+    a[data-original-href] { cursor: default !important; pointer-events: none !important; }
+    button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0.7; }
+  `;
+  doc.head?.appendChild(inertStyle);
 
   return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
 }
 
 // Capture the current page using SingleFile
 async function captureWithSingleFile(): Promise<string> {
-  // SingleFile is injected by the build process
-  // We need to use the global SingleFile object if available
-  const win = window as Window & { singlefile?: { getPageData: (options: unknown) => Promise<{ content: string }> } };
+  console.log('Page Labeller: Using SingleFile for capture...');
 
-  if (win.singlefile) {
-    const pageData = await win.singlefile.getPageData(SINGLE_FILE_OPTIONS);
+  try {
+    // Initialize SingleFile
+    singlefile.init(INIT_OPTIONS);
+
+    // Get page data using SingleFile
+    const pageData = await singlefile.getPageData(
+      SINGLE_FILE_OPTIONS,
+      INIT_OPTIONS,
+      document,
+      window
+    );
+
+    if (!pageData || !pageData.content) {
+      throw new Error('SingleFile returned empty content');
+    }
+
+    console.log('Page Labeller: SingleFile capture successful, size:', pageData.content.length);
     return pageData.content;
+  } catch (error) {
+    console.error('Page Labeller: SingleFile capture failed:', error);
+    throw error;
   }
-
-  // Fallback: Use simpler capture method if SingleFile not loaded
-  return captureSimple();
 }
 
-// Simple capture fallback (used when SingleFile isn't available)
+// Simple capture fallback (used when SingleFile fails)
 async function captureSimple(): Promise<string> {
-  const doc = document.cloneNode(true) as Document;
+  console.log('Page Labeller: Using simple capture fallback...');
+
+  // Clone the document
+  const docClone = document.cloneNode(true) as Document;
 
   // Remove scripts
-  doc.querySelectorAll('script').forEach((script) => script.remove());
+  docClone.querySelectorAll('script').forEach((script) => script.remove());
 
-  // Inline stylesheets
+  // Remove iframes (they won't work in snapshot anyway)
+  docClone.querySelectorAll('iframe').forEach((iframe) => iframe.remove());
+
+  // Inline all stylesheets
   const styles: string[] = [];
   for (const sheet of document.styleSheets) {
     try {
@@ -193,12 +213,12 @@ async function captureSimple(): Promise<string> {
         }
       }
     } catch {
-      // Cross-origin stylesheet - try to fetch
+      // Cross-origin stylesheet - try to fetch it
       if (sheet.href) {
         try {
-          const response = await fetch(sheet.href);
+          const response = await fetch(sheet.href, { mode: 'cors', credentials: 'omit' });
           const css = await response.text();
-          styles.push(css);
+          styles.push(`/* From: ${sheet.href} */\n${css}`);
         } catch {
           console.warn('Could not fetch stylesheet:', sheet.href);
         }
@@ -206,54 +226,87 @@ async function captureSimple(): Promise<string> {
     }
   }
 
-  // Add consolidated styles
-  const styleEl = doc.createElement('style');
+  // Remove external stylesheet links and add inlined styles
+  docClone.querySelectorAll('link[rel="stylesheet"]').forEach((link) => link.remove());
+  const styleEl = docClone.createElement('style');
   styleEl.textContent = styles.join('\n');
-  doc.head?.appendChild(styleEl);
+  docClone.head?.appendChild(styleEl);
 
   // Convert images to data URLs
-  const images = doc.querySelectorAll('img');
+  const images = docClone.querySelectorAll('img');
   for (const img of images) {
-    if (img.src && !img.src.startsWith('data:')) {
+    const src = img.getAttribute('src');
+    if (src && !src.startsWith('data:')) {
       try {
-        const response = await fetch(img.src);
+        // Get the actual rendered src (handles srcset, lazy loading)
+        const actualSrc = (document.querySelector(`img[src="${src}"]`) as HTMLImageElement)?.currentSrc || src;
+        const response = await fetch(actualSrc, { mode: 'cors', credentials: 'omit' });
+        const blob = await response.blob();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        img.setAttribute('src', dataUrl);
+        img.removeAttribute('srcset');
+        img.removeAttribute('data-src');
+        img.removeAttribute('loading');
+      } catch {
+        console.warn('Failed to convert image:', src);
+      }
+    }
+  }
+
+  // Handle background images in inline styles
+  docClone.querySelectorAll('[style*="url("]').forEach(async (el) => {
+    const style = el.getAttribute('style') || '';
+    const urlMatch = style.match(/url\(['"]?([^'")\s]+)['"]?\)/);
+    if (urlMatch && urlMatch[1] && !urlMatch[1].startsWith('data:')) {
+      try {
+        const response = await fetch(urlMatch[1], { mode: 'cors', credentials: 'omit' });
         const blob = await response.blob();
         const dataUrl = await new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
           reader.readAsDataURL(blob);
         });
-        img.src = dataUrl;
+        el.setAttribute('style', style.replace(urlMatch[0], `url(${dataUrl})`));
       } catch {
-        console.warn('Failed to convert image:', img.src);
+        // Keep original URL if fetch fails
       }
     }
-  }
+  });
 
-  // Add base URL
-  let baseEl = doc.querySelector('base');
+  // Add base URL for any remaining relative URLs
+  let baseEl = docClone.querySelector('base');
   if (!baseEl) {
-    baseEl = doc.createElement('base');
-    doc.head?.insertBefore(baseEl, doc.head.firstChild);
+    baseEl = docClone.createElement('base');
+    docClone.head?.insertBefore(baseEl, docClone.head.firstChild);
   }
-  baseEl.href = window.location.href;
+  baseEl.setAttribute('href', window.location.href);
 
-  return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+  return '<!DOCTYPE html>\n' + docClone.documentElement.outerHTML;
 }
 
 // Main capture function
 export async function capturePage(): Promise<Snapshot> {
-  console.log('Page Labeller: Starting capture...');
+  console.log('Page Labeller: Starting capture of', window.location.href);
+  const startTime = Date.now();
 
   let html: string;
+  let captureMethod: string;
+
   try {
     html = await captureWithSingleFile();
+    captureMethod = 'singlefile';
   } catch (error) {
-    console.warn('SingleFile capture failed, using fallback:', error);
+    console.warn('Page Labeller: SingleFile capture failed, using fallback:', error);
     html = await captureSimple();
+    captureMethod = 'simple';
   }
 
-  // Make the snapshot inert
+  // Make the snapshot inert (disable all interactive elements)
   const inertHtml = makeInert(html);
 
   const snapshot: Snapshot = {
@@ -276,7 +329,9 @@ export async function capturePage(): Promise<Snapshot> {
     tags: [],
   };
 
-  console.log('Page Labeller: Capture complete, snapshot size:', inertHtml.length);
+  const duration = Date.now() - startTime;
+  console.log(`Page Labeller: Capture complete (${captureMethod}) in ${duration}ms, size: ${(inertHtml.length / 1024).toFixed(1)}KB`);
+
   return snapshot;
 }
 
@@ -285,7 +340,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'CAPTURE_PAGE') {
     capturePage()
       .then((snapshot) => {
-        // Store the snapshot
+        // Store the snapshot using chrome.storage.local
         chrome.storage.local.set({ [`snapshot_${snapshot.id}`]: snapshot }, () => {
           if (chrome.runtime.lastError) {
             const response: CaptureErrorMessage = {
@@ -296,7 +351,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             return;
           }
 
-          // Update index
+          // Update the snapshot index
           chrome.storage.local.get('snapshotIndex', (result) => {
             const index: string[] = result.snapshotIndex || [];
             if (!index.includes(snapshot.id)) {
