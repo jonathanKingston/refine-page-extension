@@ -133,7 +133,27 @@ async function loadSnapshot(snapshotId: string) {
     }
 
     currentSnapshot = snapshot;
-    currentQuestionId = snapshot.questions.length > 0 ? snapshot.questions[0].id : null;
+
+    // Create a default question if none exist
+    if (snapshot.questions.length === 0) {
+      const defaultQuestion: Question = {
+        id: generateId(),
+        query: 'Question 1',
+        expectedAnswer: '',
+        annotationIds: [],
+        evaluation: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      snapshot.questions.push(defaultQuestion);
+      // Save the snapshot with the new question
+      await sendMessage('UPDATE_SNAPSHOT', {
+        id: snapshot.id,
+        updates: snapshot,
+      });
+    }
+
+    currentQuestionId = snapshot.questions[0].id;
 
     // Clean up existing annotators
     destroyAnnotators();

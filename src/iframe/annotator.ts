@@ -461,6 +461,9 @@ function handleMessage(event: MessageEvent) {
     case 'CLEAR_ANNOTATIONS':
       if (annotator) {
         annotator.clearAnnotations();
+        // Also clear metadata and reset index
+        annotationMeta.clear();
+        annotationIndex = 0;
       }
       break;
 
