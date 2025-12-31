@@ -15,6 +15,7 @@ interface AnnotatorMessage {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let annotator: any = null;
 let currentTool: 'select' | 'relevant' | 'answer' = 'select';
+let annotationIndex = 0; // Track annotation numbers
 
 // Color mapping for annotation types
 const ANNOTATION_COLORS: Record<string, string> = {
@@ -42,15 +43,20 @@ function serializeAnnotation(annotation: unknown): unknown {
 }
 
 // Apply custom styling to annotations based on tool type
-function applyAnnotationStyle(annotationId: string, tool: string) {
+function applyAnnotationStyle(annotationId: string, tool: string, index?: number) {
   // Find the annotation elements and apply color
   setTimeout(() => {
     const color = ANNOTATION_COLORS[tool] || ANNOTATION_COLORS.relevant;
     // Recogito uses data attributes on highlight spans
     const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
-    elements.forEach(el => {
+    elements.forEach((el, i) => {
       (el as HTMLElement).style.backgroundColor = color;
       el.classList.add(`annotation-${tool}`);
+      // Add number badge to first element only
+      if (i === 0 && index !== undefined) {
+        el.setAttribute('data-annotation-index', String(index));
+        el.classList.add('has-index');
+      }
     });
   }, 50);
 }
@@ -101,14 +107,15 @@ function initializeAnnotator(container: HTMLElement) {
     const serialized = serializeAnnotation(annotation);
     const ann = annotation as { id?: string };
 
-    // Apply styling
+    // Increment index and apply styling with number
+    annotationIndex++;
     if (ann.id) {
-      applyAnnotationStyle(ann.id, currentTool);
+      applyAnnotationStyle(ann.id, currentTool, annotationIndex);
     }
 
     window.parent.postMessage({
       type: 'ANNOTATION_CREATED',
-      payload: { annotation: serialized, tool: currentTool }
+      payload: { annotation: serialized, tool: currentTool, index: annotationIndex }
     }, '*');
   });
 
@@ -174,6 +181,34 @@ function injectAnnotationStyles() {
       background-color: rgba(59, 130, 246, 0.4) !important;
       border-bottom: 2px solid rgb(59, 130, 246) !important;
     }
+    /* Number badge for annotations */
+    .has-index {
+      position: relative;
+    }
+    .has-index::before {
+      content: attr(data-annotation-index);
+      position: absolute;
+      top: -8px;
+      left: -2px;
+      background: #374151;
+      color: white;
+      font-size: 10px;
+      font-weight: bold;
+      min-width: 14px;
+      height: 14px;
+      line-height: 14px;
+      text-align: center;
+      border-radius: 7px;
+      padding: 0 3px;
+      z-index: 1001;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .has-index.annotation-relevant::before {
+      background: rgb(22, 163, 74);
+    }
+    .has-index.annotation-answer::before {
+      background: rgb(37, 99, 235);
+    }
     /* Recogito highlight layer styling */
     .r6o-annotation,
     .r6o-span-highlight-layer .r6o-annotation {
@@ -189,6 +224,10 @@ function injectAnnotationStyles() {
     [data-annotation].selected {
       outline: 2px solid #f59e0b !important;
       outline-offset: 1px;
+    }
+    .has-index.selected::before,
+    .has-index.pl-selected::before {
+      background: #f59e0b !important;
     }
     /* Make sure annotations are visible */
     .r6o-canvas-highlight-layer,
@@ -216,6 +255,9 @@ function handleMessage(event: MessageEvent) {
       const { html } = message.payload as { html: string };
       const container = document.getElementById('content-container');
       if (container && html) {
+        // Reset annotation index for new content
+        annotationIndex = 0;
+
         // Insert the HTML content
         container.innerHTML = html;
         console.log('[Iframe Annotator] HTML content loaded');
@@ -245,21 +287,23 @@ function handleMessage(event: MessageEvent) {
       if (annotator) {
         const annotations = message.payload as Array<{
           id?: string;
-          body?: Array<{ value?: string }>;
+          bodies?: Array<{ value?: string }>;
         }>;
         if (annotations?.length) {
+          // Reset annotation index and set to count of loaded annotations
+          annotationIndex = annotations.length;
           annotator.setAnnotations(annotations);
           console.log('[Iframe Annotator] Loaded', annotations.length, 'annotations');
-          // Apply styles to loaded annotations
+          // Apply styles to loaded annotations with numbers
           setTimeout(() => {
-            for (const ann of annotations) {
+            annotations.forEach((ann, idx) => {
               if (ann.id) {
-                // Extract type from body
-                const typeBody = ann.body?.find(b => b.value === 'relevant' || b.value === 'answer');
+                // Extract type from bodies (Recogito v3 format)
+                const typeBody = ann.bodies?.find(b => b.value === 'relevant' || b.value === 'answer');
                 const tool = typeBody?.value || 'relevant';
-                applyAnnotationStyle(ann.id, tool);
+                applyAnnotationStyle(ann.id, tool, idx + 1);
               }
-            }
+            });
           }, 100);
         }
       }
