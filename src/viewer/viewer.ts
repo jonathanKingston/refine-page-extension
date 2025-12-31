@@ -687,6 +687,17 @@ function convertToW3CText(annotation: TextAnnotation): unknown {
   };
 }
 
+// Normalize text that spans multiple elements - insert spaces at word boundaries
+function normalizeSelectedText(text: string): string {
+  // Insert space between lowercase followed by uppercase (e.g., "HomeNews" -> "Home News")
+  // This handles text that spans multiple DOM elements with no whitespace
+  return text
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    // Also handle numbers followed by letters
+    .replace(/([0-9])([A-Za-z])/g, '$1 $2')
+    .replace(/([A-Za-z])([0-9])/g, '$1 $2');
+}
+
 // Convert W3C text annotation to our format
 function convertFromW3CText(w3c: any, type: AnnotationType): TextAnnotation | null {
   try {
@@ -719,6 +730,9 @@ function convertFromW3CText(w3c: any, type: AnnotationType): TextAnnotation | nu
       console.warn('Could not extract selected text from annotation');
       return null;
     }
+
+    // Normalize text that may have been concatenated across DOM elements
+    selectedText = normalizeSelectedText(selectedText);
 
     const annotation: TextAnnotation = {
       id: w3c.id || generateId(),
