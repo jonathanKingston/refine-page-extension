@@ -1,0 +1,23 @@
+{
+  "name": "page-labeller",
+  "version": "1.0.0",
+  "description": "Web extension for capturing and annotating page snapshots for labeling",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/build.mjs --watch",
+    "build": "node scripts/build.mjs",
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@annotorious/annotorious": "^3.0.17",
+    "@recogito/text-annotator": "^3.0.17",
+    "single-file-core": "^1.5.74"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "@types/node": "^20.10.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  }
+}

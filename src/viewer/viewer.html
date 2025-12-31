@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page Labeller - Viewer</title>
+  <link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+  <div class="viewer-container">
+    <!-- Header -->
+    <header class="viewer-header">
+      <div class="header-left">
+        <h1>Page Labeller</h1>
+        <span class="page-title" id="page-title">Loading...</span>
+      </div>
+      <div class="header-actions">
+        <button id="save-btn" class="btn btn-primary">Save</button>
+        <button id="back-btn" class="btn btn-secondary">Back to List</button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="viewer-main">
+      <!-- Sidebar - Snapshot List -->
+      <aside class="sidebar sidebar-left" id="snapshot-sidebar">
+        <div class="sidebar-header">
+          <h2>Snapshots</h2>
+          <div class="filter-tabs">
+            <button class="filter-tab active" data-filter="all">All</button>
+            <button class="filter-tab" data-filter="pending">Pending</button>
+            <button class="filter-tab" data-filter="approved">Done</button>
+          </div>
+        </div>
+        <ul class="snapshot-nav" id="snapshot-nav">
+          <!-- Populated dynamically -->
+        </ul>
+      </aside>
+
+      <!-- Snapshot Preview -->
+      <main class="snapshot-preview">
+        <div class="preview-toolbar">
+          <div class="annotation-tools">
+            <span class="tool-label">Annotation:</span>
+            <button class="tool-btn active" data-tool="select" title="Select">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+              </svg>
+            </button>
+            <button class="tool-btn" data-tool="relevant" title="Mark as Relevant">
+              <span class="tool-color relevant"></span>
+              Relevant
+            </button>
+            <button class="tool-btn" data-tool="answer" title="Mark as Answer">
+              <span class="tool-color answer"></span>
+              Answer
+            </button>
+            <button class="tool-btn" data-tool="no_content" title="Mark as No Content">
+              <span class="tool-color no_content"></span>
+              No Content
+            </button>
+          </div>
+          <div class="preview-actions">
+            <button id="zoom-out" class="icon-btn" title="Zoom Out">-</button>
+            <span id="zoom-level">100%</span>
+            <button id="zoom-in" class="icon-btn" title="Zoom In">+</button>
+          </div>
+        </div>
+        <div class="preview-frame-container" id="preview-container">
+          <iframe id="preview-frame" sandbox="allow-same-origin"></iframe>
+          <div class="annotation-overlay" id="annotation-overlay"></div>
+        </div>
+      </main>
+
+      <!-- Right Sidebar - Labeling Panel -->
+      <aside class="sidebar sidebar-right" id="labeling-sidebar">
+        <!-- Goal Banner -->
+        <div class="goal-banner">
+          <strong>Goal:</strong> Label relevant content and answer locations in the page snapshot
+        </div>
+
+        <!-- Current Question -->
+        <div class="panel question-panel">
+          <div class="panel-header">
+            <h3>Query</h3>
+            <button id="add-question-btn" class="btn btn-small">+ Add Question</button>
+          </div>
+          <div class="question-selector">
+            <select id="question-select">
+              <option value="">Select or add a question...</option>
+            </select>
+          </div>
+          <div class="question-form" id="question-form">
+            <div class="form-group">
+              <label for="query-input">Query</label>
+              <textarea id="query-input" rows="2" placeholder="What question should this page answer?"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="expected-answer">Expected Answer</label>
+              <textarea id="expected-answer" rows="2" placeholder="What is the expected answer?"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Annotations List -->
+        <div class="panel annotations-panel">
+          <div class="panel-header">
+            <h3>Annotation</h3>
+          </div>
+          <div class="annotation-type-tabs">
+            <button class="type-tab" data-type="relevant">
+              <span class="type-indicator relevant"></span>
+              Relevant <span class="count" id="relevant-count">0</span>
+            </button>
+            <button class="type-tab" data-type="answer">
+              <span class="type-indicator answer"></span>
+              Answer <span class="count" id="answer-count">0</span>
+            </button>
+          </div>
+          <div class="annotation-list" id="annotation-list">
+            <div class="empty-state">No annotations yet. Select text in the preview to annotate.</div>
+          </div>
+          <label class="checkbox-option">
+            <input type="checkbox" id="no-content-checkbox">
+            <span>no_content<sup>[3]</sup></span>
+          </label>
+        </div>
+
+        <!-- Evaluation Panel -->
+        <div class="panel evaluation-panel">
+          <h3>Evaluation</h3>
+
+          <div class="eval-group">
+            <label class="eval-label">Answer correctness?</label>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" name="correctness" value="correct">
+                <span>correct<sup>[c]</sup></span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="correctness" value="incorrect">
+                <span>incorrect<sup>[i]</sup></span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="correctness" value="partial">
+                <span>partial<sup>[p]</sup></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="eval-group">
+            <label class="eval-label">Answer in page?</label>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" name="in-page" value="yes">
+                <span>yes<sup>[y]</sup></span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="in-page" value="no">
+                <span>no<sup>[n]</sup></span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="in-page" value="ambiguous">
+                <span>ambiguous<sup>[a]</sup></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="eval-group">
+            <label class="eval-label">Page content quality?</label>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" name="quality" value="good">
+                <span>good<sup>[g]</sup></span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="quality" value="broken">
+                <span>broken<sup>[b]</sup></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Review Actions -->
+        <div class="panel review-panel">
+          <h3>Review Status</h3>
+          <div class="status-indicator" id="current-status">
+            <span class="status-badge pending">Pending</span>
+          </div>
+          <div class="review-actions">
+            <button id="approve-btn" class="btn btn-success">Approve</button>
+            <button id="decline-btn" class="btn btn-danger">Decline</button>
+          </div>
+          <div class="form-group">
+            <label for="review-notes">Notes</label>
+            <textarea id="review-notes" rows="2" placeholder="Optional review notes..."></textarea>
+          </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="submit-section">
+          <button id="submit-btn" class="btn btn-primary btn-large">Submit</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script type="module" src="viewer.ts"></script>
+</body>
+</html>

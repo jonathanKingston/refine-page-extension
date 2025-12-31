@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snapshot - Page Labeller</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .snapshot-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .snapshot-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      background: #1f2937;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .snapshot-info {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .snapshot-title {
+      font-weight: 500;
+      max-width: 400px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .snapshot-url {
+      font-size: 12px;
+      color: #9ca3af;
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .snapshot-badge {
+      background: #059669;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .snapshot-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-secondary {
+      background: #374151;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #4b5563;
+    }
+
+    .snapshot-frame-container {
+      flex: 1;
+      overflow: auto;
+      background: #e5e7eb;
+    }
+
+    #snapshot-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: white;
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #6b7280;
+    }
+
+    .error {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #dc2626;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="snapshot-container">
+    <div class="snapshot-toolbar">
+      <div class="snapshot-info">
+        <span class="snapshot-badge">SNAPSHOT</span>
+        <span class="snapshot-title" id="snapshot-title">Loading...</span>
+        <span class="snapshot-url" id="snapshot-url"></span>
+      </div>
+      <div class="snapshot-actions">
+        <button class="btn btn-secondary" id="open-labeller">Open in Labeller</button>
+        <button class="btn btn-primary" id="download-btn">Download HTML</button>
+      </div>
+    </div>
+    <div class="snapshot-frame-container">
+      <iframe id="snapshot-frame" sandbox="allow-same-origin"></iframe>
+    </div>
+  </div>
+  <script type="module" src="snapshot.ts"></script>
+</body>
+</html>
