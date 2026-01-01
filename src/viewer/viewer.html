@@ -55,6 +55,29 @@
         <ul class="snapshot-nav" id="snapshot-nav">
           <!-- Populated dynamically -->
         </ul>
+
+        <!-- Current Question (for active snapshot) -->
+        <div class="panel question-panel">
+          <div class="panel-header">
+            <h3>Question</h3>
+            <button id="add-question-btn" class="btn btn-small">+ Add</button>
+          </div>
+          <div class="question-selector">
+            <select id="question-select">
+              <option value="">Select or add a question...</option>
+            </select>
+          </div>
+          <div class="question-form" id="question-form">
+            <div class="form-group">
+              <label for="query-input">Query</label>
+              <textarea id="query-input" rows="2" placeholder="What question should this page answer?"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="expected-answer">Expected Answer</label>
+              <textarea id="expected-answer" rows="2" placeholder="What is the expected answer?"></textarea>
+            </div>
+          </div>
+        </div>
       </aside>
 
       <!-- Snapshot Preview -->
@@ -103,33 +126,6 @@
             <path d="M9 18l6-6-6-6"/>
           </svg>
         </button>
-        <!-- Goal Banner -->
-        <div class="goal-banner">
-          <strong>Goal:</strong> Label relevant content and answer locations in the page snapshot
-        </div>
-
-        <!-- Current Question -->
-        <div class="panel question-panel">
-          <div class="panel-header">
-            <h3>Query</h3>
-            <button id="add-question-btn" class="btn btn-small">+ Add Question</button>
-          </div>
-          <div class="question-selector">
-            <select id="question-select">
-              <option value="">Select or add a question...</option>
-            </select>
-          </div>
-          <div class="question-form" id="question-form">
-            <div class="form-group">
-              <label for="query-input">Query</label>
-              <textarea id="query-input" rows="2" placeholder="What question should this page answer?"></textarea>
-            </div>
-            <div class="form-group">
-              <label for="expected-answer">Expected Answer</label>
-              <textarea id="expected-answer" rows="2" placeholder="What is the expected answer?"></textarea>
-            </div>
-          </div>
-        </div>
 
         <!-- Annotations List -->
         <div class="panel annotations-panel">
