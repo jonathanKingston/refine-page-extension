@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>refine.page — capture & label web page snapshots</title>
+    <meta
+      name="description"
+      content="refine.page captures high-fidelity, inert snapshots of web pages so you can annotate relevant/answer text, create Q&A labels, and export datasets. Also available as a web app workflow."
+    />
+    <link rel="icon" href="../icons/icon.svg" />
+    <link rel="stylesheet" href="./site.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="container topbar-inner">
+        <a class="brand" href="#top" aria-label="refine.page home">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-name">refine.page</span>
+        </a>
+
+        <nav class="nav">
+          <a class="nav-link" href="#how">How it works</a>
+          <a class="nav-link" href="#extension">Extension</a>
+          <a class="nav-link" href="#web">Web app</a>
+          <a class="nav-link" href="#faq">FAQ</a>
+        </nav>
+
+        <div class="topbar-actions">
+          <button id="toggle-theme" class="theme-toggle" type="button" title="Toggle theme">
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+            <span class="sr-only">Toggle theme</span>
+          </button>
+          <a class="btn btn-secondary btn-small" href="#install">Install</a>
+          <a class="btn btn-primary btn-small" href="#web">Try the web app</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="container hero-inner">
+          <div class="hero-copy">
+            <p class="kicker">Capture → Freeze → Label → Export</p>
+            <h1>Turn any web page into a clean, label-ready snapshot.</h1>
+            <p class="lead">
+              <strong>refine.page</strong> saves high‑fidelity, <strong>inert</strong> snapshots of pages and gives you a focused workflow
+              to highlight <strong>relevant</strong> text, mark the <strong>answer</strong>, write Q&A labels, review, and export.
+            </p>
+
+            <div class="cta-row">
+              <a class="btn btn-primary" href="#install">Get the extension</a>
+              <a class="btn btn-secondary" href="#how">See how it works</a>
+            </div>
+
+            <div class="hero-notes">
+              <div class="pill">
+                <span class="dot relevant" aria-hidden="true"></span>
+                Relevant highlights
+              </div>
+              <div class="pill">
+                <span class="dot answer" aria-hidden="true"></span>
+                Answer highlights
+              </div>
+              <div class="pill">
+                <span class="dot storage" aria-hidden="true"></span>
+                Local-first storage
+              </div>
+            </div>
+          </div>
+
+          <div class="hero-card" aria-label="Product preview">
+            <div class="preview-header">
+              <span class="preview-title">Snapshot viewer</span>
+              <span class="preview-badge">Inert capture</span>
+            </div>
+            <div class="preview-body">
+              <div class="preview-row">
+                <div class="mini-tag relevant">Relevant</div>
+                <div class="mini-line"></div>
+              </div>
+              <div class="preview-row">
+                <div class="mini-tag answer">Answer</div>
+                <div class="mini-line long"></div>
+              </div>
+              <div class="preview-box">
+                <div class="preview-box-title">Question</div>
+                <div class="preview-box-text">What does this page say about …?</div>
+                <div class="preview-box-title">Expected answer</div>
+                <div class="preview-box-text muted">A short, factual answer you can evaluate.</div>
+              </div>
+              <div class="preview-footer">
+                <button class="mini-btn primary" type="button" disabled>Approve</button>
+                <button class="mini-btn" type="button" disabled>Decline</button>
+                <span class="preview-meta">Export anytime</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="how" class="section">
+        <div class="container">
+          <div class="section-header">
+            <h2>How refine.page works</h2>
+            <p class="section-subtitle">Two ways to use it: as a browser extension today, and as a web app workflow too.</p>
+          </div>
+
+          <div class="grid-2">
+            <article class="card">
+              <div class="card-header">
+                <h3>Extension workflow</h3>
+                <span class="badge">Best for 1-click capture</span>
+              </div>
+              <ol class="steps">
+                <li><strong>Capture</strong> a page into a self-contained snapshot.</li>
+                <li><strong>Annotate</strong> relevant text and the answer on the frozen page.</li>
+                <li><strong>Create Q&A</strong> labels + evaluation (correctness, “answer in page”, quality).</li>
+                <li><strong>Review</strong> snapshots (approve/decline) with notes.</li>
+                <li><strong>Export</strong> the dataset (and import later).</li>
+              </ol>
+              <div class="card-footer">
+                <a class="btn btn-secondary" href="#extension">See extension details</a>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-header">
+                <h3>Web app workflow</h3>
+                <span class="badge">Great for teams</span>
+              </div>
+              <ol class="steps">
+                <li><strong>Start a project</strong> and add URLs (or upload HTML snapshots).</li>
+                <li><strong>Capture on the server</strong> (or via a lightweight browser helper).</li>
+                <li><strong>Label in the browser</strong> with the same “Relevant / Answer” tools.</li>
+                <li><strong>Assign & review</strong> work with status and notes.</li>
+                <li><strong>Export</strong> a consistent dataset for training/eval.</li>
+              </ol>
+              <div class="card-footer">
+                <a class="btn btn-secondary" href="#web">See web app details</a>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="extension" class="section">
+        <div class="container">
+          <div class="section-header">
+            <h2>Use it as a browser extension</h2>
+            <p class="section-subtitle">Capture pages exactly as you saw them, then label without the page changing under you.</p>
+          </div>
+
+          <div class="grid-3">
+            <article class="card">
+              <div class="card-header">
+                <h3>High-fidelity snapshots</h3>
+                <span class="badge subtle">SingleFile-style</span>
+              </div>
+              <p class="card-text">
+                Saves the page as a self-contained HTML snapshot so you can review later without broken assets.
+              </p>
+            </article>
+
+            <article class="card">
+              <div class="card-header">
+                <h3>Inert by design</h3>
+                <span class="badge subtle">No surprises</span>
+              </div>
+              <p class="card-text">
+                Links/forms/scripts are disabled in the snapshot so labeling is stable and reproducible.
+              </p>
+            </article>
+
+            <article class="card">
+              <div class="card-header">
+                <h3>Labeling workflow</h3>
+                <span class="badge subtle">Relevant + Answer</span>
+              </div>
+              <p class="card-text">
+                Highlight evidence, write the expected answer, and export structured data when you’re done.
+              </p>
+            </article>
+          </div>
+
+          <div id="install" class="callout">
+            <div class="callout-copy">
+              <h3>Install & use</h3>
+              <p>
+                In dev: build the extension, then load the <code>dist</code> folder in <code>chrome://extensions</code>.
+              </p>
+            </div>
+            <div class="callout-actions">
+              <a class="btn btn-primary" href="../README.md">Read setup steps</a>
+              <a class="btn btn-secondary" href="#web">Or use the web app workflow</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="web" class="section">
+        <div class="container">
+          <div class="section-header">
+            <h2>Imagine it as a web app too</h2>
+            <p class="section-subtitle">
+              Same UI and labeling primitives — but with projects, collaboration, and shareable exports.
+            </p>
+          </div>
+
+          <div class="grid-2">
+            <article class="card">
+              <div class="card-header">
+                <h3>What you’d do</h3>
+                <span class="badge">Flow</span>
+              </div>
+              <ol class="steps">
+                <li><strong>Create a project</strong> (e.g. “Travel QA eval”).</li>
+                <li><strong>Add URLs</strong> or paste/upload HTML snapshots.</li>
+                <li><strong>Label</strong> the same way: Relevant, Answer, Q&A, evaluation.</li>
+                <li><strong>Review & iterate</strong> until the project is export-ready.</li>
+              </ol>
+            </article>
+
+            <article class="card">
+              <div class="card-header">
+                <h3>Why it’s useful</h3>
+                <span class="badge">Teams</span>
+              </div>
+              <ul class="bullets">
+                <li><strong>Consistency</strong>: one dataset format across extension and web.</li>
+                <li><strong>Collaboration</strong>: assign labeling/review, track status, keep notes.</li>
+                <li><strong>Reproducibility</strong>: frozen snapshots paired with annotations and Q&A.</li>
+                <li><strong>Export</strong>: download JSON/ZIP for training and evaluation.</li>
+              </ul>
+            </article>
+          </div>
+
+          <div class="note">
+            <strong>Note:</strong> This repo is the extension; the “web app” described here is the same experience, imagined as a hosted service.
+          </div>
+        </div>
+      </section>
+
+      <section id="faq" class="section">
+        <div class="container">
+          <div class="section-header">
+            <h2>FAQ</h2>
+            <p class="section-subtitle">The basics, straight from the workflow.</p>
+          </div>
+
+          <div class="grid-2">
+            <article class="card">
+              <div class="card-header">
+                <h3>What does “inert snapshot” mean?</h3>
+              </div>
+              <p class="card-text">
+                The captured page is preserved as HTML, and interactive behavior is disabled so labeling stays stable (no navigation, no script reflows).
+              </p>
+            </article>
+
+            <article class="card">
+              <div class="card-header">
+                <h3>Where is my data stored?</h3>
+              </div>
+              <p class="card-text">
+                In the extension, snapshots and labels are stored locally (Chrome storage), and you can export/import as backups.
+              </p>
+            </article>
+
+            <article class="card">
+              <div class="card-header">
+                <h3>What can I export?</h3>
+              </div>
+              <p class="card-text">
+                Snapshots (HTML) plus your annotations, questions, evaluations, and review status — ready to turn into training/eval datasets.
+              </p>
+            </article>
+
+            <article class="card">
+              <div class="card-header">
+                <h3>Can this work without the extension?</h3>
+              </div>
+              <p class="card-text">
+                Yes — the same labeling UI can live on a web page: you’d upload/import snapshots or capture URLs server-side, then annotate in-browser.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <div class="container footer-inner">
+          <div class="footer-left">
+            <div class="brand brand-footer">
+              <span class="brand-mark" aria-hidden="true"></span>
+              <span class="brand-name">refine.page</span>
+            </div>
+            <p class="footer-muted">Capture. Label. Review. Export.</p>
+          </div>
+          <div class="footer-right">
+            <a class="footer-link" href="../README.md">Docs</a>
+            <a class="footer-link" href="#top">Back to top</a>
+          </div>
+        </div>
+      </footer>
+    </main>
+
+    <script src="./site.js"></script>
+  </body>
+</html>
