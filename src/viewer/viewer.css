@@ -621,7 +621,7 @@ body {
 /* Preview Container */
 .preview-container {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   padding: 12px;
   background: var(--color-bg);
   min-height: 0;
@@ -704,6 +704,7 @@ body {
   padding: 6px;
   border-radius: var(--radius-sm);
   transition: background 0.15s;
+  cursor: pointer;
 }
 
 .annotation-item:hover {

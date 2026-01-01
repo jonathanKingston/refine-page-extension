@@ -192,8 +192,8 @@ function updateUI() {
     iframe.src = iframeUrl;
   }
 
-  // Update question selector
-  updateQuestionSelector();
+  // Update questions tab list
+  updateQuestionsTabList();
 
   // Update annotation counts
   updateAnnotationCounts();
@@ -922,73 +922,6 @@ function syncIframeAnnotations() {
   }
 }
 
-// Update question selector
-// Get the active snapshot's accordion elements
-function getActiveAccordion(): {
-  select: HTMLSelectElement | null;
-  queryInput: HTMLTextAreaElement | null;
-  expectedAnswer: HTMLTextAreaElement | null;
-  addBtn: HTMLButtonElement | null;
-} {
-  const activeItem = document.querySelector('.snapshot-nav li.active');
-  if (!activeItem) {
-    return { select: null, queryInput: null, expectedAnswer: null, addBtn: null };
-  }
-  return {
-    select: activeItem.querySelector('.question-select-input') as HTMLSelectElement,
-    queryInput: activeItem.querySelector('.query-input') as HTMLTextAreaElement,
-    expectedAnswer: activeItem.querySelector('.expected-answer-input') as HTMLTextAreaElement,
-    addBtn: activeItem.querySelector('.add-question-btn') as HTMLButtonElement,
-  };
-}
-
-function updateQuestionSelector() {
-  if (!currentSnapshot) return;
-
-  const { select } = getActiveAccordion();
-  if (!select) return;
-
-  select.innerHTML = '<option value="">Select question...</option>';
-
-  for (const question of currentSnapshot.questions) {
-    const option = document.createElement('option');
-    option.value = question.id;
-    option.textContent = question.query.substring(0, 50) + (question.query.length > 50 ? '...' : '');
-    select.appendChild(option);
-  }
-
-  if (currentQuestionId) {
-    select.value = currentQuestionId;
-    updateQuestionForm();
-  }
-}
-
-// Update question form
-function updateQuestionForm() {
-  if (!currentSnapshot || !currentQuestionId) {
-    clearQuestionForm();
-    return;
-  }
-
-  const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-  if (!question) {
-    clearQuestionForm();
-    return;
-  }
-
-  const { queryInput, expectedAnswer } = getActiveAccordion();
-
-  if (queryInput) queryInput.value = question.query;
-  if (expectedAnswer) expectedAnswer.value = question.expectedAnswer;
-}
-
-// Clear question form
-function clearQuestionForm() {
-  const { queryInput, expectedAnswer } = getActiveAccordion();
-
-  if (queryInput) queryInput.value = '';
-  if (expectedAnswer) expectedAnswer.value = '';
-}
 
 // Update annotation counts (for current question)
 function updateAnnotationCounts() {
@@ -1297,7 +1230,6 @@ function navigateQuestion(direction: 'prev' | 'next') {
   }
 
   currentQuestionId = currentSnapshot.questions[newIdx].id;
-  updateQuestionForm();
   updateEvaluationForm();
   updateCurrentQuestionLabel();
   updateAnnotationCounts();
@@ -1422,59 +1354,33 @@ function renderSnapshotNav(snapshots: SnapshotSummary[]) {
     .map(
       (s) => `
       <li data-id="${s.id}" class="${currentSnapshot?.id === s.id ? 'active' : ''}">
-        <div class="snapshot-header">
-          <div class="nav-item-content">
-            <div class="nav-item-title">${escapeHtml(s.title || 'Untitled')}</div>
-            <div class="nav-item-meta">
-              <span>${formatDate(s.capturedAt)}</span>
-              <span class="status-badge ${s.status}">${s.status}</span>
-            </div>
-          </div>
-          <button class="nav-item-delete" data-id="${s.id}" title="Delete snapshot">×</button>
+        <div class="snapshot-row">
+          <span class="snapshot-title">${escapeHtml(s.title || 'Untitled')}</span>
+          <span class="status-dot ${s.status}"></span>
         </div>
-        <div class="question-accordion">
-          <div class="question-header">
-            <h4>Question</h4>
-            <button class="btn btn-small add-question-btn">+ Add</button>
-          </div>
-          <div class="question-selector">
-            <select class="question-select-input">
-              <option value="">Select question...</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Query</label>
-            <textarea class="query-input" rows="2" placeholder="What question should this page answer?"></textarea>
-          </div>
-          <div class="form-group">
-            <label>Expected Answer</label>
-            <textarea class="expected-answer-input" rows="2" placeholder="Expected answer..."></textarea>
-          </div>
+        <div class="snapshot-meta">
+          <span>${formatDate(s.capturedAt)}</span>
+          <span>${s.questionCount} Q</span>
         </div>
       </li>
     `
     )
     .join('');
 
-  // Add click handlers for navigation (only on the snapshot-header, not the accordion)
+  // Add click handlers for navigation
   navEl.querySelectorAll('li[data-id]').forEach((li) => {
-    const header = li.querySelector('.snapshot-header');
-    header?.addEventListener('click', (e) => {
-      // Don't navigate if clicking delete button
-      if ((e.target as HTMLElement).classList.contains('nav-item-delete')) return;
+    li.addEventListener('click', () => {
       const id = (li as HTMLElement).dataset.id;
       if (id && id !== currentSnapshot?.id) {
         window.history.pushState({}, '', `?id=${id}`);
         loadSnapshot(id);
       }
     });
-  });
 
-  // Add click handlers for delete buttons
-  navEl.querySelectorAll('.nav-item-delete').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const id = (btn as HTMLElement).dataset.id;
+    // Right-click to delete
+    li.addEventListener('contextmenu', async (e) => {
+      e.preventDefault();
+      const id = (li as HTMLElement).dataset.id;
       if (id) {
         const snapshot = allSnapshots.find(s => s.id === id);
         const title = snapshot?.title || 'Untitled';
@@ -1486,78 +1392,6 @@ function renderSnapshotNav(snapshots: SnapshotSummary[]) {
   });
 }
 
-// Debounce timeouts for accordion inputs
-let queryTimeout: ReturnType<typeof setTimeout> | null = null;
-let answerTimeout: ReturnType<typeof setTimeout> | null = null;
-
-// Set up event delegation for question accordions (called once)
-function setupAccordionDelegation() {
-  const navEl = document.getElementById('snapshot-nav');
-  if (!navEl) return;
-
-  // Question select change (event delegation)
-  navEl.addEventListener('change', (e) => {
-    const target = e.target as HTMLElement;
-    if (!target.classList.contains('question-select-input')) return;
-
-    const select = target as HTMLSelectElement;
-    currentQuestionId = select.value || null;
-    updateQuestionForm();
-    updateEvaluationForm();
-    updateAnnotationCounts();
-    renderAnnotationList();
-    syncIframeAnnotations();
-  });
-
-  // Add question button (event delegation)
-  navEl.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    if (!target.classList.contains('add-question-btn')) return;
-
-    e.stopPropagation();
-    addQuestion();
-  });
-
-  // Query input change (event delegation with debounce)
-  navEl.addEventListener('input', (e) => {
-    const target = e.target as HTMLElement;
-
-    if (target.classList.contains('query-input')) {
-      if (!currentSnapshot || !currentQuestionId) return;
-      const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-      if (question) {
-        question.query = (target as HTMLTextAreaElement).value;
-        question.updatedAt = new Date().toISOString();
-
-        // Update selector to show new query text
-        const { select } = getActiveAccordion();
-        if (select) {
-          const option = select.querySelector(`option[value="${currentQuestionId}"]`) as HTMLOptionElement;
-          if (option) {
-            option.textContent = question.query.substring(0, 50) + (question.query.length > 50 ? '...' : '');
-          }
-        }
-
-        // Debounce save
-        if (queryTimeout) clearTimeout(queryTimeout);
-        queryTimeout = setTimeout(() => saveCurrentSnapshot(), 500);
-      }
-    }
-
-    if (target.classList.contains('expected-answer-input')) {
-      if (!currentSnapshot || !currentQuestionId) return;
-      const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-      if (question) {
-        question.expectedAnswer = (target as HTMLTextAreaElement).value;
-        question.updatedAt = new Date().toISOString();
-
-        // Debounce save
-        if (answerTimeout) clearTimeout(answerTimeout);
-        answerTimeout = setTimeout(() => saveCurrentSnapshot(), 500);
-      }
-    }
-  });
-}
 
 // Delete a snapshot by ID
 async function deleteSnapshotById(id: string) {
@@ -1624,11 +1458,8 @@ function addQuestion() {
   currentSnapshot.questions.push(question);
   currentQuestionId = question.id;
 
-  updateQuestionSelector();
-  const { select, queryInput } = getActiveAccordion();
-  if (select) select.value = question.id;
-
-  clearQuestionForm();
+  updateQuestionsTabList();
+  updateCurrentQuestionLabel();
   updateEvaluationForm();
   // Update annotation list and counts for the new (empty) question
   updateAnnotationCounts();
@@ -1637,6 +1468,8 @@ function addQuestion() {
   syncIframeAnnotations();
   saveCurrentSnapshot();
 
+  // Focus the query input in the Questions tab
+  const queryInput = document.getElementById('query-input') as HTMLTextAreaElement;
   queryInput?.focus();
 }
 
@@ -1783,7 +1616,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const snapshotId = params.get('id');
 
   setupKeyboardShortcuts();
-  setupAccordionDelegation();
 
   // Theme toggle
   document.getElementById('toggle-theme')?.addEventListener('click', () => {
@@ -1984,12 +1816,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       const id = questionItem.dataset.id;
       if (id) {
         currentQuestionId = id;
-        updateQuestionForm();
+        updateQuestionsTabList();
         updateEvaluationForm();
         updateCurrentQuestionLabel();
         updateAnnotationCounts();
         renderAnnotationList();
-        updateQuestionsTabList();
         syncIframeAnnotations();
       }
     }

@@ -31,10 +31,10 @@ const annotationMeta: Map<string, { tool: string; index: number }> = new Map();
 // Store annotation text for scrolling to off-screen annotations
 const annotationText: Map<string, string> = new Map();
 
-// Color mapping for annotation types
+// Color mapping for annotation types (matching theme colors)
 const ANNOTATION_COLORS: Record<string, string> = {
-  relevant: 'rgba(34, 197, 94, 0.4)',  // green
-  answer: 'rgba(59, 130, 246, 0.4)',    // blue
+  relevant: 'rgba(6, 182, 212, 0.4)',   // cyan (matches theme relevant)
+  answer: 'rgba(236, 72, 153, 0.4)',    // pink (matches theme answer)
 };
 
 // Block-level elements that should have space/newline between them
@@ -135,7 +135,7 @@ function applyAnnotationStyle(annotationId: string, tool: string, index?: number
 
   // Find the annotation elements and apply color
   const color = ANNOTATION_COLORS[tool] || ANNOTATION_COLORS.relevant;
-  const borderColor = tool === 'answer' ? 'rgb(59, 130, 246)' : 'rgb(34, 197, 94)';
+  const borderColor = tool === 'answer' ? 'rgb(236, 72, 153)' : 'rgb(6, 182, 212)';
   // Recogito uses data attributes on highlight spans
   const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
   elements.forEach((el, i) => {
@@ -161,7 +161,7 @@ function reapplyAllStyles() {
     const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
     if (elements.length > 0) {
       const color = ANNOTATION_COLORS[meta.tool] || ANNOTATION_COLORS.relevant;
-      const borderColor = meta.tool === 'answer' ? 'rgb(59, 130, 246)' : 'rgb(34, 197, 94)';
+      const borderColor = meta.tool === 'answer' ? 'rgb(236, 72, 153)' : 'rgb(6, 182, 212)';
       elements.forEach((el, i) => {
         const htmlEl = el as HTMLElement;
         // Always re-apply inline styles to override any page CSS
@@ -686,22 +686,22 @@ function injectAnnotationStyles() {
       visibility: visible !important;
     }
 
-    /* Custom annotation colors for relevant (green) */
+    /* Custom annotation colors for relevant (cyan) */
     .r6o-annotation.annotation-relevant,
     [data-annotation].annotation-relevant {
-      background-color: rgba(34, 197, 94, 0.5) !important;
-      background: rgba(34, 197, 94, 0.5) !important;
-      border-bottom: 2px solid rgb(34, 197, 94) !important;
+      background-color: rgba(6, 182, 212, 0.5) !important;
+      background: rgba(6, 182, 212, 0.5) !important;
+      border-bottom: 2px solid rgb(6, 182, 212) !important;
       opacity: 1 !important;
       visibility: visible !important;
     }
 
-    /* Custom annotation colors for answer (blue) */
+    /* Custom annotation colors for answer (pink) */
     .r6o-annotation.annotation-answer,
     [data-annotation].annotation-answer {
-      background-color: rgba(59, 130, 246, 0.5) !important;
-      background: rgba(59, 130, 246, 0.5) !important;
-      border-bottom: 2px solid rgb(59, 130, 246) !important;
+      background-color: rgba(236, 72, 153, 0.5) !important;
+      background: rgba(236, 72, 153, 0.5) !important;
+      border-bottom: 2px solid rgb(236, 72, 153) !important;
       opacity: 1 !important;
       visibility: visible !important;
     }
@@ -734,10 +734,10 @@ function injectAnnotationStyles() {
       opacity: 1 !important;
     }
     .has-index.annotation-relevant::before {
-      background: rgb(22, 163, 74) !important;
+      background: rgb(8, 145, 178) !important;
     }
     .has-index.annotation-answer::before {
-      background: rgb(37, 99, 235) !important;
+      background: rgb(219, 39, 119) !important;
     }
 
     /* Hover effect on annotations */
@@ -773,22 +773,22 @@ function injectAnnotationStyles() {
 
     /* Default annotation shape styling */
     .a9s-annotation .a9s-inner {
-      fill: rgba(34, 197, 94, 0.2) !important;
-      stroke: rgb(34, 197, 94) !important;
+      fill: rgba(6, 182, 212, 0.2) !important;
+      stroke: rgb(6, 182, 212) !important;
       stroke-width: 2px !important;
     }
 
-    /* Relevant annotation (green) */
+    /* Relevant annotation (cyan) */
     .a9s-annotation.annotation-relevant .a9s-inner {
-      fill: rgba(34, 197, 94, 0.25) !important;
-      stroke: rgb(34, 197, 94) !important;
+      fill: rgba(6, 182, 212, 0.25) !important;
+      stroke: rgb(6, 182, 212) !important;
       stroke-width: 2px !important;
     }
 
-    /* Answer annotation (blue) */
+    /* Answer annotation (pink) */
     .a9s-annotation.annotation-answer .a9s-inner {
-      fill: rgba(59, 130, 246, 0.25) !important;
-      stroke: rgb(59, 130, 246) !important;
+      fill: rgba(236, 72, 153, 0.25) !important;
+      stroke: rgb(236, 72, 153) !important;
       stroke-width: 2px !important;
     }
 

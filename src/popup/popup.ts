@@ -307,6 +307,20 @@ async function importData(file: File) {
 
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
+  // Load saved theme
+  const savedTheme = localStorage.getItem('pref-page-theme');
+  if (savedTheme) {
+    document.documentElement.dataset.theme = savedTheme;
+  }
+
+  // Theme toggle
+  document.getElementById('toggle-theme')?.addEventListener('click', () => {
+    const html = document.documentElement;
+    const currentTheme = html.dataset.theme || 'pastel';
+    html.dataset.theme = currentTheme === 'noir' ? 'pastel' : 'noir';
+    localStorage.setItem('pref-page-theme', html.dataset.theme);
+  });
+
   // Render initial state
   await renderSnapshotList();
 
