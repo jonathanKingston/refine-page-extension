@@ -130,6 +130,29 @@ interface Snapshot {
 }
 ```
 
+## Web/server-friendly eval workflow
+
+This repo now has a small **runtime-agnostic ZIP export/import module** (`src/lib/zipExport.ts`) that works in both browser and Node. That enables:
+
+- **Client-side eval (extension)**: capture + label/eval directly in the extension viewer (unchanged).
+- **Web-based eval (no extension APIs)**: export a `.zip` from the extension and load it in a standalone hosted `viewer.html` (e.g. on `refine.page`).
+- **Server-side ingestion**: parse the same `.zip` on a web server to store snapshots and power a hosted eval UI.
+
+### Standalone viewer mode (no `chrome.*`)
+
+If `viewer.html` is opened in a normal website context (no extension APIs), it will prompt for a `.zip` export file and then run the full viewer/eval UI against that loaded data.
+
+### Server-side parsing example (Node)
+
+```ts
+import { readFile } from 'node:fs/promises';
+import { parseZipExport } from './src/lib/zipExport';
+
+const zipBytes = await readFile('refine-page-export.zip');
+const data = await parseZipExport(new Uint8Array(zipBytes));
+console.log(data.snapshots.length);
+```
+
 ## License
 
 MIT

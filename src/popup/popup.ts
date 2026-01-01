@@ -2,8 +2,8 @@
  * Popup script for refine.page extension
  */
 
-import type { Snapshot, ExportData, ExportedSnapshot, ZipExportData, ZipIndexSnapshot } from '@/types';
-import JSZip from 'jszip';
+import type { Snapshot, ExportData } from '@/types';
+import { createZipExport, parseZipExport } from '@/lib/zipExport';
 
 // Direct storage access functions to bypass message size limits
 async function getSnapshotIndex(): Promise<string[]> {
@@ -188,39 +188,11 @@ async function exportData() {
     // Access storage directly to avoid message passing size limits
     const snapshots = await getAllSnapshotsFromStorage();
     const baseViewerUrl = chrome.runtime.getURL('viewer.html');
-
-    // Create ZIP file
-    const zip = new JSZip();
-    const htmlFolder = zip.folder('html');
-
-    // Create index with metadata (without HTML content)
-    const indexSnapshots = snapshots.map((snapshot) => {
-      // Extract everything except the HTML for the index
-      const { html, ...metadata } = snapshot;
-      return {
-        ...metadata,
-        htmlFile: `html/${snapshot.id}.html`,
-        viewerUrl: `${baseViewerUrl}?id=${snapshot.id}`,
-      };
+    const zipBlob = await createZipExport(snapshots, {
+      viewerUrlBase: baseViewerUrl,
+      exporterId: chrome.runtime.id,
+      outputType: 'blob',
     });
-
-    const indexData: ZipExportData = {
-      version: '1.0.0',
-      exportedAt: new Date().toISOString(),
-      extensionId: chrome.runtime.id,
-      snapshots: indexSnapshots as ZipIndexSnapshot[],
-    };
-
-    // Add index.json to ZIP
-    zip.file('index.json', JSON.stringify(indexData, null, 2));
-
-    // Add each snapshot's HTML as a separate file
-    for (const snapshot of snapshots) {
-      htmlFolder?.file(`${snapshot.id}.html`, snapshot.html);
-    }
-
-    // Generate ZIP blob
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(zipBlob);
 
     const a = document.createElement('a');
@@ -243,42 +215,7 @@ async function importData(file: File) {
     let data: ExportData;
 
     if (file.name.endsWith('.zip')) {
-      // Handle ZIP format
-      const zip = await JSZip.loadAsync(file);
-
-      // Read index.json
-      const indexFile = zip.file('index.json');
-      if (!indexFile) {
-        throw new Error('Invalid ZIP: missing index.json');
-      }
-      const indexJson = await indexFile.async('string');
-      const zipData = JSON.parse(indexJson) as ZipExportData;
-
-      // Reconstruct snapshots with HTML content
-      const snapshotsWithHtml: ExportedSnapshot[] = [];
-      for (const snapshotMeta of zipData.snapshots) {
-        const htmlFile = snapshotMeta.htmlFile || `html/${snapshotMeta.id}.html`;
-        const htmlZipFile = zip.file(htmlFile);
-
-        if (htmlZipFile) {
-          const html = await htmlZipFile.async('string');
-          // Reconstruct full snapshot with HTML
-          const { htmlFile: _, ...rest } = snapshotMeta;
-          snapshotsWithHtml.push({
-            ...rest,
-            html,
-          } as ExportedSnapshot);
-        } else {
-          console.warn(`Missing HTML file for snapshot ${snapshotMeta.id}`);
-        }
-      }
-
-      data = {
-        version: zipData.version,
-        exportedAt: zipData.exportedAt,
-        extensionId: zipData.extensionId,
-        snapshots: snapshotsWithHtml,
-      };
+      data = await parseZipExport(file);
     } else {
       // Handle legacy JSON format
       const text = await file.text();
