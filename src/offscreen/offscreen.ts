@@ -83,7 +83,6 @@ function makeInert(html: string, baseUrl?: string): string {
   // Disable forms
   doc.querySelectorAll('form').forEach((form) => {
     form.removeAttribute('action');
-    form.setAttribute('onsubmit', 'return false;');
   });
 
   // Disable interactive elements

@@ -39,8 +39,13 @@ async function ensureOffscreenDocument(): Promise<void> {
     justification: 'Convert MHTML to HTML using DOM parser',
   });
 
-  await creatingOffscreen;
-  creatingOffscreen = null;
+  try {
+    await creatingOffscreen;
+    // Small delay to allow the offscreen document's script to register its message listener
+    await new Promise(resolve => setTimeout(resolve, 50));
+  } finally {
+    creatingOffscreen = null;
+  }
 }
 
 // Capture page using Chrome's MHTML API and convert to HTML via offscreen document
@@ -68,6 +73,10 @@ async function capturePageAsMhtml(tabId: number, pageUrl: string): Promise<{ htm
     type: 'CONVERT_MHTML',
     payload: { mhtmlText, baseUrl: pageUrl },
   });
+
+  if (!response) {
+    throw new Error('No response from offscreen document - it may not have loaded yet');
+  }
 
   if (response.type === 'CONVERT_MHTML_ERROR') {
     throw new Error(response.payload.error);
