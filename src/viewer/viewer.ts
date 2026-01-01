@@ -1392,6 +1392,12 @@ function addQuestion() {
   if (select) select.value = question.id;
 
   clearQuestionForm();
+  updateEvaluationForm();
+  // Update annotation list and counts for the new (empty) question
+  updateAnnotationCounts();
+  renderAnnotationList();
+  // Clear annotations from iframe (new question has no annotations yet)
+  syncIframeAnnotations();
   saveCurrentSnapshot();
 
   const queryInput = document.getElementById('query-input') as HTMLTextAreaElement;
