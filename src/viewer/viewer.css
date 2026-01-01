@@ -126,13 +126,6 @@ body {
   min-height: 0;
 }
 
-.sidebar-left .question-panel {
-  flex-shrink: 0;
-  border-top: 1px solid var(--color-border);
-  max-height: 280px;
-  overflow-y: auto;
-}
-
 .sidebar-right {
   border-right: none;
   border-left: 1px solid var(--color-border);
@@ -983,12 +976,61 @@ body {
   animation: highlightNew 2s ease-out;
 }
 
-/* Right sidebar needs position relative for absolute collapse button */
-.sidebar-right {
-  position: relative;
+/* Snapshot item with expandable question accordion */
+.snapshot-nav li.active .question-accordion {
+  display: block;
 }
 
-/* Add padding to first panel to accommodate collapse button */
-.sidebar-right .panel:first-of-type {
-  padding-top: 40px;
+.question-accordion {
+  display: none;
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-border);
+  padding: 12px;
+  margin: 8px -16px -12px -16px;
+}
+
+.question-accordion .question-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.question-accordion .question-header h4 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.question-accordion .question-selector {
+  margin-bottom: 8px;
+}
+
+.question-accordion .question-selector select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--color-surface);
+}
+
+.question-accordion .form-group {
+  margin-bottom: 8px;
+}
+
+.question-accordion .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.question-accordion .form-group label {
+  font-size: 11px;
+}
+
+.question-accordion .form-group textarea {
+  padding: 6px 8px;
+  font-size: 12px;
 }

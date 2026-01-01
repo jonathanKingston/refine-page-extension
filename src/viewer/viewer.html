@@ -53,31 +53,8 @@
           </div>
         </div>
         <ul class="snapshot-nav" id="snapshot-nav">
-          <!-- Populated dynamically -->
+          <!-- Populated dynamically - each item will have expandable question section -->
         </ul>
-
-        <!-- Current Question (for active snapshot) -->
-        <div class="panel question-panel">
-          <div class="panel-header">
-            <h3>Question</h3>
-            <button id="add-question-btn" class="btn btn-small">+ Add</button>
-          </div>
-          <div class="question-selector">
-            <select id="question-select">
-              <option value="">Select or add a question...</option>
-            </select>
-          </div>
-          <div class="question-form" id="question-form">
-            <div class="form-group">
-              <label for="query-input">Query</label>
-              <textarea id="query-input" rows="2" placeholder="What question should this page answer?"></textarea>
-            </div>
-            <div class="form-group">
-              <label for="expected-answer">Expected Answer</label>
-              <textarea id="expected-answer" rows="2" placeholder="What is the expected answer?"></textarea>
-            </div>
-          </div>
-        </div>
       </aside>
 
       <!-- Snapshot Preview -->
@@ -120,18 +97,19 @@
 
       <!-- Right Sidebar - Labeling Panel -->
       <aside class="sidebar sidebar-right" id="labeling-sidebar">
-        <!-- Collapse button -->
-        <button class="sidebar-collapse-btn sidebar-collapse-right" id="collapse-right-sidebar" title="Collapse panel">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 18l6-6-6-6"/>
-          </svg>
-        </button>
+        <div class="sidebar-header">
+          <div class="sidebar-header-row">
+            <h2>Annotations</h2>
+            <button class="sidebar-collapse-btn" id="collapse-right-sidebar" title="Collapse panel">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
 
         <!-- Annotations List -->
         <div class="panel annotations-panel">
-          <div class="panel-header">
-            <h3>Annotation</h3>
-          </div>
           <div class="annotation-type-tabs">
             <button class="type-tab" data-type="relevant">
               <span class="type-indicator relevant"></span>
