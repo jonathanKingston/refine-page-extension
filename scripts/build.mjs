@@ -22,6 +22,7 @@ const entryPoints = {
   'content': join(srcDir, 'content/capture.ts'),
   'popup': join(srcDir, 'popup/popup.ts'),
   'viewer': join(srcDir, 'viewer/viewer.ts'),
+  'web-viewer': join(srcDir, 'viewer/web-viewer.ts'),
   'snapshot': join(srcDir, 'snapshot/snapshot.ts'),
   'iframe-annotator': join(srcDir, 'iframe/annotator.ts'),
 };
@@ -94,6 +95,14 @@ async function buildScripts() {
     plugins: [inlineCssPlugin],
   });
 
+  // Web viewer helper module (for standalone web deployment)
+  await esbuild.build({
+    ...commonOptions,
+    entryPoints: [entryPoints['web-viewer']],
+    outfile: join(distDir, 'web-viewer.js'),
+    plugins: [inlineCssPlugin],
+  });
+
   // Snapshot viewer script
   await esbuild.build({
     ...commonOptions,
@@ -138,6 +147,12 @@ function copyStaticFiles() {
     .replace('src="viewer.ts"', 'src="viewer.js"')
     .replace('href="viewer.css"', 'href="viewer.css"');
   writeFileSync(join(distDir, 'viewer.html'), viewerHtml);
+
+  // Web viewer (standalone web deployment version)
+  const webViewerHtml = readFileSync(join(srcDir, 'viewer/web-viewer.html'), 'utf-8')
+    .replace('src="viewer.ts"', 'src="viewer.js"')
+    .replace('href="viewer.css"', 'href="viewer.css"');
+  writeFileSync(join(distDir, 'web-viewer.html'), webViewerHtml);
 
   const snapshotHtml = readFileSync(join(srcDir, 'snapshot/snapshot.html'), 'utf-8')
     .replace('src="snapshot.ts"', 'src="snapshot.js"');

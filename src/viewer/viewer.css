@@ -208,6 +208,18 @@ body {
   height: 16px;
 }
 
+/* Web mode badge (shown in web-viewer.html) */
+.web-mode-badge {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--color-primary-text);
+  background: var(--color-primary);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+}
+
 /* Theme toggle icons */
 .icon-moon { display: block; }
 .icon-sun { display: none; }

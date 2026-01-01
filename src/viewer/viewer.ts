@@ -1,6 +1,14 @@
 /**
  * Viewer page for annotating and labeling snapshots
  * Uses @recogito/text-annotator for text and @annotorious/annotorious for images
+ *
+ * This viewer can run in two modes:
+ * 1. Chrome Extension mode - uses chrome.storage.local and chrome.runtime APIs
+ * 2. Web/HTTP mode - fetches data from remote URLs (for web server deployment)
+ *
+ * Mode is auto-detected based on environment, or can be configured via:
+ * - URL parameters: ?baseUrl=https://example.com/api or ?dataUrl=https://example.com/snapshot.json
+ * - Global config: window.REFINE_PAGE_CONFIG = { baseUrl: '...' }
  */
 
 import type {
@@ -13,6 +21,13 @@ import type {
   AnswerInPage,
   PageQuality,
 } from '@/types';
+
+import {
+  initializeStorage,
+  getStorageProvider,
+  type StorageProvider,
+  type SnapshotSummary,
+} from '@/services';
 
 // Import annotation library types (actual annotators are now in iframe)
 import '@recogito/text-annotator/text-annotator.css';
@@ -27,18 +42,8 @@ function stripCspFromHtml(html: string): string {
     .replace(/<meta[^>]*content=["'][^"']*script-src[^"']*["'][^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '');
 }
 
-// Lightweight snapshot summary (without HTML) for listing
-interface SnapshotSummary {
-  id: string;
-  url: string;
-  title: string;
-  status: Snapshot['status'];
-  capturedAt: string;
-  updatedAt: string;
-  tags: string[];
-  annotationCount: { text: number; region: number };
-  questionCount: number;
-}
+// Storage provider instance (initialized on DOMContentLoaded)
+let storageProvider: StorageProvider | null = null;
 
 // State
 let currentSnapshot: Snapshot | null = null;
@@ -61,55 +66,41 @@ function generateId(): string {
   return `${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 }
 
-// Send message to background script
-async function sendMessage<T>(type: string, payload?: unknown): Promise<T> {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ type, payload }, (response) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-      } else if (response?.error) {
-        reject(new Error(response.error));
-      } else {
-        resolve(response);
-      }
-    });
-  });
+// Get the storage provider (must be initialized first)
+function getProvider(): StorageProvider {
+  if (!storageProvider) {
+    throw new Error('Storage provider not initialized');
+  }
+  return storageProvider;
 }
 
-// Direct storage access - bypasses message passing to avoid size limits
-async function getSnapshotIndex(): Promise<string[]> {
-  const result = await chrome.storage.local.get('snapshotIndex');
-  return result.snapshotIndex || [];
-}
-
+// Storage access functions using the provider abstraction
 async function getSnapshotFromStorage(id: string): Promise<Snapshot | null> {
-  const key = `snapshot_${id}`;
-  const result = await chrome.storage.local.get(key);
-  return result[key] || null;
+  return getProvider().getSnapshot(id);
 }
 
 async function getAllSnapshotsFromStorage(): Promise<Snapshot[]> {
-  const index = await getSnapshotIndex();
-  const keys = index.map((id) => `snapshot_${id}`);
-  if (keys.length === 0) return [];
-
-  const result = await chrome.storage.local.get(keys);
-  return keys.map((key) => result[key]).filter(Boolean);
+  return getProvider().getAllSnapshots();
 }
 
 async function getAllSnapshotSummaries(): Promise<SnapshotSummary[]> {
-  const snapshots = await getAllSnapshotsFromStorage();
-  return snapshots.map((s) => ({
-    id: s.id,
-    url: s.url,
-    title: s.title,
-    status: s.status,
-    capturedAt: s.capturedAt,
-    updatedAt: s.updatedAt,
-    tags: s.tags,
-    annotationCount: { text: s.annotations.text.length, region: s.annotations.region.length },
-    questionCount: s.questions.length,
-  }));
+  return getProvider().getAllSnapshotSummaries();
+}
+
+async function updateSnapshotInStorage(id: string, updates: Partial<Snapshot>): Promise<Snapshot | null> {
+  return getProvider().updateSnapshot(id, updates);
+}
+
+async function deleteSnapshotFromStorage(id: string): Promise<void> {
+  return getProvider().deleteSnapshot(id);
+}
+
+// Get asset URL (for iframe.html, etc.)
+function getAssetUrl(assetPath: string): string {
+  const provider = getProvider();
+  const url = provider.getAssetUrl(assetPath);
+  // Fallback to relative path if provider returns null
+  return url || `/${assetPath}`;
 }
 
 // Get URL parameters
@@ -141,10 +132,7 @@ async function loadSnapshot(snapshotId: string) {
       };
       snapshot.questions.push(defaultQuestion);
       // Save the snapshot with the new question
-      await sendMessage('UPDATE_SNAPSHOT', {
-        id: snapshot.id,
-        updates: snapshot,
-      });
+      await updateSnapshotInStorage(snapshot.id, snapshot);
     }
 
     currentQuestionId = snapshot.questions[0].id;
@@ -183,7 +171,7 @@ function updateUI() {
     const htmlWithoutCsp = stripCspFromHtml(currentSnapshot.html);
 
     // Use our iframe.html page which has the annotator script
-    const iframeUrl = chrome.runtime.getURL('iframe.html');
+    const iframeUrl = getAssetUrl('iframe.html');
 
     // Set up message handling before loading iframe
     setupIframeMessageHandler(iframe, htmlWithoutCsp);
@@ -546,38 +534,7 @@ function injectAnnotationStyles(doc: Document) {
   doc.head?.appendChild(style);
 }
 
-// Load existing text annotations into the text annotator
-function loadExistingTextAnnotations() {
-  if (!textAnnotator || !currentSnapshot) return;
-
-  for (const annotation of currentSnapshot.annotations.text) {
-    try {
-      // Create W3C annotation format for the library
-      const w3cAnnotation = {
-        '@context': 'http://www.w3.org/ns/anno.jsonld',
-        type: 'Annotation',
-        id: annotation.id,
-        body: [{
-          type: 'TextualBody',
-          purpose: 'tagging',
-          value: annotation.type,
-        }],
-        target: {
-          source: currentSnapshot.id,
-          selector: {
-            type: 'TextQuoteSelector',
-            exact: annotation.selectedText,
-          },
-        },
-      };
-
-      textAnnotator.addAnnotation(w3cAnnotation);
-      updateAnnotationAppearance(annotation.id, annotation.type);
-    } catch (error) {
-      console.warn('Failed to load annotation:', annotation.selectedText.substring(0, 30), error);
-    }
-  }
-}
+// Note: Text annotations are now loaded in the iframe via LOAD_ANNOTATIONS message
 
 // Update the visual appearance of an annotation based on its type
 function updateAnnotationAppearance(annotationId: string, type: AnnotationType) {
@@ -950,7 +907,7 @@ function updateAnnotationCounts() {
 }
 
 // Get annotations for the current question
-function getAnnotationsForCurrentQuestion(): { text: typeof currentSnapshot.annotations.text; region: typeof currentSnapshot.annotations.region } {
+function getAnnotationsForCurrentQuestion(): { text: TextAnnotation[]; region: RegionAnnotation[] } {
   if (!currentSnapshot) return { text: [], region: [] };
 
   // If no question selected, show no annotations
@@ -1275,10 +1232,7 @@ async function saveCurrentSnapshot(showConfirmation = false) {
   showSaveStatus('saving');
 
   try {
-    await sendMessage('UPDATE_SNAPSHOT', {
-      id: currentSnapshot.id,
-      updates: currentSnapshot,
-    });
+    await updateSnapshotInStorage(currentSnapshot.id, currentSnapshot);
     showSaveStatus('saved');
     if (showConfirmation) {
       showNotification('Saved');
@@ -1424,7 +1378,7 @@ function renderSnapshotNav(snapshots: SnapshotSummary[]) {
 // Delete a snapshot by ID
 async function deleteSnapshotById(id: string) {
   try {
-    await sendMessage('DELETE_SNAPSHOT', { id });
+    await deleteSnapshotFromStorage(id);
     showNotification('Snapshot deleted');
 
     if (currentSnapshot?.id === id) {
@@ -1645,6 +1599,16 @@ function applyZoom() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
+  // Initialize storage provider first
+  try {
+    await initializeStorage();
+    storageProvider = getStorageProvider();
+  } catch (error) {
+    console.error('Failed to initialize storage:', error);
+    showNotification('Failed to initialize storage', 'error');
+    return;
+  }
+
   const params = getUrlParams();
   const snapshotId = params.get('id');
 

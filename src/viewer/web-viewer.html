@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>refine.page - Web Viewer</title>
+  <link rel="stylesheet" href="viewer.css">
+  <!--
+    Web Viewer Configuration
+
+    This viewer can load snapshots from any URL. Configure via:
+
+    1. URL Parameters:
+       viewer.html?baseUrl=https://your-api.com/snapshots&id=snapshot_123
+
+    2. Or set window.REFINE_PAGE_CONFIG before loading:
+       <script>
+         window.REFINE_PAGE_CONFIG = {
+           baseUrl: 'https://your-api.com/snapshots',
+           // Optional: custom URL patterns
+           snapshotUrlPattern: 'https://your-api.com/snapshots/{id}.json',
+           indexUrl: 'https://your-api.com/snapshots/index.json',
+           // Optional: custom headers for auth
+           headers: { 'Authorization': 'Bearer token' },
+         };
+       </script>
+  -->
+</head>
+<body>
+  <div class="viewer-container">
+    <!-- Header -->
+    <header class="viewer-header">
+      <div class="header-left">
+        <h1 class="app-name">refine.page</h1>
+        <span class="header-dot">·</span>
+        <span class="page-title" id="page-title">Loading...</span>
+        <a href="#" id="open-url-btn" class="open-url-icon" title="Open original page" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+        </a>
+      </div>
+      <div class="header-right">
+        <span class="save-status hidden" id="save-status"></span>
+        <span class="web-mode-badge" title="Running in web mode">WEB</span>
+        <button class="header-btn" id="toggle-theme" title="Toggle theme">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+        <button class="header-btn" id="toggle-focus-mode" title="Toggle focus mode">
+          <svg class="icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          <svg class="icon-minimize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="4 14 10 14 10 20"></polyline>
+            <polyline points="20 10 14 10 14 4"></polyline>
+            <line x1="14" y1="10" x2="21" y2="3"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="viewer-main">
+      <!-- Left Sidebar -->
+      <aside class="sidebar sidebar-left" id="sidebar-left">
+        <!-- Tab Toggle: Pages / Questions -->
+        <div class="sidebar-tabs">
+          <div class="tab-toggle">
+            <button class="tab-btn active" data-tab="pages">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+              Pages
+            </button>
+            <button class="tab-btn" data-tab="questions">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                <circle cx="12" cy="17" r="1" fill="currentColor"></circle>
+              </svg>
+              Questions
+            </button>
+          </div>
+        </div>
+
+        <!-- Pages Tab Content -->
+        <div class="tab-content" id="pages-tab">
+          <div class="filter-tabs">
+            <button class="filter-tab active" data-filter="all">all</button>
+            <button class="filter-tab" data-filter="pending">pending</button>
+            <button class="filter-tab" data-filter="approved">done</button>
+          </div>
+          <ul class="snapshot-nav" id="snapshot-nav">
+            <!-- Populated dynamically -->
+          </ul>
+          <div class="sidebar-footer" id="snapshot-stats-footer">
+            <span id="review-progress">0 of 0 reviewed</span>
+          </div>
+        </div>
+
+        <!-- Questions Tab Content -->
+        <div class="tab-content hidden" id="questions-tab">
+          <div class="questions-header">
+            <span class="questions-context" id="questions-context">For: Loading...</span>
+            <button class="icon-btn-small" id="add-question-btn" title="Add question">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="questions-list" id="questions-list">
+            <!-- Populated dynamically -->
+          </div>
+          <div class="question-editor" id="question-editor">
+            <div class="form-group">
+              <label>Query</label>
+              <textarea id="query-input" rows="2" placeholder="What question should this page answer?"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Expected (optional)</label>
+              <input type="text" id="expected-answer-input" placeholder="Expected answer...">
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="main-content">
+        <!-- Toolbar -->
+        <div class="toolbar">
+          <div class="annotation-tools">
+            <span class="tool-label">Annotate:</span>
+            <button class="tool-btn" data-tool="relevant" title="Mark as Relevant">
+              <span class="tool-dot relevant"></span>
+              Relevant
+            </button>
+            <button class="tool-btn" data-tool="answer" title="Mark as Answer">
+              <span class="tool-dot answer"></span>
+              Answer
+            </button>
+          </div>
+          <div class="toolbar-info">
+            <span id="current-question-label">Q1: Loading...</span>
+          </div>
+        </div>
+
+        <!-- Preview -->
+        <div class="preview-container" id="preview-container">
+          <iframe id="preview-frame"></iframe>
+        </div>
+      </main>
+
+      <!-- Right Sidebar -->
+      <aside class="sidebar sidebar-right" id="sidebar-right">
+        <!-- Annotations Section -->
+        <div class="panel annotations-panel">
+          <div class="panel-header">
+            <span class="panel-title">Annotations</span>
+            <div class="annotation-counts">
+              <span class="count-badge relevant" id="relevant-count">0</span>
+              <span class="count-badge answer" id="answer-count">0</span>
+            </div>
+          </div>
+          <div class="annotation-list" id="annotation-list">
+            <div class="empty-state">No annotations yet</div>
+          </div>
+        </div>
+
+        <!-- Evaluation Section -->
+        <div class="panel evaluation-panel">
+          <div class="eval-group">
+            <label class="eval-label">Correctness</label>
+            <div class="toggle-group" id="correctness-toggle">
+              <button class="toggle-btn" data-value="correct">correct<span class="key">c</span></button>
+              <button class="toggle-btn" data-value="incorrect">incorrect<span class="key">i</span></button>
+              <button class="toggle-btn" data-value="partial">partial<span class="key">p</span></button>
+            </div>
+          </div>
+          <div class="eval-group">
+            <label class="eval-label">In page?</label>
+            <div class="toggle-group" id="in-page-toggle">
+              <button class="toggle-btn" data-value="yes">yes<span class="key">y</span></button>
+              <button class="toggle-btn" data-value="no">no<span class="key">n</span></button>
+              <button class="toggle-btn" data-value="unclear">unclear<span class="key">u</span></button>
+            </div>
+          </div>
+          <div class="eval-group">
+            <label class="eval-label">Page quality</label>
+            <div class="toggle-group" id="quality-toggle">
+              <button class="toggle-btn" data-value="good">good<span class="key">g</span></button>
+              <button class="toggle-btn" data-value="broken">broken<span class="key">b</span></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="panel notes-panel">
+          <textarea id="review-notes" placeholder="Notes..." rows="2"></textarea>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Bottom Bar -->
+    <footer class="bottom-bar">
+      <!-- Question Navigator -->
+      <div class="bottom-section question-nav">
+        <button class="nav-btn" id="prev-question" title="Previous question">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <span class="nav-label" id="question-nav-label">Q1 of 1</span>
+        <button class="nav-btn" id="next-question" title="Next question">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Annotation Summary -->
+      <div class="bottom-section annotation-summary">
+        <span class="summary-label">Marked:</span>
+        <span class="summary-badge relevant"><span id="bottom-relevant-count">0</span> relevant</span>
+        <span class="summary-badge answer"><span id="bottom-answer-count">0</span> answer</span>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Quick Eval -->
+      <div class="bottom-section quick-eval">
+        <div class="quick-eval-group">
+          <span class="quick-label">Correct?</span>
+          <div class="quick-btns" id="quick-correctness">
+            <button class="quick-btn" data-value="correct" title="Correct">c</button>
+            <button class="quick-btn" data-value="incorrect" title="Incorrect">i</button>
+            <button class="quick-btn" data-value="partial" title="Partial">p</button>
+          </div>
+        </div>
+        <div class="quick-eval-group">
+          <span class="quick-label">In page?</span>
+          <div class="quick-btns" id="quick-in-page">
+            <button class="quick-btn" data-value="yes" title="Yes">y</button>
+            <button class="quick-btn" data-value="no" title="No">n</button>
+            <button class="quick-btn" data-value="unclear" title="Unclear">u</button>
+          </div>
+        </div>
+        <div class="quick-eval-group">
+          <span class="quick-label">Quality?</span>
+          <div class="quick-btns" id="quick-quality">
+            <button class="quick-btn" data-value="good" title="Good">g</button>
+            <button class="quick-btn" data-value="broken" title="Broken">b</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <!-- Actions -->
+      <div class="bottom-section actions">
+        <button class="action-btn primary" id="approve-btn">Approve</button>
+        <button class="action-btn" id="decline-btn">Decline</button>
+        <button class="action-btn" id="skip-btn">Skip</button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Uses the same viewer.ts which auto-detects environment -->
+  <script type="module" src="viewer.ts"></script>
+</body>
+</html>
