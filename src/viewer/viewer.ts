@@ -876,7 +876,10 @@ function highlightNewAnnotation(annotationId: string) {
 // Sync iframe annotations to show only current question's annotations
 function syncIframeAnnotations() {
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
-  if (!iframe || !iframeAnnotatorReady) return;
+  if (!iframe || !iframeAnnotatorReady) {
+    console.log('syncIframeAnnotations: iframe not ready', { iframe: !!iframe, ready: iframeAnnotatorReady });
+    return;
+  }
 
   // Clear all annotations in iframe first
   sendToIframe(iframe, 'CLEAR_ANNOTATIONS', {});
@@ -884,10 +887,12 @@ function syncIframeAnnotations() {
 
   // Get annotations for current question
   const { text: textAnnotations, region: regionAnnotations } = getAnnotationsForCurrentQuestion();
+  console.log('syncIframeAnnotations: question', currentQuestionId, 'text:', textAnnotations.length, 'region:', regionAnnotations.length);
 
   // Load only this question's text annotations
   if (textAnnotations.length > 0) {
     const w3cAnnotations = textAnnotations.map(a => convertToW3CText(a));
+    console.log('syncIframeAnnotations: loading text annotations', w3cAnnotations);
     sendToIframe(iframe, 'LOAD_ANNOTATIONS', w3cAnnotations);
   }
 
@@ -899,6 +904,7 @@ function syncIframeAnnotations() {
       bounds: a.bounds,
       type: a.type,
     }));
+    console.log('syncIframeAnnotations: loading region annotations', regionData);
     sendToIframe(iframe, 'LOAD_REGION_ANNOTATIONS', regionData);
   }
 }
@@ -988,6 +994,12 @@ function getAnnotationsForCurrentQuestion(): { text: typeof currentSnapshot.anno
 
   // Filter annotations to only those linked to this question
   const annotationIds = new Set(question.annotationIds);
+  console.log('getAnnotationsForCurrentQuestion:', {
+    questionId: currentQuestionId,
+    annotationIds: Array.from(annotationIds),
+    totalTextAnnotations: currentSnapshot.annotations.text.length,
+    totalRegionAnnotations: currentSnapshot.annotations.region.length,
+  });
   return {
     text: currentSnapshot.annotations.text.filter(a => annotationIds.has(a.id)),
     region: currentSnapshot.annotations.region.filter(a => annotationIds.has(a.id)),
