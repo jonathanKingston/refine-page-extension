@@ -22,6 +22,9 @@ let currentTool: 'select' | 'relevant' | 'answer' = 'select';
 let annotationIndex = 0; // Track annotation numbers
 let regionAnnotationIndex = 0; // Track region annotation numbers
 
+// Flag to suppress delete events during clear operations (e.g., switching questions)
+let suppressDeleteEvents = false;
+
 // Store annotation metadata for re-applying styles after Recogito re-renders
 const annotationMeta: Map<string, { tool: string; index: number }> = new Map();
 
@@ -301,6 +304,12 @@ function initializeAnnotator(container: HTMLElement) {
 
   // Handle annotation deletion
   annotator.on('deleteAnnotation', (annotation: unknown) => {
+    // Don't send delete events during clear operations (e.g., switching questions)
+    if (suppressDeleteEvents) {
+      console.log('[Iframe Annotator] Annotation delete suppressed (clearing):', annotation);
+      return;
+    }
+
     console.log('[Iframe Annotator] Annotation deleted:', annotation);
 
     const serialized = serializeAnnotation(annotation);
@@ -431,6 +440,12 @@ function initializeImageAnnotators(container: HTMLElement) {
 
       // Handle region annotation deletion
       imageAnnotator.on('deleteAnnotation', (annotation: unknown) => {
+        // Don't send delete events during clear operations (e.g., switching questions)
+        if (suppressDeleteEvents) {
+          console.log('[Iframe Annotator] Region annotation delete suppressed (clearing):', annotation);
+          return;
+        }
+
         console.log('[Iframe Annotator] Region annotation deleted:', annotation);
 
         const serialized = serializeAnnotation(annotation);
@@ -899,7 +914,10 @@ function handleMessage(event: MessageEvent) {
 
     case 'CLEAR_ANNOTATIONS':
       if (annotator) {
+        // Suppress delete events during clear (we're just switching questions, not deleting data)
+        suppressDeleteEvents = true;
         annotator.clearAnnotations();
+        suppressDeleteEvents = false;
         // Also clear metadata, text, and reset index
         annotationMeta.clear();
         annotationText.clear();
@@ -1017,6 +1035,8 @@ function handleMessage(event: MessageEvent) {
     }
 
     case 'CLEAR_REGION_ANNOTATIONS':
+      // Suppress delete events during clear (we're just switching questions, not deleting data)
+      suppressDeleteEvents = true;
       imageAnnotators.forEach(ann => {
         try {
           ann.clearAnnotations();
@@ -1024,6 +1044,7 @@ function handleMessage(event: MessageEvent) {
           console.warn('[Iframe Annotator] Error clearing region annotations:', e);
         }
       });
+      suppressDeleteEvents = false;
       regionAnnotationIndex = 0;
       break;
 
