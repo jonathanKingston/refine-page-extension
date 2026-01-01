@@ -1,13 +1,103 @@
 /**
  * Background service worker for refine.page extension
- * Handles cross-component communication and storage operations
+ * Handles cross-component communication, storage operations, and page capture via Chrome MHTML API
  */
 
 import type { Snapshot, ExportData, ExportedSnapshot } from '@/types';
+import mhtml2html from 'mhtml2html';
 
 // Generate unique ID
 function generateId(): string {
   return `snapshot_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+}
+
+// Make snapshot inert - disable all interactive elements
+function makeInert(html: string): string {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  // Remove all scripts
+  doc.querySelectorAll('script').forEach((el) => el.remove());
+  doc.querySelectorAll('noscript').forEach((el) => el.remove());
+
+  // Disable all links
+  doc.querySelectorAll('a[href]').forEach((link) => {
+    const href = link.getAttribute('href');
+    if (href) {
+      link.setAttribute('data-original-href', href);
+      link.removeAttribute('href');
+    }
+  });
+
+  // Disable forms
+  doc.querySelectorAll('form').forEach((form) => {
+    form.removeAttribute('action');
+    form.setAttribute('onsubmit', 'return false;');
+  });
+
+  // Disable interactive elements
+  doc.querySelectorAll('button, input, select, textarea').forEach((el) => {
+    el.setAttribute('disabled', 'disabled');
+  });
+
+  // Remove event handler attributes
+  const eventAttrs = ['onclick', 'onmouseover', 'onmouseout', 'onload', 'onerror', 'onsubmit', 'onchange', 'onfocus', 'onblur'];
+  doc.querySelectorAll('*').forEach((el) => {
+    eventAttrs.forEach((attr) => el.removeAttribute(attr));
+  });
+
+  // Add meta tag to identify as refine.page snapshot
+  const meta = doc.createElement('meta');
+  meta.setAttribute('name', 'refine-page-snapshot');
+  meta.setAttribute('content', 'true');
+  meta.setAttribute('data-captured-at', new Date().toISOString());
+  doc.head?.appendChild(meta);
+
+  // Add strict CSP meta tag - allow inline styles since MHTML inlines everything
+  const cspMeta = doc.createElement('meta');
+  cspMeta.setAttribute('http-equiv', 'Content-Security-Policy');
+  cspMeta.setAttribute('content', "default-src 'self' data: blob:; script-src 'none'; style-src 'unsafe-inline' data: blob:; font-src data: blob:; img-src 'self' data: blob:; frame-src 'none'; object-src 'none';");
+  doc.head?.insertBefore(cspMeta, doc.head.firstChild);
+
+  // Add inert styles
+  const inertStyle = doc.createElement('style');
+  inertStyle.textContent = `
+    a[data-original-href] { cursor: default !important; pointer-events: none !important; }
+    button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0.7; }
+  `;
+  doc.head?.appendChild(inertStyle);
+
+  return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+}
+
+// Capture page using Chrome's MHTML API and convert to HTML
+async function capturePageAsMhtml(tabId: number): Promise<{ html: string; title: string }> {
+  console.log('refine.page: Capturing page as MHTML for tab', tabId);
+  const startTime = Date.now();
+
+  // Capture the page as MHTML
+  const mhtmlBlob = await chrome.pageCapture.saveAsMHTML({ tabId });
+  if (!mhtmlBlob) {
+    throw new Error('Failed to capture page as MHTML');
+  }
+
+  console.log('refine.page: MHTML captured, size:', (mhtmlBlob.size / 1024).toFixed(1), 'KB');
+
+  // Read the MHTML blob as text
+  const mhtmlText = await mhtmlBlob.text();
+
+  // Convert MHTML to HTML document using mhtml2html
+  console.log('refine.page: Converting MHTML to HTML...');
+  const htmlDoc = mhtml2html.convert(mhtmlText);
+
+  // Get the HTML string from the document
+  const htmlString = '<!DOCTYPE html>\n' + htmlDoc.documentElement.outerHTML;
+  const title = htmlDoc.title || 'Untitled';
+
+  const duration = Date.now() - startTime;
+  console.log(`refine.page: Conversion complete in ${duration}ms, HTML size: ${(htmlString.length / 1024).toFixed(1)}KB`);
+
+  return { html: htmlString, title };
 }
 
 // Storage operations using chrome.storage.local
@@ -156,7 +246,7 @@ async function importData(data: ExportData): Promise<{ imported: number; skipped
 
 // Message handlers
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Skip messages without a type (e.g., from other extensions or SingleFile internals)
+  // Skip messages without a type (e.g., from other extensions)
   if (!message?.type) {
     return false;
   }
@@ -193,27 +283,66 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case 'CAPTURE_PAGE': {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tab?.id) {
+        if (!tab?.id || !tab?.url) {
           throw new Error('No active tab found');
         }
+
+        // Check if the tab URL is capturable (not chrome://, chrome-extension://, etc.)
+        const url = tab.url;
+        if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') ||
+            url.startsWith('edge://') || url.startsWith('about:') ||
+            url.startsWith('devtools://')) {
+          throw new Error('Cannot capture browser internal pages');
+        }
+
         try {
-          const response = await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_PAGE' });
-          return response;
-        } catch (error) {
-          // Content script not loaded - try injecting it first
-          console.log('Content script not loaded, injecting...');
-          if ((error as Error).message?.includes('Could not establish connection')) {
+          // Get page metadata from content script
+          let metadata: { url: string; title: string; viewport: { width: number; height: number } };
+          try {
+            const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_METADATA' });
+            metadata = response.payload;
+          } catch {
+            // Content script not loaded - inject it and try again
+            console.log('Content script not loaded, injecting...');
             await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               files: ['content.js'],
             });
-            // Wait a moment for script to initialize
             await new Promise(resolve => setTimeout(resolve, 100));
-            // Try again after injection
-            const response = await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_PAGE' });
-            return response;
+            const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_METADATA' });
+            metadata = response.payload;
           }
-          throw error;
+
+          // Capture the page as MHTML and convert to HTML
+          const { html } = await capturePageAsMhtml(tab.id);
+
+          // Make the snapshot inert
+          const inertHtml = makeInert(html);
+
+          // Create the snapshot
+          const snapshot: Snapshot = {
+            id: generateId(),
+            url: metadata.url,
+            title: metadata.title,
+            html: inertHtml,
+            viewport: metadata.viewport,
+            annotations: { text: [], region: [] },
+            questions: [],
+            status: 'pending',
+            capturedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            tags: [],
+          };
+
+          // Save the snapshot
+          await saveSnapshot(snapshot);
+
+          console.log(`refine.page: Snapshot saved, id: ${snapshot.id}, size: ${(inertHtml.length / 1024).toFixed(1)}KB`);
+
+          return { type: 'CAPTURE_COMPLETE', payload: { snapshotId: snapshot.id } };
+        } catch (error) {
+          console.error('refine.page: Capture error:', error);
+          return { type: 'CAPTURE_ERROR', payload: { error: (error as Error).message || 'Unknown error' } };
         }
       }
 
