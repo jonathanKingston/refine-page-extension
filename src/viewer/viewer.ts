@@ -160,6 +160,9 @@ async function loadSnapshot(snapshotId: string) {
 function updateUI() {
   if (!currentSnapshot) return;
 
+  // Update snapshot navigation active state FIRST (needed for accordion to work)
+  updateSnapshotNavActive();
+
   // Update page title
   const titleEl = document.getElementById('page-title');
   if (titleEl) {
@@ -208,9 +211,6 @@ function updateUI() {
   if (notesInput && currentSnapshot.reviewNotes) {
     notesInput.value = currentSnapshot.reviewNotes;
   }
-
-  // Update snapshot navigation active state
-  updateSnapshotNavActive();
 }
 
 // Track if iframe annotator is ready
