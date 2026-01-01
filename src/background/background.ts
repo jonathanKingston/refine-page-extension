@@ -44,7 +44,7 @@ async function ensureOffscreenDocument(): Promise<void> {
 }
 
 // Capture page using Chrome's MHTML API and convert to HTML via offscreen document
-async function capturePageAsMhtml(tabId: number): Promise<{ html: string; title: string }> {
+async function capturePageAsMhtml(tabId: number, pageUrl: string): Promise<{ html: string; title: string }> {
   console.log('refine.page: Capturing page as MHTML for tab', tabId);
   const startTime = Date.now();
 
@@ -66,7 +66,7 @@ async function capturePageAsMhtml(tabId: number): Promise<{ html: string; title:
   console.log('refine.page: Sending MHTML to offscreen document for conversion...');
   const response = await chrome.runtime.sendMessage({
     type: 'CONVERT_MHTML',
-    payload: { mhtmlText },
+    payload: { mhtmlText, baseUrl: pageUrl },
   });
 
   if (response.type === 'CONVERT_MHTML_ERROR') {
@@ -298,7 +298,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
 
           // Capture the page as MHTML and convert to HTML (via offscreen document)
-          const { html } = await capturePageAsMhtml(tab.id);
+          const { html } = await capturePageAsMhtml(tab.id, metadata.url);
 
           // Create the snapshot
           const snapshot: Snapshot = {
