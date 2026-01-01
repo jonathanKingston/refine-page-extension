@@ -81,6 +81,43 @@ function makeInert(html: string): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
 
+  // Normalize async CSS patterns into a "final applied" state.
+  // Many pages load styles via:
+  // - <link rel="stylesheet" media="print" onload="this.media='all'">
+  // - <link rel="preload" as="style" onload="this.rel='stylesheet'">
+  // We remove inline event handlers below for safety, so we must apply the end-state here
+  // or styles will be missing in the snapshot.
+  doc.querySelectorAll('link').forEach((link) => {
+    const rel = (link.getAttribute('rel') || '').toLowerCase();
+    const relTokens = new Set(rel.split(/\s+/).filter(Boolean));
+    const as = (link.getAttribute('as') || '').toLowerCase();
+    const hadOnload = link.hasAttribute('onload');
+
+    // Convert style preloads into real stylesheets.
+    // We only do this when the page intended to activate the preload via onload.
+    if (hadOnload && relTokens.has('preload') && as === 'style') {
+      link.setAttribute('rel', 'stylesheet');
+      link.removeAttribute('as');
+    }
+
+    // Ensure async "print media" stylesheets are actually applied.
+    const media = (link.getAttribute('media') || '').toLowerCase();
+    // Only flip when it's the common async-load trick (print -> all via onload).
+    if (hadOnload && media === 'print') {
+      link.setAttribute('media', 'all');
+    }
+
+    // If a stylesheet was intended to be enabled by JS, make it enabled.
+    if (hadOnload && link.hasAttribute('disabled')) {
+      link.removeAttribute('disabled');
+    }
+
+    // Remove inline JS handlers (we do a global sweep below too, but do it here
+    // so we never depend on these handlers for CSS activation).
+    link.removeAttribute('onload');
+    link.removeAttribute('onerror');
+  });
+
   // Remove all scripts (SingleFile should have done this, but ensure)
   doc.querySelectorAll('script').forEach((el) => el.remove());
   doc.querySelectorAll('noscript').forEach((el) => el.remove());
@@ -100,15 +137,28 @@ function makeInert(html: string): string {
     form.setAttribute('onsubmit', 'return false;');
   });
 
-  // Disable interactive elements
-  doc.querySelectorAll('button, input, select, textarea').forEach((el) => {
-    el.setAttribute('disabled', 'disabled');
+  // Make interactive elements non-interactive without changing their styling.
+  // Using `disabled` can affect rendering on some sites (e.g., inputs can appear hidden or
+  // lose critical styles). We instead prevent interaction via CSS (see inert styles below)
+  // and a few attributes that don't generally alter appearance.
+  doc.querySelectorAll('input, textarea').forEach((el) => {
+    // Avoid editing/keyboard focus but keep visuals.
+    el.setAttribute('readonly', 'readonly');
+    el.setAttribute('tabindex', '-1');
+  });
+  doc.querySelectorAll('button, select').forEach((el) => {
+    el.setAttribute('tabindex', '-1');
+    el.setAttribute('aria-disabled', 'true');
   });
 
-  // Remove event handler attributes
-  const eventAttrs = ['onclick', 'onmouseover', 'onmouseout', 'onload', 'onerror', 'onsubmit', 'onchange', 'onfocus', 'onblur'];
+  // Remove ALL inline event handlers for safety.
+  // (e.g., onclick, onload, oninput, etc.)
   doc.querySelectorAll('*').forEach((el) => {
-    eventAttrs.forEach((attr) => el.removeAttribute(attr));
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.name.toLowerCase().startsWith('on')) {
+        el.removeAttribute(attr.name);
+      }
+    }
   });
 
   // Add meta tag to identify as refine.page snapshot
@@ -128,9 +178,70 @@ function makeInert(html: string): string {
   const inertStyle = doc.createElement('style');
   inertStyle.textContent = `
     a[data-original-href] { cursor: default !important; pointer-events: none !important; }
-    button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0.7; }
+    /* Prevent interaction while preserving rendering */
+    a, button, input, select, textarea { pointer-events: none !important; }
+    button, input, select, textarea { caret-color: transparent !important; }
   `;
   doc.head?.appendChild(inertStyle);
+
+  // Preserve open shadow roots through the parse/serialize roundtrip by emitting
+  // Declarative Shadow DOM templates before serialization. Otherwise, content inside
+  // shadow roots can be lost when using `outerHTML`.
+  //
+  // While doing so, apply the same inerting rules inside the template content,
+  // since document-level CSS/attribute changes don't affect shadow DOM.
+  doc.querySelectorAll('*').forEach((el) => {
+    const host = el as Element & { shadowRoot?: ShadowRoot | null };
+    const shadowRoot = host.shadowRoot;
+    if (!shadowRoot) return;
+
+    const hasDeclarativeTemplate = Array.from(host.children).some(
+      (child) => child.tagName === 'TEMPLATE' && child.hasAttribute('shadowrootmode')
+    );
+    if (hasDeclarativeTemplate) return;
+
+    const template = doc.createElement('template');
+    template.setAttribute('shadowrootmode', 'open');
+    template.innerHTML = shadowRoot.innerHTML;
+
+    // Sanitize & inert shadow content (template.content is a DocumentFragment).
+    template.content.querySelectorAll('script, noscript').forEach((n) => n.remove());
+    template.content.querySelectorAll('a[href]').forEach((link) => {
+      const href = link.getAttribute('href');
+      if (href) {
+        link.setAttribute('data-original-href', href);
+        link.removeAttribute('href');
+      }
+    });
+    template.content.querySelectorAll('form').forEach((form) => {
+      form.removeAttribute('action');
+      form.setAttribute('onsubmit', 'return false;');
+    });
+    template.content.querySelectorAll('input, textarea').forEach((node) => {
+      node.setAttribute('readonly', 'readonly');
+      node.setAttribute('tabindex', '-1');
+    });
+    template.content.querySelectorAll('button, select').forEach((node) => {
+      node.setAttribute('tabindex', '-1');
+      node.setAttribute('aria-disabled', 'true');
+    });
+    template.content.querySelectorAll('*').forEach((node) => {
+      for (const attr of Array.from(node.attributes)) {
+        if (attr.name.toLowerCase().startsWith('on')) {
+          node.removeAttribute(attr.name);
+        }
+      }
+    });
+    const shadowInertStyle = doc.createElement('style');
+    shadowInertStyle.textContent = `
+      a[data-original-href] { cursor: default !important; pointer-events: none !important; }
+      a, button, input, select, textarea { pointer-events: none !important; }
+      button, input, select, textarea { caret-color: transparent !important; }
+    `;
+    template.content.insertBefore(shadowInertStyle, template.content.firstChild);
+
+    host.insertBefore(template, host.firstChild);
+  });
 
   return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
 }
@@ -145,10 +256,39 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): 
   });
 }
 
+// Best-effort wait for client-rendered UI to appear (e.g. Next/React hydration).
+// Some sites (DuckDuckGo included) render key UI like the search box client-side;
+// capturing too early can miss it even though the page is "mostly" loaded.
+async function waitForPageToSettle(maxWaitMs: number): Promise<void> {
+  const start = Date.now();
+
+  // Wait for load, but don't block forever.
+  if (document.readyState !== 'complete') {
+    await Promise.race([
+      new Promise<void>((resolve) => window.addEventListener('load', () => resolve(), { once: true })),
+      new Promise<void>((resolve) => setTimeout(() => resolve(), maxWaitMs)),
+    ]);
+  }
+
+  // Wait a bit for hydration to render interactive UI.
+  while (Date.now() - start < maxWaitMs) {
+    if (document.querySelector('input, textarea, select, [role="search"], [role="searchbox"]')) {
+      break;
+    }
+    await new Promise<void>((resolve) => setTimeout(() => resolve(), 50));
+  }
+
+  // Allow layout/style flush.
+  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+}
+
 // Main capture function using SingleFile
 export async function capturePage(): Promise<Snapshot> {
   console.log('refine.page: Starting capture of', window.location.href);
   const startTime = Date.now();
+
+  // Give SPAs a moment to finish hydration so we capture the fully rendered DOM.
+  await waitForPageToSettle(1500);
 
   // Initialize and run SingleFile
   console.log('refine.page: Initializing SingleFile...');
