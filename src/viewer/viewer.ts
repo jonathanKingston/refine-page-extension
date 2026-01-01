@@ -1027,8 +1027,8 @@ function renderAnnotationList() {
   // Sort by creation time (oldest first, newest at bottom)
   allAnnotations.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  // Render sorted annotations
-  const items = allAnnotations.map(a => {
+  // Render sorted annotations with index numbers
+  const items = allAnnotations.map((a, idx) => {
     const displayText = a.annotationType === 'text'
       ? `${escapeHtml(a.displayText.substring(0, 40))}${a.displayText.length > 40 ? '...' : ''}`
       : a.displayText;
@@ -1036,7 +1036,7 @@ function renderAnnotationList() {
 
     return `
       <div class="annotation-item" data-id="${a.id}" data-type="${a.annotationType}">
-        <span class="type-indicator ${a.type}"></span>
+        <span class="annotation-index ${a.type}">${idx + 1}</span>
         <span class="annotation-text"${titleAttr}>${displayText}</span>
         <button class="annotation-delete" data-id="${a.id}" title="Delete">×</button>
       </div>

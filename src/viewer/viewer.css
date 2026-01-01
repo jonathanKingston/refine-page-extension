@@ -73,14 +73,14 @@
   --color-selected-text: #ffffff;
 
   --color-relevant-bg: #262626;
-  --color-relevant-border: #404040;
-  --color-relevant-text: #a3a3a3;
-  --color-relevant-dot: #22c55e;
+  --color-relevant-border: #0e7490;
+  --color-relevant-text: #22d3ee;
+  --color-relevant-dot: #06b6d4;
 
   --color-answer-bg: #262626;
-  --color-answer-border: #404040;
-  --color-answer-text: #a3a3a3;
-  --color-answer-dot: #ffffff;
+  --color-answer-border: #be185d;
+  --color-answer-text: #f472b6;
+  --color-answer-dot: #ec4899;
 
   --color-status-pending: #eab308;
   --color-status-approved: #ffffff;
@@ -1226,6 +1226,39 @@ body {
 
 .type-indicator.relevant { background: var(--color-relevant-dot); }
 .type-indicator.answer { background: var(--color-answer-dot); }
+
+/* Annotation index number */
+.annotation-index {
+  min-width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.annotation-index.relevant {
+  background: var(--color-relevant-dot);
+  color: #ffffff;
+}
+
+.annotation-index.answer {
+  background: var(--color-answer-dot);
+  color: #ffffff;
+}
+
+[data-theme="noir"] .annotation-index.relevant {
+  background: var(--color-relevant-dot);
+  color: #0a0a0a;
+}
+
+[data-theme="noir"] .annotation-index.answer {
+  background: var(--color-answer-dot);
+  color: #0a0a0a;
+}
 
 .annotation-text {
   flex: 1;
