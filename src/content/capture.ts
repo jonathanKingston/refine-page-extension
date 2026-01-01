@@ -81,6 +81,43 @@ function makeInert(html: string): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
 
+  // Normalize async CSS patterns into a "final applied" state.
+  // Many pages load styles via:
+  // - <link rel="stylesheet" media="print" onload="this.media='all'">
+  // - <link rel="preload" as="style" onload="this.rel='stylesheet'">
+  // We remove inline event handlers below for safety, so we must apply the end-state here
+  // or styles will be missing in the snapshot.
+  doc.querySelectorAll('link').forEach((link) => {
+    const rel = (link.getAttribute('rel') || '').toLowerCase();
+    const relTokens = new Set(rel.split(/\s+/).filter(Boolean));
+    const as = (link.getAttribute('as') || '').toLowerCase();
+    const hadOnload = link.hasAttribute('onload');
+
+    // Convert style preloads into real stylesheets.
+    // We only do this when the page intended to activate the preload via onload.
+    if (hadOnload && relTokens.has('preload') && as === 'style') {
+      link.setAttribute('rel', 'stylesheet');
+      link.removeAttribute('as');
+    }
+
+    // Ensure async "print media" stylesheets are actually applied.
+    const media = (link.getAttribute('media') || '').toLowerCase();
+    // Only flip when it's the common async-load trick (print -> all via onload).
+    if (hadOnload && media === 'print') {
+      link.setAttribute('media', 'all');
+    }
+
+    // If a stylesheet was intended to be enabled by JS, make it enabled.
+    if (hadOnload && link.hasAttribute('disabled')) {
+      link.removeAttribute('disabled');
+    }
+
+    // Remove inline JS handlers (we do a global sweep below too, but do it here
+    // so we never depend on these handlers for CSS activation).
+    link.removeAttribute('onload');
+    link.removeAttribute('onerror');
+  });
+
   // Remove all scripts (SingleFile should have done this, but ensure)
   doc.querySelectorAll('script').forEach((el) => el.remove());
   doc.querySelectorAll('noscript').forEach((el) => el.remove());
