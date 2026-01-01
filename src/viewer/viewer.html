@@ -11,7 +11,8 @@
     <!-- Header -->
     <header class="viewer-header">
       <div class="header-left">
-        <h1>pref.page</h1>
+        <h1 class="app-name">pref.page</h1>
+        <span class="header-dot">·</span>
         <span class="page-title" id="page-title">Loading...</span>
         <a href="#" id="open-url-btn" class="open-url-icon" title="Open original page" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -21,187 +22,248 @@
           </svg>
         </a>
       </div>
-      <div class="header-actions">
+      <div class="header-right">
         <span class="save-status hidden" id="save-status"></span>
+        <button class="header-btn" id="toggle-theme" title="Toggle theme">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+        <button class="header-btn" id="toggle-focus-mode" title="Toggle focus mode">
+          <svg class="icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          <svg class="icon-minimize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="4 14 10 14 10 20"></polyline>
+            <polyline points="20 10 14 10 14 4"></polyline>
+            <line x1="14" y1="10" x2="21" y2="3"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+        </button>
       </div>
     </header>
 
     <!-- Main Content -->
     <div class="viewer-main">
-      <!-- Toggle button for left sidebar (visible when collapsed) -->
-      <button class="sidebar-toggle sidebar-toggle-left" id="toggle-left-sidebar" title="Toggle snapshots panel">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 18l6-6-6-6"/>
-        </svg>
-      </button>
-
-      <!-- Sidebar - Snapshot List -->
-      <aside class="sidebar sidebar-left" id="snapshot-sidebar">
-        <div class="sidebar-header">
-          <div class="sidebar-header-row">
-            <h2>Snapshots</h2>
-            <button class="sidebar-collapse-btn" id="collapse-left-sidebar" title="Collapse panel">
+      <!-- Left Sidebar -->
+      <aside class="sidebar sidebar-left" id="sidebar-left">
+        <!-- Tab Toggle: Pages / Questions -->
+        <div class="sidebar-tabs">
+          <div class="tab-toggle">
+            <button class="tab-btn active" data-tab="pages">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M15 18l-6-6 6-6"/>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
               </svg>
+              Pages
             </button>
-          </div>
-          <div class="filter-tabs">
-            <button class="filter-tab active" data-filter="all">All</button>
-            <button class="filter-tab" data-filter="pending">Pending</button>
-            <button class="filter-tab" data-filter="approved">Done</button>
+            <button class="tab-btn" data-tab="questions">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+              Questions
+            </button>
           </div>
         </div>
-        <ul class="snapshot-nav" id="snapshot-nav">
-          <!-- Populated dynamically - each item will have expandable question section -->
-        </ul>
-      </aside>
 
-      <!-- Snapshot Preview -->
-      <main class="snapshot-preview">
-        <div class="preview-toolbar">
-          <div class="annotation-tools">
-            <span class="tool-label">Annotation:</span>
-            <button class="tool-btn active" data-tool="select" title="Select">
+        <!-- Pages Tab Content -->
+        <div class="tab-content" id="pages-tab">
+          <div class="filter-tabs">
+            <button class="filter-tab active" data-filter="all">all</button>
+            <button class="filter-tab" data-filter="pending">pending</button>
+            <button class="filter-tab" data-filter="approved">done</button>
+          </div>
+          <ul class="snapshot-nav" id="snapshot-nav">
+            <!-- Populated dynamically -->
+          </ul>
+          <div class="sidebar-footer" id="snapshot-stats-footer">
+            <span id="review-progress">0 of 0 reviewed</span>
+          </div>
+        </div>
+
+        <!-- Questions Tab Content -->
+        <div class="tab-content hidden" id="questions-tab">
+          <div class="questions-header">
+            <span class="questions-context" id="questions-context">For: Loading...</span>
+            <button class="icon-btn-small" id="add-question-btn" title="Add question">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
             </button>
+          </div>
+          <div class="questions-list" id="questions-list">
+            <!-- Populated dynamically -->
+          </div>
+          <div class="question-editor" id="question-editor">
+            <div class="form-group">
+              <label>Query</label>
+              <textarea id="query-input" rows="2" placeholder="What question should this page answer?"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Expected (optional)</label>
+              <input type="text" id="expected-answer-input" placeholder="Expected answer...">
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="main-content">
+        <!-- Toolbar -->
+        <div class="toolbar">
+          <div class="annotation-tools">
+            <span class="tool-label">Annotate:</span>
             <button class="tool-btn" data-tool="relevant" title="Mark as Relevant">
-              <span class="tool-color relevant"></span>
+              <span class="tool-dot relevant"></span>
               Relevant
             </button>
             <button class="tool-btn" data-tool="answer" title="Mark as Answer">
-              <span class="tool-color answer"></span>
+              <span class="tool-dot answer"></span>
               Answer
             </button>
           </div>
-          <div class="preview-actions">
-            <button id="zoom-out" class="icon-btn" title="Zoom Out">-</button>
-            <span id="zoom-level">100%</span>
-            <button id="zoom-in" class="icon-btn" title="Zoom In">+</button>
+          <div class="toolbar-info">
+            <span id="current-question-label">Q1: Loading...</span>
           </div>
         </div>
-        <div class="preview-frame-container" id="preview-container">
+
+        <!-- Preview -->
+        <div class="preview-container" id="preview-container">
           <iframe id="preview-frame"></iframe>
-          <div class="annotation-overlay" id="annotation-overlay"></div>
         </div>
       </main>
 
-      <!-- Toggle button for right sidebar (visible when collapsed) -->
-      <button class="sidebar-toggle sidebar-toggle-right" id="toggle-right-sidebar" title="Toggle labeling panel">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M15 18l-6-6 6-6"/>
-        </svg>
-      </button>
-
-      <!-- Right Sidebar - Labeling Panel -->
-      <aside class="sidebar sidebar-right" id="labeling-sidebar">
-        <div class="sidebar-header">
-          <div class="sidebar-header-row">
-            <h2>Annotations</h2>
-            <button class="sidebar-collapse-btn" id="collapse-right-sidebar" title="Collapse panel">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 18l6-6-6-6"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Annotations List -->
+      <!-- Right Sidebar -->
+      <aside class="sidebar sidebar-right" id="sidebar-right">
+        <!-- Annotations Section -->
         <div class="panel annotations-panel">
-          <div class="annotation-type-tabs">
-            <button class="type-tab" data-type="relevant">
-              <span class="type-indicator relevant"></span>
-              Relevant <span class="count" id="relevant-count">0</span>
-            </button>
-            <button class="type-tab" data-type="answer">
-              <span class="type-indicator answer"></span>
-              Answer <span class="count" id="answer-count">0</span>
-            </button>
+          <div class="panel-header">
+            <span class="panel-title">Annotations</span>
+            <div class="annotation-counts">
+              <span class="count-badge relevant" id="relevant-count">0</span>
+              <span class="count-badge answer" id="answer-count">0</span>
+            </div>
           </div>
           <div class="annotation-list" id="annotation-list">
-            <div class="empty-state">No annotations yet. Select text in the preview to annotate.</div>
+            <div class="empty-state">No annotations yet</div>
           </div>
         </div>
 
-        <!-- Evaluation Panel -->
+        <!-- Evaluation Section -->
         <div class="panel evaluation-panel">
-          <h3>Evaluation</h3>
-
           <div class="eval-group">
-            <label class="eval-label">Answer correctness?</label>
-            <div class="radio-group">
-              <label class="radio-option">
-                <input type="radio" name="correctness" value="correct">
-                <span>correct<sup>[c]</sup></span>
-              </label>
-              <label class="radio-option">
-                <input type="radio" name="correctness" value="incorrect">
-                <span>incorrect<sup>[i]</sup></span>
-              </label>
-              <label class="radio-option">
-                <input type="radio" name="correctness" value="partial">
-                <span>partial<sup>[p]</sup></span>
-              </label>
+            <label class="eval-label">Correctness</label>
+            <div class="toggle-group" id="correctness-toggle">
+              <button class="toggle-btn" data-value="correct">correct<span class="key">c</span></button>
+              <button class="toggle-btn" data-value="incorrect">incorrect<span class="key">i</span></button>
+              <button class="toggle-btn" data-value="partial">partial<span class="key">p</span></button>
             </div>
           </div>
-
           <div class="eval-group">
-            <label class="eval-label">Answer in page?</label>
-            <div class="radio-group">
-              <label class="radio-option">
-                <input type="radio" name="in-page" value="yes">
-                <span>yes<sup>[y]</sup></span>
-              </label>
-              <label class="radio-option">
-                <input type="radio" name="in-page" value="no">
-                <span>no<sup>[n]</sup></span>
-              </label>
-              <label class="radio-option">
-                <input type="radio" name="in-page" value="ambiguous">
-                <span>ambiguous</span>
-              </label>
+            <label class="eval-label">In page?</label>
+            <div class="toggle-group" id="in-page-toggle">
+              <button class="toggle-btn" data-value="yes">yes<span class="key">y</span></button>
+              <button class="toggle-btn" data-value="no">no<span class="key">n</span></button>
+              <button class="toggle-btn" data-value="ambiguous">ambiguous<span class="key">a</span></button>
             </div>
           </div>
-
           <div class="eval-group">
-            <label class="eval-label">Page content quality?</label>
-            <div class="radio-group">
-              <label class="radio-option">
-                <input type="radio" name="quality" value="good">
-                <span>good<sup>[g]</sup></span>
-              </label>
-              <label class="radio-option">
-                <input type="radio" name="quality" value="broken">
-                <span>broken<sup>[b]</sup></span>
-              </label>
+            <label class="eval-label">Page quality</label>
+            <div class="toggle-group" id="quality-toggle">
+              <button class="toggle-btn" data-value="good">good<span class="key">g</span></button>
+              <button class="toggle-btn" data-value="broken">broken<span class="key">b</span></button>
             </div>
           </div>
         </div>
 
-        <!-- Review Actions -->
-        <div class="panel review-panel">
-          <h3>Review Status</h3>
-          <div class="status-indicator" id="current-status">
-            <span class="status-badge pending">Pending</span>
-          </div>
-          <div class="review-actions">
-            <button id="approve-btn" class="btn btn-success">Approve</button>
-            <button id="decline-btn" class="btn btn-danger">Decline</button>
-          </div>
-          <div class="form-group">
-            <label for="review-notes">Notes</label>
-            <textarea id="review-notes" rows="2" placeholder="Optional review notes..."></textarea>
-          </div>
-        </div>
-
-        <!-- Submit -->
-        <div class="submit-section">
-          <button id="submit-btn" class="btn btn-primary btn-large">Submit</button>
+        <!-- Notes -->
+        <div class="panel notes-panel">
+          <textarea id="review-notes" placeholder="Notes..." rows="2"></textarea>
         </div>
       </aside>
     </div>
+
+    <!-- Bottom Bar -->
+    <footer class="bottom-bar">
+      <!-- Question Navigator -->
+      <div class="bottom-section question-nav">
+        <button class="nav-btn" id="prev-question" title="Previous question">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <span class="nav-label" id="question-nav-label">Q1 of 1</span>
+        <button class="nav-btn" id="next-question" title="Next question">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Annotation Summary -->
+      <div class="bottom-section annotation-summary">
+        <span class="summary-label">Marked:</span>
+        <span class="summary-badge relevant"><span id="bottom-relevant-count">0</span> relevant</span>
+        <span class="summary-badge answer"><span id="bottom-answer-count">0</span> answer</span>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Quick Eval -->
+      <div class="bottom-section quick-eval">
+        <div class="quick-eval-group">
+          <span class="quick-label">Correct?</span>
+          <div class="quick-btns" id="quick-correctness">
+            <button class="quick-btn" data-value="correct" title="Correct">c</button>
+            <button class="quick-btn" data-value="incorrect" title="Incorrect">i</button>
+            <button class="quick-btn" data-value="partial" title="Partial">p</button>
+          </div>
+        </div>
+        <div class="quick-eval-group">
+          <span class="quick-label">In page?</span>
+          <div class="quick-btns" id="quick-in-page">
+            <button class="quick-btn" data-value="yes" title="Yes">y</button>
+            <button class="quick-btn" data-value="no" title="No">n</button>
+            <button class="quick-btn" data-value="ambiguous" title="Ambiguous">a</button>
+          </div>
+        </div>
+        <div class="quick-eval-group">
+          <span class="quick-label">Quality?</span>
+          <div class="quick-btns" id="quick-quality">
+            <button class="quick-btn" data-value="good" title="Good">g</button>
+            <button class="quick-btn" data-value="broken" title="Broken">b</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <!-- Actions -->
+      <div class="bottom-section actions">
+        <button class="action-btn primary" id="approve-btn">Approve</button>
+        <button class="action-btn" id="decline-btn">Decline</button>
+        <button class="action-btn" id="skip-btn">Skip</button>
+      </div>
+    </footer>
   </div>
 
   <script type="module" src="viewer.ts"></script>

@@ -46,6 +46,7 @@ let currentQuestionId: string | null = null;
 let currentTool: 'select' | AnnotationType = 'select';
 let zoomLevel = 100;
 let allSnapshots: SnapshotSummary[] = [];
+let focusMode = false;
 
 // Note: Annotation library instances are now managed in the iframe
 
@@ -205,6 +206,18 @@ function updateUI() {
 
   // Update evaluation form
   updateEvaluationForm();
+
+  // Update current question label
+  updateCurrentQuestionLabel();
+
+  // Update questions tab context
+  const contextEl = document.getElementById('questions-context');
+  if (contextEl && currentSnapshot) {
+    contextEl.textContent = `For: ${currentSnapshot.title || 'Untitled'}`;
+  }
+
+  // Update questions list in Questions tab
+  updateQuestionsTabList();
 
   // Update review notes
   const notesInput = document.getElementById('review-notes') as HTMLTextAreaElement;
@@ -988,11 +1001,19 @@ function updateAnnotationCounts() {
   const relevantCount = allAnnotations.filter(a => a.type === 'relevant').length;
   const answerCount = allAnnotations.filter(a => a.type === 'answer').length;
 
+  // Update right sidebar counts
   const relevantEl = document.getElementById('relevant-count');
   const answerEl = document.getElementById('answer-count');
 
   if (relevantEl) relevantEl.textContent = String(relevantCount);
   if (answerEl) answerEl.textContent = String(answerCount);
+
+  // Update bottom bar counts
+  const bottomRelevantEl = document.getElementById('bottom-relevant-count');
+  const bottomAnswerEl = document.getElementById('bottom-answer-count');
+
+  if (bottomRelevantEl) bottomRelevantEl.textContent = String(relevantCount);
+  if (bottomAnswerEl) bottomAnswerEl.textContent = String(answerCount);
 }
 
 // Get annotations for the current question
@@ -1162,37 +1183,127 @@ function updateStatusDisplay() {
 
 // Update evaluation form
 function updateEvaluationForm() {
-  // Clear all radios first
-  document.querySelectorAll('input[name="correctness"]').forEach((r) => (r as HTMLInputElement).checked = false);
-  document.querySelectorAll('input[name="in-page"]').forEach((r) => (r as HTMLInputElement).checked = false);
-  document.querySelectorAll('input[name="quality"]').forEach((r) => (r as HTMLInputElement).checked = false);
+  // Clear all toggle buttons
+  document.querySelectorAll('#correctness-toggle .toggle-btn, #quick-correctness .quick-btn').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('#in-page-toggle .toggle-btn, #quick-in-page .quick-btn').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('#quality-toggle .toggle-btn, #quick-quality .quick-btn').forEach((b) => b.classList.remove('active'));
 
   if (!currentSnapshot || !currentQuestionId) return;
 
   const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
   if (!question) return;
 
-  // Set radio values
+  // Set toggle button active states
   if (question.evaluation.answerCorrectness) {
-    const radio = document.querySelector(
-      `input[name="correctness"][value="${question.evaluation.answerCorrectness}"]`
-    ) as HTMLInputElement;
-    if (radio) radio.checked = true;
+    document.querySelectorAll(`#correctness-toggle .toggle-btn[data-value="${question.evaluation.answerCorrectness}"], #quick-correctness .quick-btn[data-value="${question.evaluation.answerCorrectness}"]`)
+      .forEach(btn => btn.classList.add('active'));
   }
 
   if (question.evaluation.answerInPage) {
-    const radio = document.querySelector(
-      `input[name="in-page"][value="${question.evaluation.answerInPage}"]`
-    ) as HTMLInputElement;
-    if (radio) radio.checked = true;
+    document.querySelectorAll(`#in-page-toggle .toggle-btn[data-value="${question.evaluation.answerInPage}"], #quick-in-page .quick-btn[data-value="${question.evaluation.answerInPage}"]`)
+      .forEach(btn => btn.classList.add('active'));
   }
 
   if (question.evaluation.pageQuality) {
-    const radio = document.querySelector(
-      `input[name="quality"][value="${question.evaluation.pageQuality}"]`
-    ) as HTMLInputElement;
-    if (radio) radio.checked = true;
+    document.querySelectorAll(`#quality-toggle .toggle-btn[data-value="${question.evaluation.pageQuality}"], #quick-quality .quick-btn[data-value="${question.evaluation.pageQuality}"]`)
+      .forEach(btn => btn.classList.add('active'));
   }
+}
+
+// Update current question label
+function updateCurrentQuestionLabel() {
+  const labelEl = document.getElementById('current-question-label');
+  const navLabelEl = document.getElementById('question-nav-label');
+
+  if (!currentSnapshot) {
+    if (labelEl) labelEl.textContent = 'No question';
+    if (navLabelEl) navLabelEl.textContent = '0 of 0';
+    return;
+  }
+
+  const questionIdx = currentQuestionId
+    ? currentSnapshot.questions.findIndex(q => q.id === currentQuestionId)
+    : -1;
+  const totalQuestions = currentSnapshot.questions.length;
+
+  if (questionIdx >= 0 && currentQuestionId) {
+    const question = currentSnapshot.questions[questionIdx];
+    const shortQuery = question.query.substring(0, 30) + (question.query.length > 30 ? '...' : '');
+    if (labelEl) labelEl.textContent = `Q${questionIdx + 1}: ${shortQuery}`;
+    if (navLabelEl) navLabelEl.textContent = `Q${questionIdx + 1} of ${totalQuestions}`;
+  } else {
+    if (labelEl) labelEl.textContent = 'No question selected';
+    if (navLabelEl) navLabelEl.textContent = `0 of ${totalQuestions}`;
+  }
+}
+
+// Update review progress stats
+function updateReviewProgress() {
+  const progressEl = document.getElementById('review-progress');
+  if (!progressEl) return;
+
+  const reviewed = allSnapshots.filter(s => s.status === 'approved' || s.status === 'declined').length;
+  const total = allSnapshots.length;
+  progressEl.textContent = `${reviewed} of ${total} reviewed`;
+}
+
+// Update questions list in the Questions tab
+function updateQuestionsTabList() {
+  const listEl = document.getElementById('questions-list');
+  if (!listEl || !currentSnapshot) return;
+
+  if (currentSnapshot.questions.length === 0) {
+    listEl.innerHTML = '<div class="empty-state">No questions yet</div>';
+    return;
+  }
+
+  listEl.innerHTML = currentSnapshot.questions.map((q, idx) => `
+    <div class="question-item ${q.id === currentQuestionId ? 'active' : ''}" data-id="${q.id}">
+      <span class="question-number">Q${idx + 1}</span>
+      <span class="question-text">${escapeHtml(q.query.substring(0, 40))}${q.query.length > 40 ? '...' : ''}</span>
+      <button class="question-delete" data-id="${q.id}" title="Delete">×</button>
+    </div>
+  `).join('');
+
+  // Update question editor with current question
+  const queryInput = document.getElementById('query-input') as HTMLTextAreaElement;
+  const expectedInput = document.getElementById('expected-answer-input') as HTMLInputElement;
+
+  if (currentQuestionId) {
+    const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+    if (question) {
+      if (queryInput) queryInput.value = question.query;
+      if (expectedInput) expectedInput.value = question.expectedAnswer;
+    }
+  } else {
+    if (queryInput) queryInput.value = '';
+    if (expectedInput) expectedInput.value = '';
+  }
+}
+
+// Navigate to next/previous question
+function navigateQuestion(direction: 'prev' | 'next') {
+  if (!currentSnapshot || currentSnapshot.questions.length === 0) return;
+
+  const currentIdx = currentQuestionId
+    ? currentSnapshot.questions.findIndex(q => q.id === currentQuestionId)
+    : -1;
+
+  let newIdx: number;
+  if (direction === 'next') {
+    newIdx = currentIdx < currentSnapshot.questions.length - 1 ? currentIdx + 1 : 0;
+  } else {
+    newIdx = currentIdx > 0 ? currentIdx - 1 : currentSnapshot.questions.length - 1;
+  }
+
+  currentQuestionId = currentSnapshot.questions[newIdx].id;
+  updateQuestionForm();
+  updateEvaluationForm();
+  updateCurrentQuestionLabel();
+  updateAnnotationCounts();
+  renderAnnotationList();
+  updateQuestionsTabList();
+  syncIframeAnnotations();
 }
 
 // Track save status timeout for cleanup
@@ -1291,6 +1402,7 @@ async function loadAllSnapshots(filter: string = 'all') {
     }
 
     renderSnapshotNav(filtered);
+    updateReviewProgress();
   } catch (error) {
     console.error('Failed to load snapshots:', error);
   }
@@ -1548,20 +1660,18 @@ function setEvaluationValue(name: string, value: string) {
   const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
   if (!question) return;
 
-  const radio = document.querySelector(`input[name="${name}"][value="${value}"]`) as HTMLInputElement;
-  if (radio) {
-    radio.checked = true;
-
-    if (name === 'correctness') {
-      question.evaluation.answerCorrectness = value as AnswerCorrectness;
-    } else if (name === 'in-page') {
-      question.evaluation.answerInPage = value as AnswerInPage;
-    } else if (name === 'quality') {
-      question.evaluation.pageQuality = value as PageQuality;
-    }
-
-    saveCurrentSnapshot();
+  // Update data
+  if (name === 'correctness') {
+    question.evaluation.answerCorrectness = value as AnswerCorrectness;
+  } else if (name === 'in-page') {
+    question.evaluation.answerInPage = value as AnswerInPage;
+  } else if (name === 'quality') {
+    question.evaluation.pageQuality = value as PageQuality;
   }
+
+  // Update UI
+  updateEvaluationForm();
+  saveCurrentSnapshot();
 }
 
 // Setup keyboard shortcuts
@@ -1675,6 +1785,41 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupKeyboardShortcuts();
   setupAccordionDelegation();
 
+  // Theme toggle
+  document.getElementById('toggle-theme')?.addEventListener('click', () => {
+    const html = document.documentElement;
+    const currentTheme = html.dataset.theme || 'pastel';
+    html.dataset.theme = currentTheme === 'noir' ? 'pastel' : 'noir';
+    localStorage.setItem('pref-page-theme', html.dataset.theme);
+  });
+
+  // Load saved theme
+  const savedTheme = localStorage.getItem('pref-page-theme');
+  if (savedTheme) {
+    document.documentElement.dataset.theme = savedTheme;
+  }
+
+  // Focus mode toggle
+  document.getElementById('toggle-focus-mode')?.addEventListener('click', () => {
+    focusMode = !focusMode;
+    document.body.classList.toggle('focus-mode', focusMode);
+  });
+
+  // Tab switching (Pages/Questions)
+  document.querySelectorAll('.tab-btn[data-tab]').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const tabName = (tab as HTMLElement).dataset.tab;
+
+      // Update tab buttons
+      document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      // Update tab content
+      document.getElementById('pages-tab')?.classList.toggle('hidden', tabName !== 'pages');
+      document.getElementById('questions-tab')?.classList.toggle('hidden', tabName !== 'questions');
+    });
+  });
+
   await loadAllSnapshots();
 
   if (snapshotId) {
@@ -1700,55 +1845,55 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // Note: Question form handlers are now set up in setupAccordionHandlers()
-  // which is called after renderSnapshotNav()
-
-  // Evaluation radios
-  document.querySelectorAll('input[name="correctness"]').forEach((radio) => {
-    radio.addEventListener('change', () => {
-      if (!currentSnapshot || !currentQuestionId) return;
-      const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-      if (question) {
-        question.evaluation.answerCorrectness = (radio as HTMLInputElement).value as AnswerCorrectness;
-        saveCurrentSnapshot();
-      }
+  // Toggle-style evaluation buttons (right sidebar)
+  document.querySelectorAll('#correctness-toggle .toggle-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const value = (btn as HTMLElement).dataset.value;
+      if (value) setEvaluationValue('correctness', value);
     });
   });
 
-  document.querySelectorAll('input[name="in-page"]').forEach((radio) => {
-    radio.addEventListener('change', () => {
-      if (!currentSnapshot || !currentQuestionId) return;
-      const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-      if (question) {
-        question.evaluation.answerInPage = (radio as HTMLInputElement).value as AnswerInPage;
-        saveCurrentSnapshot();
-      }
+  document.querySelectorAll('#in-page-toggle .toggle-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const value = (btn as HTMLElement).dataset.value;
+      if (value) setEvaluationValue('in-page', value);
     });
   });
 
-  document.querySelectorAll('input[name="quality"]').forEach((radio) => {
-    radio.addEventListener('change', () => {
-      if (!currentSnapshot || !currentQuestionId) return;
-      const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-      if (question) {
-        question.evaluation.pageQuality = (radio as HTMLInputElement).value as PageQuality;
-        saveCurrentSnapshot();
-      }
+  document.querySelectorAll('#quality-toggle .toggle-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const value = (btn as HTMLElement).dataset.value;
+      if (value) setEvaluationValue('quality', value);
     });
   });
 
-  // Zoom controls
-  document.getElementById('zoom-in')?.addEventListener('click', () => {
-    zoomLevel = Math.min(200, zoomLevel + 10);
-    applyZoom();
+  // Quick eval buttons (bottom bar)
+  document.querySelectorAll('#quick-correctness .quick-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const value = (btn as HTMLElement).dataset.value;
+      if (value) setEvaluationValue('correctness', value);
+    });
   });
 
-  document.getElementById('zoom-out')?.addEventListener('click', () => {
-    zoomLevel = Math.max(50, zoomLevel - 10);
-    applyZoom();
+  document.querySelectorAll('#quick-in-page .quick-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const value = (btn as HTMLElement).dataset.value;
+      if (value) setEvaluationValue('in-page', value);
+    });
   });
 
-  // Approve/Decline buttons
+  document.querySelectorAll('#quick-quality .quick-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const value = (btn as HTMLElement).dataset.value;
+      if (value) setEvaluationValue('quality', value);
+    });
+  });
+
+  // Question navigation (bottom bar)
+  document.getElementById('prev-question')?.addEventListener('click', () => navigateQuestion('prev'));
+  document.getElementById('next-question')?.addEventListener('click', () => navigateQuestion('next'));
+
+  // Approve/Decline/Skip buttons
   document.getElementById('approve-btn')?.addEventListener('click', () => {
     if (currentSnapshot) {
       currentSnapshot.status = 'approved';
@@ -1767,6 +1912,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  document.getElementById('skip-btn')?.addEventListener('click', () => {
+    // Move to next pending snapshot
+    const nextPending = allSnapshots.find(s => s.status === 'pending' && s.id !== currentSnapshot?.id);
+    if (nextPending) {
+      window.history.pushState({}, '', `?id=${nextPending.id}`);
+      loadSnapshot(nextPending.id);
+    }
+  });
+
   // Review notes
   const notesInput = document.getElementById('review-notes') as HTMLTextAreaElement;
   notesInput?.addEventListener('input', () => {
@@ -1776,33 +1930,68 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Submit button
-  document.getElementById('submit-btn')?.addEventListener('click', () => saveCurrentSnapshot(true));
-
-  // Sidebar toggle functionality
-  const viewerMain = document.querySelector('.viewer-main');
-  const leftSidebar = document.getElementById('snapshot-sidebar');
-  const rightSidebar = document.getElementById('labeling-sidebar');
-
-  // Left sidebar toggle
-  document.getElementById('collapse-left-sidebar')?.addEventListener('click', () => {
-    leftSidebar?.classList.add('collapsed');
-    viewerMain?.classList.add('left-collapsed');
+  // Questions tab handlers
+  document.getElementById('add-question-btn')?.addEventListener('click', () => {
+    addQuestion();
   });
 
-  document.getElementById('toggle-left-sidebar')?.addEventListener('click', () => {
-    leftSidebar?.classList.remove('collapsed');
-    viewerMain?.classList.remove('left-collapsed');
+  // Question editor inputs (in Questions tab)
+  const queryInput = document.getElementById('query-input') as HTMLTextAreaElement;
+  queryInput?.addEventListener('input', () => {
+    if (!currentSnapshot || !currentQuestionId) return;
+    const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+    if (question) {
+      question.query = queryInput.value;
+      question.updatedAt = new Date().toISOString();
+      updateCurrentQuestionLabel();
+      updateQuestionsTabList();
+      saveCurrentSnapshot();
+    }
   });
 
-  // Right sidebar toggle
-  document.getElementById('collapse-right-sidebar')?.addEventListener('click', () => {
-    rightSidebar?.classList.add('collapsed');
-    viewerMain?.classList.add('right-collapsed');
+  const expectedInput = document.getElementById('expected-answer-input') as HTMLInputElement;
+  expectedInput?.addEventListener('input', () => {
+    if (!currentSnapshot || !currentQuestionId) return;
+    const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+    if (question) {
+      question.expectedAnswer = expectedInput.value;
+      question.updatedAt = new Date().toISOString();
+      saveCurrentSnapshot();
+    }
   });
 
-  document.getElementById('toggle-right-sidebar')?.addEventListener('click', () => {
-    rightSidebar?.classList.remove('collapsed');
-    viewerMain?.classList.remove('right-collapsed');
+  // Questions list click handlers (event delegation)
+  document.getElementById('questions-list')?.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+
+    // Handle delete button
+    if (target.classList.contains('question-delete')) {
+      const id = target.dataset.id;
+      if (id && currentSnapshot) {
+        currentSnapshot.questions = currentSnapshot.questions.filter(q => q.id !== id);
+        if (currentQuestionId === id) {
+          currentQuestionId = currentSnapshot.questions[0]?.id || null;
+        }
+        updateUI();
+        saveCurrentSnapshot();
+      }
+      return;
+    }
+
+    // Handle question item click
+    const questionItem = target.closest('.question-item') as HTMLElement;
+    if (questionItem) {
+      const id = questionItem.dataset.id;
+      if (id) {
+        currentQuestionId = id;
+        updateQuestionForm();
+        updateEvaluationForm();
+        updateCurrentQuestionLabel();
+        updateAnnotationCounts();
+        renderAnnotationList();
+        updateQuestionsTabList();
+        syncIframeAnnotations();
+      }
+    }
   });
 });
