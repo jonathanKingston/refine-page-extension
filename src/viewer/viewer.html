@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>pref.page - Viewer</title>
+  <title>refine.page - Viewer</title>
   <link rel="stylesheet" href="viewer.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
     <!-- Header -->
     <header class="viewer-header">
       <div class="header-left">
-        <h1 class="app-name">pref.page</h1>
+        <h1 class="app-name">refine.page</h1>
         <span class="header-dot">·</span>
         <span class="page-title" id="page-title">Loading...</span>
         <a href="#" id="open-url-btn" class="open-url-icon" title="Open original page" target="_blank" rel="noopener">
@@ -75,7 +75,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="10"></circle>
                 <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                <circle cx="12" cy="17" r="1" fill="currentColor"></circle>
               </svg>
               Questions
             </button>
@@ -181,7 +181,7 @@
             <div class="toggle-group" id="in-page-toggle">
               <button class="toggle-btn" data-value="yes">yes<span class="key">y</span></button>
               <button class="toggle-btn" data-value="no">no<span class="key">n</span></button>
-              <button class="toggle-btn" data-value="ambiguous">ambiguous<span class="key">a</span></button>
+              <button class="toggle-btn" data-value="unclear">unclear<span class="key">u</span></button>
             </div>
           </div>
           <div class="eval-group">
@@ -243,7 +243,7 @@
           <div class="quick-btns" id="quick-in-page">
             <button class="quick-btn" data-value="yes" title="Yes">y</button>
             <button class="quick-btn" data-value="no" title="No">n</button>
-            <button class="quick-btn" data-value="ambiguous" title="Ambiguous">a</button>
+            <button class="quick-btn" data-value="unclear" title="Unclear">u</button>
           </div>
         </div>
         <div class="quick-eval-group">

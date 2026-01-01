@@ -162,7 +162,7 @@ function copyStaticFiles() {
 
 // Build function
 async function build() {
-  console.log('Building pref.page extension...');
+  console.log('Building refine.page extension...');
   const start = Date.now();
 
   try {

@@ -1,5 +1,5 @@
 /**
- * Background service worker for pref.page extension
+ * Background service worker for refine.page extension
  * Handles cross-component communication and storage operations
  */
 
@@ -243,10 +243,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Handle extension installation
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
-    console.log('pref.page extension installed');
+    console.log('refine.page extension installed');
     // Initialize storage
     chrome.storage.local.set({ snapshotIndex: [] });
   }
 });
 
-console.log('pref.page: Background service worker started');
+console.log('refine.page: Background service worker started');

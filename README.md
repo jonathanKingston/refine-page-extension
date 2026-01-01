@@ -1,4 +1,4 @@
-# pref.page
+# refine.page
 
 A web extension for capturing and annotating web page snapshots for labeling and review. Similar to Zotero's snapshot functionality, but focused on creating labeled datasets from web pages.
 
@@ -16,7 +16,7 @@ A web extension for capturing and annotating web page snapshots for labeling and
   - Annotation links to highlighted text
 - **Evaluation Metrics**: Rate each Q&A pair with:
   - Answer correctness (correct/incorrect/partial)
-  - Answer in page (yes/no/ambiguous)
+  - Answer in page (yes/no/unclear)
   - Page content quality (good/broken)
 - **Review Workflow**: Approve or decline snapshots with optional review notes
 - **Export/Import**: Backup and restore your labeled data as JSON files
@@ -53,7 +53,7 @@ A web extension for capturing and annotating web page snapshots for labeling and
 ### Capturing Pages
 
 1. Navigate to any web page you want to capture
-2. Click the pref.page extension icon
+2. Click the refine.page extension icon
 3. Click "Capture Page"
 4. The page will be saved as an inert snapshot
 
@@ -87,7 +87,7 @@ A web extension for capturing and annotating web page snapshots for labeling and
 ## Project Structure
 
 ```
-pref-page/
+refine-page/
 ├── src/
 │   ├── types/           # TypeScript type definitions
 │   ├── background/      # Service worker for message handling

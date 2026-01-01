@@ -1,5 +1,5 @@
 /**
- * Popup script for pref.page extension
+ * Popup script for refine.page extension
  */
 
 import type { Snapshot, ExportData, ExportedSnapshot, ZipExportData, ZipIndexSnapshot } from '@/types';
@@ -225,7 +225,7 @@ async function exportData() {
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = `pref-page-export-${new Date().toISOString().split('T')[0]}.zip`;
+    a.download = `refine-page-export-${new Date().toISOString().split('T')[0]}.zip`;
     a.click();
 
     URL.revokeObjectURL(url);
@@ -308,7 +308,7 @@ async function importData(file: File) {
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
   // Load saved theme
-  const savedTheme = localStorage.getItem('pref-page-theme');
+  const savedTheme = localStorage.getItem('refine-page-theme');
   if (savedTheme) {
     document.documentElement.dataset.theme = savedTheme;
   }
@@ -318,7 +318,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const html = document.documentElement;
     const currentTheme = html.dataset.theme || 'pastel';
     html.dataset.theme = currentTheme === 'noir' ? 'pastel' : 'noir';
-    localStorage.setItem('pref-page-theme', html.dataset.theme);
+    localStorage.setItem('refine-page-theme', html.dataset.theme);
   });
 
   // Render initial state

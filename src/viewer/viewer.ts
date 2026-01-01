@@ -1340,6 +1340,34 @@ async function loadAllSnapshots(filter: string = 'all') {
   }
 }
 
+// Update the current snapshot's summary in allSnapshots (for question count, etc.)
+function updateCurrentSnapshotSummary() {
+  if (!currentSnapshot) return;
+
+  const index = allSnapshots.findIndex(s => s.id === currentSnapshot!.id);
+  if (index >= 0) {
+    allSnapshots[index] = {
+      ...allSnapshots[index],
+      questionCount: currentSnapshot.questions.length,
+      status: currentSnapshot.status,
+    };
+
+    // Re-render just the updated item in the nav
+    const navItem = document.querySelector(`#snapshot-nav li[data-id="${currentSnapshot.id}"]`);
+    if (navItem) {
+      const metaEl = navItem.querySelector('.snapshot-meta span:last-child');
+      if (metaEl) {
+        metaEl.textContent = `${currentSnapshot.questions.length} Q`;
+      }
+      // Update status dot
+      const dotEl = navItem.querySelector('.status-dot');
+      if (dotEl) {
+        dotEl.className = `status-dot ${currentSnapshot.status}`;
+      }
+    }
+  }
+}
+
 // Render snapshot navigation
 function renderSnapshotNav(snapshots: SnapshotSummary[]) {
   const navEl = document.getElementById('snapshot-nav');
@@ -1466,6 +1494,8 @@ function addQuestion() {
   renderAnnotationList();
   // Clear annotations from iframe (new question has no annotations yet)
   syncIframeAnnotations();
+  // Update sidebar to show new question count
+  updateCurrentSnapshotSummary();
   saveCurrentSnapshot();
 
   // Focus the query input in the Questions tab
@@ -1570,6 +1600,9 @@ function setupKeyboardShortcuts() {
       } else if (e.key === 'n') {
         e.preventDefault();
         setEvaluationValue('in-page', 'no');
+      } else if (e.key === 'u') {
+        e.preventDefault();
+        setEvaluationValue('in-page', 'unclear');
       }
 
       if (e.key === 'g') {
@@ -1622,11 +1655,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const html = document.documentElement;
     const currentTheme = html.dataset.theme || 'pastel';
     html.dataset.theme = currentTheme === 'noir' ? 'pastel' : 'noir';
-    localStorage.setItem('pref-page-theme', html.dataset.theme);
+    localStorage.setItem('refine-page-theme', html.dataset.theme);
   });
 
   // Load saved theme
-  const savedTheme = localStorage.getItem('pref-page-theme');
+  const savedTheme = localStorage.getItem('refine-page-theme');
   if (savedTheme) {
     document.documentElement.dataset.theme = savedTheme;
   }

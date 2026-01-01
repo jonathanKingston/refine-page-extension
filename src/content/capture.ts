@@ -111,9 +111,9 @@ function makeInert(html: string): string {
     eventAttrs.forEach((attr) => el.removeAttribute(attr));
   });
 
-  // Add meta tag to identify as pref.page snapshot
+  // Add meta tag to identify as refine.page snapshot
   const meta = doc.createElement('meta');
-  meta.setAttribute('name', 'pref-page-snapshot');
+  meta.setAttribute('name', 'refine-page-snapshot');
   meta.setAttribute('content', 'true');
   meta.setAttribute('data-captured-at', new Date().toISOString());
   doc.head?.appendChild(meta);
@@ -147,20 +147,20 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): 
 
 // Main capture function using SingleFile
 export async function capturePage(): Promise<Snapshot> {
-  console.log('pref.page: Starting capture of', window.location.href);
+  console.log('refine.page: Starting capture of', window.location.href);
   const startTime = Date.now();
 
   // Initialize and run SingleFile
-  console.log('pref.page: Initializing SingleFile...');
+  console.log('refine.page: Initializing SingleFile...');
   singlefile.init(INIT_OPTIONS);
 
-  console.log('pref.page: Running SingleFile getPageData...');
+  console.log('refine.page: Running SingleFile getPageData...');
   const pageData = await withTimeout(
     singlefile.getPageData(SINGLE_FILE_OPTIONS, INIT_OPTIONS, document, window),
     30000,  // 30 second timeout
     'Capture timed out after 30 seconds'
   );
-  console.log('pref.page: SingleFile completed');
+  console.log('refine.page: SingleFile completed');
 
   if (!pageData?.content) {
     throw new Error('SingleFile returned empty content');
@@ -187,7 +187,7 @@ export async function capturePage(): Promise<Snapshot> {
   };
 
   const duration = Date.now() - startTime;
-  console.log(`pref.page: Capture complete in ${duration}ms, size: ${(inertHtml.length / 1024).toFixed(1)}KB`);
+  console.log(`refine.page: Capture complete in ${duration}ms, size: ${(inertHtml.length / 1024).toFixed(1)}KB`);
 
   return snapshot;
 }
@@ -216,7 +216,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         });
       })
       .catch((error) => {
-        console.error('pref.page: Capture error:', error);
+        console.error('refine.page: Capture error:', error);
         sendResponse({ type: 'CAPTURE_ERROR', payload: { error: error.message || 'Unknown error' } });
       });
 
@@ -224,4 +224,4 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 });
 
-console.log('pref.page: Content script loaded');
+console.log('refine.page: Content script loaded');

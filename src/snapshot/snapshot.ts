@@ -41,7 +41,7 @@ async function loadSnapshot(snapshotId: string) {
     // Update UI
     if (titleEl) titleEl.textContent = snapshot.title || 'Untitled';
     if (urlEl) urlEl.textContent = snapshot.url;
-    document.title = `${snapshot.title || 'Snapshot'} - pref.page`;
+    document.title = `${snapshot.title || 'Snapshot'} - refine.page`;
 
     // Load HTML into iframe using srcdoc for better isolation
     // We use a blob URL to serve the HTML as a proper page

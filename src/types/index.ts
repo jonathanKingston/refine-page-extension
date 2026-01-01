@@ -1,5 +1,5 @@
 /**
- * Core types for pref.page extension
+ * Core types for refine.page extension
  * Uses W3C Web Annotation format for compatibility with annotation libraries
  */
 
@@ -51,7 +51,7 @@ export interface WebAnnotation {
   created: string;
   modified: string;
   // Custom extension for our purposes
-  'x-pref-page'?: {
+  'x-refine-page'?: {
     annotationType: 'text' | 'region';
   };
 }
@@ -96,7 +96,7 @@ export interface RegionAnnotation {
 
 // Question/Answer evaluation types
 export type AnswerCorrectness = 'correct' | 'incorrect' | 'partial';
-export type AnswerInPage = 'yes' | 'no' | 'ambiguous';
+export type AnswerInPage = 'yes' | 'no' | 'unclear';
 export type PageQuality = 'good' | 'broken' | 'partial';
 
 export interface Question {
@@ -244,7 +244,7 @@ export function toW3CAnnotation(
     },
     created: annotation.createdAt,
     modified: annotation.updatedAt,
-    'x-pref-page': {
+    'x-refine-page': {
       annotationType: isText ? 'text' : 'region',
     },
   };
