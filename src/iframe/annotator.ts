@@ -350,6 +350,10 @@ function initializeImageAnnotators(container: HTMLElement) {
       return;
     }
 
+    // Disable default drag behavior on the image
+    img.draggable = false;
+    img.addEventListener('dragstart', (e) => e.preventDefault());
+
     try {
       const imgId = img.id || `img-${index}`;
       img.id = imgId;
@@ -789,6 +793,15 @@ function injectAnnotationStyles() {
     /* Drawing/creation mode */
     .a9s-annotation.a9s-drawing .a9s-inner {
       stroke-dasharray: 5, 5 !important;
+    }
+
+    /* Disable image dragging to allow region selection */
+    img {
+      -webkit-user-drag: none !important;
+      -khtml-user-drag: none !important;
+      -moz-user-drag: none !important;
+      -o-user-drag: none !important;
+      user-drag: none !important;
     }
   `;
   document.head.appendChild(style);
