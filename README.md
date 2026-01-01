@@ -84,6 +84,26 @@ A web extension for capturing and annotating web page snapshots for labeling and
 1. Click "Export" in the popup to download all snapshots as JSON
 2. Click "Import" to restore from a backup file
 
+## Using a hosted (3p) annotator iframe
+
+By default the viewer loads `iframe.html` from the extension bundle via `chrome.runtime.getURL(...)`.
+If you want to run the annotator iframe from a web server (so the same “eval service” can be hosted and reused),
+you can point the viewer at a third-party base URL that serves:
+
+- `iframe.html`
+- `iframe-annotator.js`
+
+You can configure this in either of these ways:
+
+- **Query param**: open the viewer with `annotatorBase=https://your-host.example/path/`
+- **LocalStorage (persists)**: set `refine-annotator-base-url` to your base URL
+
+Example localStorage (run in the viewer tab DevTools console):
+
+```js
+localStorage.setItem('refine-annotator-base-url', 'https://your-host.example/refine/');
+```
+
 ## Project Structure
 
 ```
