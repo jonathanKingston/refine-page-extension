@@ -917,15 +917,36 @@ function handleMessage(event: MessageEvent) {
 
     case 'REMOVE_ANNOTATION': {
       const { annotationId } = message.payload as { annotationId: string };
-      if (annotator && annotationId) {
-        try {
-          annotator.removeAnnotation(annotationId);
-          // Also remove from our metadata
-          annotationMeta.delete(annotationId);
-          console.log('[Iframe Annotator] Removed annotation:', annotationId);
-        } catch (e) {
-          console.warn('[Iframe Annotator] Error removing annotation:', e);
+      if (annotationId) {
+        // Try to remove via annotator API
+        if (annotator) {
+          try {
+            annotator.removeAnnotation(annotationId);
+            console.log('[Iframe Annotator] Removed annotation via API:', annotationId);
+          } catch (e) {
+            console.warn('[Iframe Annotator] Error removing annotation via API:', e);
+          }
         }
+
+        // Also manually remove DOM elements as fallback
+        const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
+        elements.forEach(el => {
+          // Unwrap the highlight span - move children out and remove the span
+          const parent = el.parentNode;
+          if (parent) {
+            while (el.firstChild) {
+              parent.insertBefore(el.firstChild, el);
+            }
+            parent.removeChild(el);
+          }
+        });
+        if (elements.length > 0) {
+          console.log('[Iframe Annotator] Manually removed', elements.length, 'DOM elements for:', annotationId);
+        }
+
+        // Clean up metadata
+        annotationMeta.delete(annotationId);
+        annotationText.delete(annotationId);
       }
       break;
     }
