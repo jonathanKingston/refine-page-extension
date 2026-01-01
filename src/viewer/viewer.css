@@ -939,18 +939,31 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
+  opacity: 1;
+  transition: opacity 0.3s ease;
 }
 
-.save-status::before {
-  content: '✓';
+.save-status.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .save-status.saving {
   color: var(--color-text-muted);
 }
 
-.save-status.saving::before {
-  content: '…';
+/* Highlight animation for new annotations */
+@keyframes highlightNew {
+  0% {
+    background: #fef08a;
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.annotation-item.newly-added {
+  animation: highlightNew 2s ease-out;
 }
 
 /* Right sidebar needs position relative for absolute collapse button */

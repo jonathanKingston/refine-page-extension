@@ -363,6 +363,8 @@ function handleAnnotationCreated(payload: { annotation: unknown; tool: string })
 
     updateAnnotationCounts();
     renderAnnotationList();
+    // Scroll to and highlight the new annotation in the sidebar
+    highlightNewAnnotation(textAnnotation.id);
     saveCurrentSnapshot();
     console.log('Annotation created:', textAnnotation.id);
   }
@@ -406,6 +408,8 @@ function handleRegionAnnotationCreated(payload: { annotation: unknown; tool: str
 
     updateAnnotationCounts();
     renderAnnotationList();
+    // Scroll to and highlight the new annotation in the sidebar
+    highlightNewAnnotation(regionAnnotation.id);
     saveCurrentSnapshot();
     console.log('Region annotation created:', regionAnnotation.id);
   }
@@ -850,6 +854,25 @@ function scrollSidebarToAnnotation(annotationId: string) {
   }
 }
 
+// Scroll to and highlight a newly added annotation in the sidebar
+function highlightNewAnnotation(annotationId: string) {
+  const listEl = document.getElementById('annotation-list');
+  if (!listEl) return;
+
+  // Find the annotation item in the sidebar
+  const item = listEl.querySelector(`.annotation-item[data-id="${annotationId}"]`);
+  if (item) {
+    // Remove any previous selections and newly-added states
+    listEl.querySelectorAll('.annotation-item').forEach(i => {
+      i.classList.remove('selected', 'newly-added');
+    });
+    // Add highlight class for animation
+    item.classList.add('newly-added');
+    // Scroll into view
+    item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
 // Sync iframe annotations to show only current question's annotations
 function syncIframeAnnotations() {
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
@@ -1118,17 +1141,48 @@ function updateEvaluationForm() {
   }
 }
 
+// Track save status timeout for cleanup
+let saveStatusTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// Show save status indicator
+function showSaveStatus(status: 'saving' | 'saved') {
+  const statusEl = document.getElementById('save-status');
+  if (!statusEl) return;
+
+  // Clear any pending timeout
+  if (saveStatusTimeout) {
+    clearTimeout(saveStatusTimeout);
+    saveStatusTimeout = null;
+  }
+
+  statusEl.classList.remove('hidden', 'saving');
+
+  if (status === 'saving') {
+    statusEl.textContent = 'Saving...';
+    statusEl.classList.add('saving');
+  } else {
+    statusEl.textContent = 'Saved';
+    // Hide after 2 seconds
+    saveStatusTimeout = setTimeout(() => {
+      statusEl.classList.add('hidden');
+    }, 2000);
+  }
+}
+
 // Save current snapshot (silent by default, showNotification for explicit saves)
 async function saveCurrentSnapshot(showConfirmation = false) {
   if (!currentSnapshot) return;
 
   currentSnapshot.updatedAt = new Date().toISOString();
 
+  showSaveStatus('saving');
+
   try {
     await sendMessage('UPDATE_SNAPSHOT', {
       id: currentSnapshot.id,
       updates: currentSnapshot,
     });
+    showSaveStatus('saved');
     if (showConfirmation) {
       showNotification('Saved');
     }
