@@ -4,73 +4,46 @@
  */
 
 import type { Snapshot, ExportData, ExportedSnapshot } from '@/types';
-import mhtml2html from 'mhtml2html';
 
 // Generate unique ID
 function generateId(): string {
   return `snapshot_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 }
 
-// Make snapshot inert - disable all interactive elements
-function makeInert(html: string): string {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+// Offscreen document management
+const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
+let creatingOffscreen: Promise<void> | null = null;
 
-  // Remove all scripts
-  doc.querySelectorAll('script').forEach((el) => el.remove());
-  doc.querySelectorAll('noscript').forEach((el) => el.remove());
-
-  // Disable all links
-  doc.querySelectorAll('a[href]').forEach((link) => {
-    const href = link.getAttribute('href');
-    if (href) {
-      link.setAttribute('data-original-href', href);
-      link.removeAttribute('href');
-    }
+async function hasOffscreenDocument(): Promise<boolean> {
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
+    documentUrls: [chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH)],
   });
-
-  // Disable forms
-  doc.querySelectorAll('form').forEach((form) => {
-    form.removeAttribute('action');
-    form.setAttribute('onsubmit', 'return false;');
-  });
-
-  // Disable interactive elements
-  doc.querySelectorAll('button, input, select, textarea').forEach((el) => {
-    el.setAttribute('disabled', 'disabled');
-  });
-
-  // Remove event handler attributes
-  const eventAttrs = ['onclick', 'onmouseover', 'onmouseout', 'onload', 'onerror', 'onsubmit', 'onchange', 'onfocus', 'onblur'];
-  doc.querySelectorAll('*').forEach((el) => {
-    eventAttrs.forEach((attr) => el.removeAttribute(attr));
-  });
-
-  // Add meta tag to identify as refine.page snapshot
-  const meta = doc.createElement('meta');
-  meta.setAttribute('name', 'refine-page-snapshot');
-  meta.setAttribute('content', 'true');
-  meta.setAttribute('data-captured-at', new Date().toISOString());
-  doc.head?.appendChild(meta);
-
-  // Add strict CSP meta tag - allow inline styles since MHTML inlines everything
-  const cspMeta = doc.createElement('meta');
-  cspMeta.setAttribute('http-equiv', 'Content-Security-Policy');
-  cspMeta.setAttribute('content', "default-src 'self' data: blob:; script-src 'none'; style-src 'unsafe-inline' data: blob:; font-src data: blob:; img-src 'self' data: blob:; frame-src 'none'; object-src 'none';");
-  doc.head?.insertBefore(cspMeta, doc.head.firstChild);
-
-  // Add inert styles
-  const inertStyle = doc.createElement('style');
-  inertStyle.textContent = `
-    a[data-original-href] { cursor: default !important; pointer-events: none !important; }
-    button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0.7; }
-  `;
-  doc.head?.appendChild(inertStyle);
-
-  return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+  return contexts.length > 0;
 }
 
-// Capture page using Chrome's MHTML API and convert to HTML
+async function ensureOffscreenDocument(): Promise<void> {
+  if (await hasOffscreenDocument()) {
+    return;
+  }
+
+  // Avoid race conditions by checking if we're already creating
+  if (creatingOffscreen) {
+    await creatingOffscreen;
+    return;
+  }
+
+  creatingOffscreen = chrome.offscreen.createDocument({
+    url: OFFSCREEN_DOCUMENT_PATH,
+    reasons: [chrome.offscreen.Reason.DOM_PARSER],
+    justification: 'Convert MHTML to HTML using DOM parser',
+  });
+
+  await creatingOffscreen;
+  creatingOffscreen = null;
+}
+
+// Capture page using Chrome's MHTML API and convert to HTML via offscreen document
 async function capturePageAsMhtml(tabId: number): Promise<{ html: string; title: string }> {
   console.log('refine.page: Capturing page as MHTML for tab', tabId);
   const startTime = Date.now();
@@ -86,18 +59,24 @@ async function capturePageAsMhtml(tabId: number): Promise<{ html: string; title:
   // Read the MHTML blob as text
   const mhtmlText = await mhtmlBlob.text();
 
-  // Convert MHTML to HTML document using mhtml2html
-  console.log('refine.page: Converting MHTML to HTML...');
-  const htmlDoc = mhtml2html.convert(mhtmlText);
+  // Ensure offscreen document exists
+  await ensureOffscreenDocument();
 
-  // Get the HTML string from the document
-  const htmlString = '<!DOCTYPE html>\n' + htmlDoc.documentElement.outerHTML;
-  const title = htmlDoc.title || 'Untitled';
+  // Send MHTML to offscreen document for conversion
+  console.log('refine.page: Sending MHTML to offscreen document for conversion...');
+  const response = await chrome.runtime.sendMessage({
+    type: 'CONVERT_MHTML',
+    payload: { mhtmlText },
+  });
+
+  if (response.type === 'CONVERT_MHTML_ERROR') {
+    throw new Error(response.payload.error);
+  }
 
   const duration = Date.now() - startTime;
-  console.log(`refine.page: Conversion complete in ${duration}ms, HTML size: ${(htmlString.length / 1024).toFixed(1)}KB`);
+  console.log(`refine.page: Capture complete in ${duration}ms, HTML size: ${(response.payload.html.length / 1024).toFixed(1)}KB`);
 
-  return { html: htmlString, title };
+  return { html: response.payload.html, title: response.payload.title };
 }
 
 // Storage operations using chrome.storage.local
@@ -251,6 +230,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  // Skip messages from offscreen document (responses)
+  if (message.type === 'CONVERT_MHTML_COMPLETE' || message.type === 'CONVERT_MHTML_ERROR') {
+    return false;
+  }
+
   const handleMessage = async (): Promise<unknown> => {
     switch (message.type) {
       case 'GET_ALL_SNAPSHOTS':
@@ -313,18 +297,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             metadata = response.payload;
           }
 
-          // Capture the page as MHTML and convert to HTML
+          // Capture the page as MHTML and convert to HTML (via offscreen document)
           const { html } = await capturePageAsMhtml(tab.id);
-
-          // Make the snapshot inert
-          const inertHtml = makeInert(html);
 
           // Create the snapshot
           const snapshot: Snapshot = {
             id: generateId(),
             url: metadata.url,
             title: metadata.title,
-            html: inertHtml,
+            html: html,
             viewport: metadata.viewport,
             annotations: { text: [], region: [] },
             questions: [],
@@ -337,7 +318,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Save the snapshot
           await saveSnapshot(snapshot);
 
-          console.log(`refine.page: Snapshot saved, id: ${snapshot.id}, size: ${(inertHtml.length / 1024).toFixed(1)}KB`);
+          console.log(`refine.page: Snapshot saved, id: ${snapshot.id}, size: ${(html.length / 1024).toFixed(1)}KB`);
 
           return { type: 'CAPTURE_COMPLETE', payload: { snapshotId: snapshot.id } };
         } catch (error) {
