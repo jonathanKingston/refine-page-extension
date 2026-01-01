@@ -9,7 +9,8 @@ import * as mhtml2html from 'mhtml2html';
 // Keeps data: and blob: URLs, removes everything else
 function cleanCssUrls(css: string): string {
   // Match url(...) but keep data: and blob: URLs
-  return css.replace(/url\s*\(\s*(['"]?)(?!data:|blob:)([^)'"]+)\1\s*\)/gi, 'url(about:blank)');
+  // Replace with empty url() to avoid CORS errors with about:blank
+  return css.replace(/url\s*\(\s*(['"]?)(?!data:|blob:)([^)'"]+)\1\s*\)/gi, 'url()');
 }
 
 // Clean all stylesheets and inline styles in the document
