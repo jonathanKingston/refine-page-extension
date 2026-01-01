@@ -914,13 +914,13 @@ function handleMessage(event: MessageEvent) {
 
     case 'CLEAR_ANNOTATIONS':
       if (annotator) {
-        // Suppress delete events during clear (we're just switching questions, not deleting data)
-        suppressDeleteEvents = true;
-        annotator.clearAnnotations();
-        // Reset flag after a delay to catch async delete events
-        setTimeout(() => {
-          suppressDeleteEvents = false;
-        }, 100);
+        // Use setAnnotations([]) instead of clearAnnotations() to avoid triggering delete events
+        // clearAnnotations() fires deleteAnnotation events which we don't want when just switching questions
+        try {
+          annotator.setAnnotations([]);
+        } catch (e) {
+          console.warn('[Iframe Annotator] Error setting empty annotations:', e);
+        }
         // Also clear metadata, text, and reset index
         annotationMeta.clear();
         annotationText.clear();
@@ -1038,19 +1038,14 @@ function handleMessage(event: MessageEvent) {
     }
 
     case 'CLEAR_REGION_ANNOTATIONS':
-      // Suppress delete events during clear (we're just switching questions, not deleting data)
-      suppressDeleteEvents = true;
+      // Use setAnnotations([]) instead of clearAnnotations() to avoid triggering delete events
       imageAnnotators.forEach(ann => {
         try {
-          ann.clearAnnotations();
+          ann.setAnnotations([]);
         } catch (e) {
-          console.warn('[Iframe Annotator] Error clearing region annotations:', e);
+          console.warn('[Iframe Annotator] Error setting empty region annotations:', e);
         }
       });
-      // Reset flag after a delay to catch async delete events
-      setTimeout(() => {
-        suppressDeleteEvents = false;
-      }, 100);
       regionAnnotationIndex = 0;
       break;
 
