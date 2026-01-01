@@ -1012,28 +1012,53 @@ function renderAnnotationList() {
     return;
   }
 
-  // Combine text and region annotations
-  const items: string[] = [];
+  // Combine all annotations with their type and sort by creation time
+  const allAnnotations: Array<{
+    id: string;
+    type: string;
+    createdAt: string;
+    annotationType: 'text' | 'region';
+    displayText: string;
+  }> = [];
 
   for (const a of textAnnotations) {
-    items.push(`
-      <div class="annotation-item" data-id="${a.id}" data-type="text">
-        <span class="type-indicator ${a.type}"></span>
-        <span class="annotation-text" title="${escapeHtml(a.selectedText)}">${escapeHtml(a.selectedText.substring(0, 40))}${a.selectedText.length > 40 ? '...' : ''}</span>
-        <button class="annotation-delete" data-id="${a.id}" title="Delete">×</button>
-      </div>
-    `);
+    allAnnotations.push({
+      id: a.id,
+      type: a.type,
+      createdAt: a.createdAt,
+      annotationType: 'text',
+      displayText: a.selectedText,
+    });
   }
 
   for (const a of regionAnnotations) {
-    items.push(`
-      <div class="annotation-item" data-id="${a.id}" data-type="region">
+    allAnnotations.push({
+      id: a.id,
+      type: a.type,
+      createdAt: a.createdAt,
+      annotationType: 'region',
+      displayText: `[Region: ${a.bounds.width.toFixed(0)}×${a.bounds.height.toFixed(0)}]`,
+    });
+  }
+
+  // Sort by creation time (oldest first, newest at bottom)
+  allAnnotations.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  // Render sorted annotations
+  const items = allAnnotations.map(a => {
+    const displayText = a.annotationType === 'text'
+      ? `${escapeHtml(a.displayText.substring(0, 40))}${a.displayText.length > 40 ? '...' : ''}`
+      : a.displayText;
+    const titleAttr = a.annotationType === 'text' ? ` title="${escapeHtml(a.displayText)}"` : '';
+
+    return `
+      <div class="annotation-item" data-id="${a.id}" data-type="${a.annotationType}">
         <span class="type-indicator ${a.type}"></span>
-        <span class="annotation-text">[Region: ${a.bounds.width.toFixed(0)}×${a.bounds.height.toFixed(0)}]</span>
+        <span class="annotation-text"${titleAttr}>${displayText}</span>
         <button class="annotation-delete" data-id="${a.id}" title="Delete">×</button>
       </div>
-    `);
-  }
+    `;
+  });
 
   listEl.innerHTML = items.join('');
 
