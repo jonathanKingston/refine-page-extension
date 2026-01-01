@@ -1310,14 +1310,16 @@ function renderSnapshotNav(snapshots: SnapshotSummary[]) {
     .map(
       (s) => `
       <li data-id="${s.id}" class="${currentSnapshot?.id === s.id ? 'active' : ''}">
-        <div class="nav-item-content">
-          <div class="nav-item-title">${escapeHtml(s.title || 'Untitled')}</div>
-          <div class="nav-item-meta">
-            <span>${formatDate(s.capturedAt)}</span>
-            <span class="status-badge ${s.status}">${s.status}</span>
+        <div class="snapshot-header">
+          <div class="nav-item-content">
+            <div class="nav-item-title">${escapeHtml(s.title || 'Untitled')}</div>
+            <div class="nav-item-meta">
+              <span>${formatDate(s.capturedAt)}</span>
+              <span class="status-badge ${s.status}">${s.status}</span>
+            </div>
           </div>
+          <button class="nav-item-delete" data-id="${s.id}" title="Delete snapshot">×</button>
         </div>
-        <button class="nav-item-delete" data-id="${s.id}" title="Delete snapshot">×</button>
         <div class="question-accordion">
           <div class="question-header">
             <h4>Question</h4>
@@ -1342,10 +1344,12 @@ function renderSnapshotNav(snapshots: SnapshotSummary[]) {
     )
     .join('');
 
-  // Add click handlers for navigation (only on the nav-item-content, not the accordion)
+  // Add click handlers for navigation (only on the snapshot-header, not the accordion)
   navEl.querySelectorAll('li[data-id]').forEach((li) => {
-    const content = li.querySelector('.nav-item-content');
-    content?.addEventListener('click', (e) => {
+    const header = li.querySelector('.snapshot-header');
+    header?.addEventListener('click', (e) => {
+      // Don't navigate if clicking delete button
+      if ((e.target as HTMLElement).classList.contains('nav-item-delete')) return;
       const id = (li as HTMLElement).dataset.id;
       if (id && id !== currentSnapshot?.id) {
         window.history.pushState({}, '', `?id=${id}`);
@@ -1368,17 +1372,23 @@ function renderSnapshotNav(snapshots: SnapshotSummary[]) {
       }
     });
   });
-
-  // Set up accordion event handlers for the active snapshot
-  setupAccordionHandlers();
 }
 
-// Set up event handlers for the question accordion
-function setupAccordionHandlers() {
-  const { select, queryInput, expectedAnswer, addBtn } = getActiveAccordion();
+// Debounce timeouts for accordion inputs
+let queryTimeout: ReturnType<typeof setTimeout> | null = null;
+let answerTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // Question select change
-  select?.addEventListener('change', () => {
+// Set up event delegation for question accordions (called once)
+function setupAccordionDelegation() {
+  const navEl = document.getElementById('snapshot-nav');
+  if (!navEl) return;
+
+  // Question select change (event delegation)
+  navEl.addEventListener('change', (e) => {
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains('question-select-input')) return;
+
+    const select = target as HTMLSelectElement;
     currentQuestionId = select.value || null;
     updateQuestionForm();
     updateEvaluationForm();
@@ -1387,47 +1397,52 @@ function setupAccordionHandlers() {
     syncIframeAnnotations();
   });
 
-  // Add question button
-  addBtn?.addEventListener('click', (e) => {
+  // Add question button (event delegation)
+  navEl.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains('add-question-btn')) return;
+
     e.stopPropagation();
     addQuestion();
   });
 
-  // Query input change (debounced save)
-  let queryTimeout: ReturnType<typeof setTimeout> | null = null;
-  queryInput?.addEventListener('input', () => {
-    if (!currentSnapshot || !currentQuestionId) return;
-    const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-    if (question) {
-      question.query = queryInput.value;
-      question.updatedAt = new Date().toISOString();
+  // Query input change (event delegation with debounce)
+  navEl.addEventListener('input', (e) => {
+    const target = e.target as HTMLElement;
 
-      // Update selector to show new query text
-      if (select) {
-        const option = select.querySelector(`option[value="${currentQuestionId}"]`) as HTMLOptionElement;
-        if (option) {
-          option.textContent = question.query.substring(0, 50) + (question.query.length > 50 ? '...' : '');
+    if (target.classList.contains('query-input')) {
+      if (!currentSnapshot || !currentQuestionId) return;
+      const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+      if (question) {
+        question.query = (target as HTMLTextAreaElement).value;
+        question.updatedAt = new Date().toISOString();
+
+        // Update selector to show new query text
+        const { select } = getActiveAccordion();
+        if (select) {
+          const option = select.querySelector(`option[value="${currentQuestionId}"]`) as HTMLOptionElement;
+          if (option) {
+            option.textContent = question.query.substring(0, 50) + (question.query.length > 50 ? '...' : '');
+          }
         }
+
+        // Debounce save
+        if (queryTimeout) clearTimeout(queryTimeout);
+        queryTimeout = setTimeout(() => saveCurrentSnapshot(), 500);
       }
-
-      // Debounce save
-      if (queryTimeout) clearTimeout(queryTimeout);
-      queryTimeout = setTimeout(() => saveCurrentSnapshot(), 500);
     }
-  });
 
-  // Expected answer input change (debounced save)
-  let answerTimeout: ReturnType<typeof setTimeout> | null = null;
-  expectedAnswer?.addEventListener('input', () => {
-    if (!currentSnapshot || !currentQuestionId) return;
-    const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
-    if (question) {
-      question.expectedAnswer = expectedAnswer.value;
-      question.updatedAt = new Date().toISOString();
+    if (target.classList.contains('expected-answer-input')) {
+      if (!currentSnapshot || !currentQuestionId) return;
+      const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+      if (question) {
+        question.expectedAnswer = (target as HTMLTextAreaElement).value;
+        question.updatedAt = new Date().toISOString();
 
-      // Debounce save
-      if (answerTimeout) clearTimeout(answerTimeout);
-      answerTimeout = setTimeout(() => saveCurrentSnapshot(), 500);
+        // Debounce save
+        if (answerTimeout) clearTimeout(answerTimeout);
+        answerTimeout = setTimeout(() => saveCurrentSnapshot(), 500);
+      }
     }
   });
 }
@@ -1658,6 +1673,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const snapshotId = params.get('id');
 
   setupKeyboardShortcuts();
+  setupAccordionDelegation();
 
   await loadAllSnapshots();
 
