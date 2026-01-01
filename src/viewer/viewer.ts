@@ -342,6 +342,14 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
         break;
       }
 
+      case 'IFRAME_KEYDOWN': {
+        const payload = message.payload as ShortcutKeyData | undefined;
+        if (payload?.key) {
+          handleViewerShortcut(payload);
+        }
+        break;
+      }
+
       case 'REGION_ANNOTATION_CREATED':
         handleRegionAnnotationCreated(message.payload);
         break;
@@ -544,39 +552,6 @@ function injectAnnotationStyles(doc: Document) {
     }
   `;
   doc.head?.appendChild(style);
-}
-
-// Load existing text annotations into the text annotator
-function loadExistingTextAnnotations() {
-  if (!textAnnotator || !currentSnapshot) return;
-
-  for (const annotation of currentSnapshot.annotations.text) {
-    try {
-      // Create W3C annotation format for the library
-      const w3cAnnotation = {
-        '@context': 'http://www.w3.org/ns/anno.jsonld',
-        type: 'Annotation',
-        id: annotation.id,
-        body: [{
-          type: 'TextualBody',
-          purpose: 'tagging',
-          value: annotation.type,
-        }],
-        target: {
-          source: currentSnapshot.id,
-          selector: {
-            type: 'TextQuoteSelector',
-            exact: annotation.selectedText,
-          },
-        },
-      };
-
-      textAnnotator.addAnnotation(w3cAnnotation);
-      updateAnnotationAppearance(annotation.id, annotation.type);
-    } catch (error) {
-      console.warn('Failed to load annotation:', annotation.selectedText.substring(0, 30), error);
-    }
-  }
 }
 
 // Update the visual appearance of an annotation based on its type
@@ -950,7 +925,7 @@ function updateAnnotationCounts() {
 }
 
 // Get annotations for the current question
-function getAnnotationsForCurrentQuestion(): { text: typeof currentSnapshot.annotations.text; region: typeof currentSnapshot.annotations.region } {
+function getAnnotationsForCurrentQuestion(): { text: TextAnnotation[]; region: RegionAnnotation[] } {
   if (!currentSnapshot) return { text: [], region: [] };
 
   // If no question selected, show no annotations
@@ -1537,93 +1512,116 @@ function setEvaluationValue(name: string, value: string) {
   saveCurrentSnapshot();
 }
 
+type ShortcutKeyData = {
+  key: string;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  altKey?: boolean;
+  shiftKey?: boolean;
+};
+
+function handleViewerShortcut(data: ShortcutKeyData, e?: KeyboardEvent) {
+  // When triggered from the document, respect focused form fields in the viewer UI.
+  if (e) {
+    const target = e.target as HTMLElement | null;
+    const tag = target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      return;
+    }
+  }
+
+  // Ctrl/Cmd shortcuts first (before single-key shortcuts)
+  if (data.ctrlKey || data.metaKey) {
+    if (data.key === 's') {
+      e?.preventDefault();
+      saveCurrentSnapshot(true);
+    } else if (data.key === 'Enter') {
+      e?.preventDefault();
+      if (currentSnapshot) {
+        currentSnapshot.status = 'approved';
+        updateStatusDisplay();
+        saveCurrentSnapshot();
+        loadAllSnapshots();
+        const nextPending = allSnapshots.find(s => s.status === 'pending' && s.id !== currentSnapshot?.id);
+        if (nextPending) {
+          loadSnapshot(nextPending.id);
+        }
+      }
+    }
+    // Don't process single-key shortcuts when modifier is held
+    return;
+  }
+
+  // Annotation tools (only when no modifier keys)
+  if (data.key === '1' || data.key === 'r') {
+    e?.preventDefault();
+    setTool('relevant');
+  } else if (data.key === '2' || data.key === 'a') {
+    e?.preventDefault();
+    setTool('answer');
+  } else if (data.key === 'Escape' || data.key === '0' || data.key === 's') {
+    e?.preventDefault();
+    setTool('select');
+  }
+
+  // Evaluation shortcuts
+  if (currentQuestionId) {
+    if (data.key === 'c') {
+      e?.preventDefault();
+      setEvaluationValue('correctness', 'correct');
+    } else if (data.key === 'i') {
+      e?.preventDefault();
+      setEvaluationValue('correctness', 'incorrect');
+    } else if (data.key === 'p') {
+      e?.preventDefault();
+      setEvaluationValue('correctness', 'partial');
+    }
+
+    if (data.key === 'y') {
+      e?.preventDefault();
+      setEvaluationValue('in-page', 'yes');
+    } else if (data.key === 'n') {
+      e?.preventDefault();
+      setEvaluationValue('in-page', 'no');
+    } else if (data.key === 'u') {
+      e?.preventDefault();
+      setEvaluationValue('in-page', 'unclear');
+    }
+
+    if (data.key === 'g') {
+      e?.preventDefault();
+      setEvaluationValue('quality', 'good');
+    } else if (data.key === 'b') {
+      e?.preventDefault();
+      setEvaluationValue('quality', 'broken');
+    }
+  }
+
+  // Zoom
+  if (data.key === '+' || data.key === '=') {
+    e?.preventDefault();
+    zoomLevel = Math.min(200, zoomLevel + 10);
+    applyZoom();
+  } else if (data.key === '-') {
+    e?.preventDefault();
+    zoomLevel = Math.max(50, zoomLevel - 10);
+    applyZoom();
+  }
+}
+
 // Setup keyboard shortcuts
 function setupKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
-    // Skip if in input fields
-    if ((e.target as HTMLElement).tagName === 'INPUT' ||
-        (e.target as HTMLElement).tagName === 'TEXTAREA' ||
-        (e.target as HTMLElement).tagName === 'SELECT') {
-      return;
-    }
-
-    // Handle Ctrl/Cmd shortcuts first (before single-key shortcuts)
-    if (e.ctrlKey || e.metaKey) {
-      if (e.key === 's') {
-        e.preventDefault();
-        saveCurrentSnapshot(true);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (currentSnapshot) {
-          currentSnapshot.status = 'approved';
-          updateStatusDisplay();
-          saveCurrentSnapshot();
-          loadAllSnapshots();
-          const nextPending = allSnapshots.find(s => s.status === 'pending' && s.id !== currentSnapshot?.id);
-          if (nextPending) {
-            loadSnapshot(nextPending.id);
-          }
-        }
-      }
-      // Don't process single-key shortcuts when modifier is held
-      return;
-    }
-
-    // Annotation tools (only when no modifier keys)
-    if (e.key === '1' || e.key === 'r') {
-      e.preventDefault();
-      setTool('relevant');
-    } else if (e.key === '2' || e.key === 'a') {
-      e.preventDefault();
-      setTool('answer');
-    } else if (e.key === 'Escape' || e.key === '0' || e.key === 's') {
-      e.preventDefault();
-      setTool('select');
-    }
-
-    // Evaluation shortcuts
-    if (currentQuestionId) {
-      if (e.key === 'c') {
-        e.preventDefault();
-        setEvaluationValue('correctness', 'correct');
-      } else if (e.key === 'i') {
-        e.preventDefault();
-        setEvaluationValue('correctness', 'incorrect');
-      } else if (e.key === 'p') {
-        e.preventDefault();
-        setEvaluationValue('correctness', 'partial');
-      }
-
-      if (e.key === 'y') {
-        e.preventDefault();
-        setEvaluationValue('in-page', 'yes');
-      } else if (e.key === 'n') {
-        e.preventDefault();
-        setEvaluationValue('in-page', 'no');
-      } else if (e.key === 'u') {
-        e.preventDefault();
-        setEvaluationValue('in-page', 'unclear');
-      }
-
-      if (e.key === 'g') {
-        e.preventDefault();
-        setEvaluationValue('quality', 'good');
-      } else if (e.key === 'b') {
-        e.preventDefault();
-        setEvaluationValue('quality', 'broken');
-      }
-    }
-
-    // Zoom
-    if (e.key === '+' || e.key === '=') {
-      e.preventDefault();
-      zoomLevel = Math.min(200, zoomLevel + 10);
-      applyZoom();
-    } else if (e.key === '-') {
-      e.preventDefault();
-      zoomLevel = Math.max(50, zoomLevel - 10);
-      applyZoom();
-    }
+    handleViewerShortcut(
+      {
+        key: e.key,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        altKey: e.altKey,
+        shiftKey: e.shiftKey,
+      },
+      e
+    );
   });
 }
 
