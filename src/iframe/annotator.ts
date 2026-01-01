@@ -917,7 +917,10 @@ function handleMessage(event: MessageEvent) {
         // Suppress delete events during clear (we're just switching questions, not deleting data)
         suppressDeleteEvents = true;
         annotator.clearAnnotations();
-        suppressDeleteEvents = false;
+        // Reset flag after a delay to catch async delete events
+        setTimeout(() => {
+          suppressDeleteEvents = false;
+        }, 100);
         // Also clear metadata, text, and reset index
         annotationMeta.clear();
         annotationText.clear();
@@ -1044,7 +1047,10 @@ function handleMessage(event: MessageEvent) {
           console.warn('[Iframe Annotator] Error clearing region annotations:', e);
         }
       });
-      suppressDeleteEvents = false;
+      // Reset flag after a delay to catch async delete events
+      setTimeout(() => {
+        suppressDeleteEvents = false;
+      }, 100);
       regionAnnotationIndex = 0;
       break;
 
