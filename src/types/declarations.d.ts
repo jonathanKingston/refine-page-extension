@@ -28,6 +28,12 @@ declare module 'mhtml2html' {
     mhtml: string | MhtmlParseResult,
     options?: ConvertOptions
   ): Document;
+
+  const mhtml2html: {
+    parse: typeof parse;
+    convert: typeof convert;
+  };
+  export default mhtml2html;
 }
 
 // Declaration for CSS imports

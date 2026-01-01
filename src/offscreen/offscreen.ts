@@ -3,7 +3,7 @@
  * Handles MHTML to HTML conversion using DOM APIs not available in service workers
  */
 
-import mhtml2html from 'mhtml2html';
+import * as mhtml2html from 'mhtml2html';
 
 // Make HTML inert - disable all interactive elements
 function makeInert(html: string): string {
@@ -67,14 +67,30 @@ function makeInert(html: string): string {
 // Convert MHTML to inert HTML
 function convertMhtmlToHtml(mhtmlText: string): { html: string; title: string } {
   console.log('refine.page offscreen: Converting MHTML to HTML...');
+  console.log('refine.page offscreen: MHTML size:', mhtmlText.length, 'chars');
   const startTime = Date.now();
 
-  // Convert MHTML to HTML document using mhtml2html
-  const htmlDoc = mhtml2html.convert(mhtmlText);
+  // Get the convert function - handle both default and named exports
+  const convertFn = (mhtml2html as any).default?.convert || (mhtml2html as any).convert || mhtml2html.convert;
+
+  if (!convertFn) {
+    throw new Error('mhtml2html.convert function not found');
+  }
+
+  // Convert MHTML to HTML - mhtml2html returns {window: {document: Document}}
+  const result = convertFn(mhtmlText);
+
+  // Extract the actual document from the result
+  const doc = result?.window?.document;
+
+  if (!doc || !doc.documentElement) {
+    console.error('refine.page offscreen: conversion result:', result);
+    throw new Error(`mhtml2html conversion failed - no document returned`);
+  }
 
   // Get the HTML string from the document
-  const htmlString = '<!DOCTYPE html>\n' + htmlDoc.documentElement.outerHTML;
-  const title = htmlDoc.title || 'Untitled';
+  const htmlString = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+  const title = doc.title || 'Untitled';
 
   // Make the HTML inert
   const inertHtml = makeInert(htmlString);
