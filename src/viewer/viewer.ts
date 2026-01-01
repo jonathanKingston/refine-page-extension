@@ -331,13 +331,64 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
       }
 
       case 'KEY_PRESSED': {
-        const { key } = message.payload as { key: string };
-        if (key === 'r') {
+        const { key, ctrlKey } = message.payload as { key: string; ctrlKey?: boolean };
+
+        // Handle Ctrl/Cmd shortcuts
+        if (ctrlKey) {
+          if (key === 's') {
+            saveCurrentSnapshot(true);
+          } else if (key === 'Enter') {
+            if (currentSnapshot) {
+              currentSnapshot.status = 'approved';
+              updateStatusDisplay();
+              saveCurrentSnapshot();
+              loadAllSnapshots();
+              const nextPending = allSnapshots.find(s => s.status === 'pending' && s.id !== currentSnapshot?.id);
+              if (nextPending) {
+                loadSnapshot(nextPending.id);
+              }
+            }
+          }
+          break;
+        }
+
+        // Tool shortcuts
+        if (key === '1' || key === 'r') {
           setTool('relevant');
-        } else if (key === 'a') {
+        } else if (key === '2' || key === 'a') {
           setTool('answer');
-        } else if (key === 's') {
+        } else if (key === 'Escape' || key === '0' || key === 's') {
           setTool('select');
+        }
+
+        // Evaluation shortcuts
+        if (currentQuestionId) {
+          if (key === 'c') {
+            setEvaluationValue('correctness', 'correct');
+          } else if (key === 'i') {
+            setEvaluationValue('correctness', 'incorrect');
+          } else if (key === 'p') {
+            setEvaluationValue('correctness', 'partial');
+          } else if (key === 'y') {
+            setEvaluationValue('in-page', 'yes');
+          } else if (key === 'n') {
+            setEvaluationValue('in-page', 'no');
+          } else if (key === 'u') {
+            setEvaluationValue('in-page', 'unclear');
+          } else if (key === 'g') {
+            setEvaluationValue('quality', 'good');
+          } else if (key === 'b') {
+            setEvaluationValue('quality', 'broken');
+          }
+        }
+
+        // Zoom shortcuts
+        if (key === '+' || key === '=') {
+          zoomLevel = Math.min(200, zoomLevel + 10);
+          applyZoom();
+        } else if (key === '-') {
+          zoomLevel = Math.max(50, zoomLevel - 10);
+          applyZoom();
         }
         break;
       }

@@ -1092,21 +1092,37 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Don't intercept when modifier keys are held (allow Ctrl+R, Cmd+R, etc.)
-  if (e.ctrlKey || e.metaKey || e.altKey) {
+  // Forward Ctrl/Cmd shortcuts to parent
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 's' || e.key === 'Enter') {
+      e.preventDefault();
+      window.parent.postMessage({
+        type: 'KEY_PRESSED',
+        payload: { key: e.key, ctrlKey: true }
+      }, '*');
+    }
     return;
   }
 
-  // Tool switching shortcuts
-  if (e.key === '1' || e.key === 'r') {
+  // Don't intercept Alt key combinations
+  if (e.altKey) {
+    return;
+  }
+
+  // All single-key shortcuts that the parent handles
+  const shortcutKeys = [
+    '1', '2', '0',           // Number shortcuts for tools
+    'r', 'a', 's',           // Tool shortcuts
+    'c', 'i', 'p',           // Correctness evaluation
+    'y', 'n', 'u',           // In-page evaluation
+    'g', 'b',                // Quality evaluation
+    '+', '=', '-',           // Zoom
+    'Escape'
+  ];
+
+  if (shortcutKeys.includes(e.key)) {
     e.preventDefault();
-    window.parent.postMessage({ type: 'KEY_PRESSED', payload: { key: 'r' } }, '*');
-  } else if (e.key === '2' || e.key === 'a') {
-    e.preventDefault();
-    window.parent.postMessage({ type: 'KEY_PRESSED', payload: { key: 'a' } }, '*');
-  } else if (e.key === 'Escape' || e.key === '0' || e.key === 's') {
-    e.preventDefault();
-    window.parent.postMessage({ type: 'KEY_PRESSED', payload: { key: 's' } }, '*');
+    window.parent.postMessage({ type: 'KEY_PRESSED', payload: { key: e.key } }, '*');
   }
 });
 
