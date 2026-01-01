@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Page Labeller",
+  "name": "pref.page",
   "version": "1.0.0",
   "description": "Capture and annotate web page snapshots for labeling and review",
   "permissions": [

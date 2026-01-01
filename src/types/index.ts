@@ -1,5 +1,5 @@
 /**
- * Core types for Page Labeller extension
+ * Core types for pref.page extension
  * Uses W3C Web Annotation format for compatibility with annotation libraries
  */
 
@@ -51,7 +51,7 @@ export interface WebAnnotation {
   created: string;
   modified: string;
   // Custom extension for our purposes
-  'x-page-labeller'?: {
+  'x-pref-page'?: {
     annotationType: 'text' | 'region';
   };
 }
@@ -244,7 +244,7 @@ export function toW3CAnnotation(
     },
     created: annotation.createdAt,
     modified: annotation.updatedAt,
-    'x-page-labeller': {
+    'x-pref-page': {
       annotationType: isText ? 'text' : 'region',
     },
   };

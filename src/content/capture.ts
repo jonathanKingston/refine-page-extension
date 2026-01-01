@@ -111,9 +111,9 @@ function makeInert(html: string): string {
     eventAttrs.forEach((attr) => el.removeAttribute(attr));
   });
 
-  // Add meta tag to identify as Page Labeller snapshot
+  // Add meta tag to identify as pref.page snapshot
   const meta = doc.createElement('meta');
-  meta.setAttribute('name', 'page-labeller-snapshot');
+  meta.setAttribute('name', 'pref-page-snapshot');
   meta.setAttribute('content', 'true');
   meta.setAttribute('data-captured-at', new Date().toISOString());
   doc.head?.appendChild(meta);
@@ -147,20 +147,20 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): 
 
 // Main capture function using SingleFile
 export async function capturePage(): Promise<Snapshot> {
-  console.log('Page Labeller: Starting capture of', window.location.href);
+  console.log('pref.page: Starting capture of', window.location.href);
   const startTime = Date.now();
 
   // Initialize and run SingleFile
-  console.log('Page Labeller: Initializing SingleFile...');
+  console.log('pref.page: Initializing SingleFile...');
   singlefile.init(INIT_OPTIONS);
 
-  console.log('Page Labeller: Running SingleFile getPageData...');
+  console.log('pref.page: Running SingleFile getPageData...');
   const pageData = await withTimeout(
     singlefile.getPageData(SINGLE_FILE_OPTIONS, INIT_OPTIONS, document, window),
     30000,  // 30 second timeout
     'Capture timed out after 30 seconds'
   );
-  console.log('Page Labeller: SingleFile completed');
+  console.log('pref.page: SingleFile completed');
 
   if (!pageData?.content) {
     throw new Error('SingleFile returned empty content');
@@ -187,7 +187,7 @@ export async function capturePage(): Promise<Snapshot> {
   };
 
   const duration = Date.now() - startTime;
-  console.log(`Page Labeller: Capture complete in ${duration}ms, size: ${(inertHtml.length / 1024).toFixed(1)}KB`);
+  console.log(`pref.page: Capture complete in ${duration}ms, size: ${(inertHtml.length / 1024).toFixed(1)}KB`);
 
   return snapshot;
 }
@@ -216,7 +216,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         });
       })
       .catch((error) => {
-        console.error('Page Labeller: Capture error:', error);
+        console.error('pref.page: Capture error:', error);
         sendResponse({ type: 'CAPTURE_ERROR', payload: { error: error.message || 'Unknown error' } });
       });
 
@@ -224,4 +224,4 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 });
 
-console.log('Page Labeller: Content script loaded');
+console.log('pref.page: Content script loaded');

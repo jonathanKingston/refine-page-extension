@@ -162,7 +162,7 @@ function copyStaticFiles() {
 
 // Build function
 async function build() {
-  console.log('Building Page Labeller extension...');
+  console.log('Building pref.page extension...');
   const start = Date.now();
 
   try {

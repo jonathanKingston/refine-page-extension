@@ -1,4 +1,4 @@
-# Page Labeller
+# pref.page
 
 A web extension for capturing and annotating web page snapshots for labeling and review. Similar to Zotero's snapshot functionality, but focused on creating labeled datasets from web pages.
 
@@ -53,7 +53,7 @@ A web extension for capturing and annotating web page snapshots for labeling and
 ### Capturing Pages
 
 1. Navigate to any web page you want to capture
-2. Click the Page Labeller extension icon
+2. Click the pref.page extension icon
 3. Click "Capture Page"
 4. The page will be saved as an inert snapshot
 
@@ -87,7 +87,7 @@ A web extension for capturing and annotating web page snapshots for labeling and
 ## Project Structure
 
 ```
-page-labeller/
+pref-page/
 ├── src/
 │   ├── types/           # TypeScript type definitions
 │   ├── background/      # Service worker for message handling

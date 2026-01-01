@@ -1,5 +1,5 @@
 /**
- * Popup script for Page Labeller extension
+ * Popup script for pref.page extension
  */
 
 import type { Snapshot, ExportData, ExportedSnapshot, ZipExportData, ZipIndexSnapshot } from '@/types';
@@ -225,7 +225,7 @@ async function exportData() {
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = `page-labeller-export-${new Date().toISOString().split('T')[0]}.zip`;
+    a.download = `pref-page-export-${new Date().toISOString().split('T')[0]}.zip`;
     a.click();
 
     URL.revokeObjectURL(url);

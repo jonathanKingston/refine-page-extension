@@ -1,5 +1,5 @@
 /**
- * Background service worker for Page Labeller extension
+ * Background service worker for pref.page extension
  * Handles cross-component communication and storage operations
  */
 
@@ -243,10 +243,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Handle extension installation
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
-    console.log('Page Labeller extension installed');
+    console.log('pref.page extension installed');
     // Initialize storage
     chrome.storage.local.set({ snapshotIndex: [] });
   }
 });
 
-console.log('Page Labeller: Background service worker started');
+console.log('pref.page: Background service worker started');

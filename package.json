@@ -1,5 +1,5 @@
 {
-  "name": "page-labeller",
+  "name": "pref-page",
   "version": "1.0.0",
   "description": "Web extension for capturing and annotating page snapshots for labeling",
   "type": "module",
