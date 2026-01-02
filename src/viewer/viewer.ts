@@ -18,6 +18,8 @@ import type {
 import '@recogito/text-annotator/text-annotator.css';
 import '@annotorious/annotorious/annotorious.css';
 
+import { getOriginFromUrl, resolveAnnotatorIframeUrl } from '@/utils/resourceUrls';
+
 
 // Strip CSP meta tags from HTML to allow our annotation scripts to run
 function stripCspFromHtml(html: string): string {
@@ -183,10 +185,11 @@ function updateUI() {
     const htmlWithoutCsp = stripCspFromHtml(currentSnapshot.html);
 
     // Use our iframe.html page which has the annotator script
-    const iframeUrl = chrome.runtime.getURL('iframe.html');
+    const iframeUrl = resolveAnnotatorIframeUrl();
+    const iframeOrigin = getOriginFromUrl(iframeUrl);
 
     // Set up message handling before loading iframe
-    setupIframeMessageHandler(iframe, htmlWithoutCsp);
+    setupIframeMessageHandler(iframe, htmlWithoutCsp, iframeOrigin);
 
     // Load the iframe page
     iframe.src = iframeUrl;
@@ -230,6 +233,7 @@ function updateUI() {
 let iframeAnnotatorReady = false;
 let pendingIframeMessages: Array<{type: string; payload?: unknown}> = [];
 let currentMessageHandler: ((event: MessageEvent) => void) | null = null;
+let currentIframeTargetOrigin: string = '*';
 
 // Send message to iframe annotator
 function sendToIframe(iframe: HTMLIFrameElement, type: string, payload?: unknown) {
@@ -237,19 +241,20 @@ function sendToIframe(iframe: HTMLIFrameElement, type: string, payload?: unknown
 
   const message = { type, payload };
   if (iframeAnnotatorReady) {
-    iframe.contentWindow.postMessage(message, '*');
+    iframe.contentWindow.postMessage(message, currentIframeTargetOrigin);
   } else {
     pendingIframeMessages.push(message);
   }
 }
 
 // Set up message handler for iframe communication
-function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: string) {
+function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: string, expectedOrigin: string) {
   console.log('Setting up iframe message handler');
 
   // Reset state
   iframeAnnotatorReady = false;
   pendingIframeMessages = [];
+  currentIframeTargetOrigin = expectedOrigin;
 
   // Remove previous handler if exists
   if (currentMessageHandler) {
@@ -260,6 +265,8 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
   const messageHandler = (event: MessageEvent) => {
     // Only accept messages from our iframe
     if (event.source !== iframe.contentWindow) return;
+    // And only from the expected origin (supports loading annotator from 3p)
+    if (expectedOrigin !== '*' && event.origin !== expectedOrigin) return;
 
     const message = event.data;
     if (!message?.type) return;
@@ -273,7 +280,7 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
         iframe.contentWindow?.postMessage({
           type: 'LOAD_HTML',
           payload: { html: htmlContent }
-        }, '*');
+        }, expectedOrigin);
         break;
 
       case 'ANNOTATOR_READY':
@@ -281,7 +288,7 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
         console.log('Annotator ready');
         // Send any pending messages
         pendingIframeMessages.forEach(msg => {
-          iframe.contentWindow?.postMessage(msg, '*');
+          iframe.contentWindow?.postMessage(msg, expectedOrigin);
         });
         pendingIframeMessages = [];
         // Send current tool state
@@ -544,39 +551,6 @@ function injectAnnotationStyles(doc: Document) {
     }
   `;
   doc.head?.appendChild(style);
-}
-
-// Load existing text annotations into the text annotator
-function loadExistingTextAnnotations() {
-  if (!textAnnotator || !currentSnapshot) return;
-
-  for (const annotation of currentSnapshot.annotations.text) {
-    try {
-      // Create W3C annotation format for the library
-      const w3cAnnotation = {
-        '@context': 'http://www.w3.org/ns/anno.jsonld',
-        type: 'Annotation',
-        id: annotation.id,
-        body: [{
-          type: 'TextualBody',
-          purpose: 'tagging',
-          value: annotation.type,
-        }],
-        target: {
-          source: currentSnapshot.id,
-          selector: {
-            type: 'TextQuoteSelector',
-            exact: annotation.selectedText,
-          },
-        },
-      };
-
-      textAnnotator.addAnnotation(w3cAnnotation);
-      updateAnnotationAppearance(annotation.id, annotation.type);
-    } catch (error) {
-      console.warn('Failed to load annotation:', annotation.selectedText.substring(0, 30), error);
-    }
-  }
 }
 
 // Update the visual appearance of an annotation based on its type
@@ -950,7 +924,7 @@ function updateAnnotationCounts() {
 }
 
 // Get annotations for the current question
-function getAnnotationsForCurrentQuestion(): { text: typeof currentSnapshot.annotations.text; region: typeof currentSnapshot.annotations.region } {
+function getAnnotationsForCurrentQuestion(): { text: TextAnnotation[]; region: RegionAnnotation[] } {
   if (!currentSnapshot) return { text: [], region: [] };
 
   // If no question selected, show no annotations
