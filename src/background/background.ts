@@ -1,6 +1,6 @@
 /**
  * Background service worker for refine.page extension
- * Handles cross-component communication and storage operations
+ * Handles cross-component communication, storage operations, and page capture via Chrome MHTML API
  */
 
 import type { Snapshot, ExportData, ExportedSnapshot } from '@/types';
@@ -8,6 +8,84 @@ import type { Snapshot, ExportData, ExportedSnapshot } from '@/types';
 // Generate unique ID
 function generateId(): string {
   return `snapshot_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+}
+
+// Offscreen document management
+const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
+let creatingOffscreen: Promise<void> | null = null;
+
+async function hasOffscreenDocument(): Promise<boolean> {
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
+    documentUrls: [chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH)],
+  });
+  return contexts.length > 0;
+}
+
+async function ensureOffscreenDocument(): Promise<void> {
+  if (await hasOffscreenDocument()) {
+    return;
+  }
+
+  // Avoid race conditions by checking if we're already creating
+  if (creatingOffscreen) {
+    await creatingOffscreen;
+    return;
+  }
+
+  creatingOffscreen = chrome.offscreen.createDocument({
+    url: OFFSCREEN_DOCUMENT_PATH,
+    reasons: [chrome.offscreen.Reason.DOM_PARSER],
+    justification: 'Convert MHTML to HTML using DOM parser',
+  });
+
+  try {
+    await creatingOffscreen;
+    // Small delay to allow the offscreen document's script to register its message listener
+    await new Promise(resolve => setTimeout(resolve, 50));
+  } finally {
+    creatingOffscreen = null;
+  }
+}
+
+// Capture page using Chrome's MHTML API and convert to HTML via offscreen document
+async function capturePageAsMhtml(tabId: number, pageUrl: string): Promise<{ html: string; title: string }> {
+  console.log('refine.page: Capturing page as MHTML for tab', tabId);
+  const startTime = Date.now();
+
+  // Capture the page as MHTML
+  const mhtmlBlob = await chrome.pageCapture.saveAsMHTML({ tabId });
+  if (!mhtmlBlob) {
+    throw new Error('Failed to capture page as MHTML');
+  }
+
+  console.log('refine.page: MHTML captured, size:', (mhtmlBlob.size / 1024).toFixed(1), 'KB');
+
+  // Read the MHTML blob as text
+  const mhtmlText = await mhtmlBlob.text();
+
+  // Ensure offscreen document exists
+  await ensureOffscreenDocument();
+
+  // Send MHTML to offscreen document for conversion
+  console.log('refine.page: Sending MHTML to offscreen document for conversion...');
+  const response = await chrome.runtime.sendMessage({
+    type: 'CONVERT_MHTML',
+    payload: { mhtmlText, baseUrl: pageUrl },
+  });
+
+  if (!response) {
+    throw new Error('No response from offscreen document - it may not have loaded yet');
+  }
+
+  if (response.type === 'CONVERT_MHTML_ERROR') {
+    throw new Error(response.payload.error);
+  }
+
+  const duration = Date.now() - startTime;
+  console.log(`refine.page: Capture complete in ${duration}ms, HTML size: ${(response.payload.html.length / 1024).toFixed(1)}KB`);
+
+  return { html: response.payload.html, title: response.payload.title };
 }
 
 // Storage operations using chrome.storage.local
@@ -156,8 +234,13 @@ async function importData(data: ExportData): Promise<{ imported: number; skipped
 
 // Message handlers
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Skip messages without a type (e.g., from other extensions or SingleFile internals)
+  // Skip messages without a type (e.g., from other extensions)
   if (!message?.type) {
+    return false;
+  }
+
+  // Skip messages from offscreen document (responses)
+  if (message.type === 'CONVERT_MHTML_COMPLETE' || message.type === 'CONVERT_MHTML_ERROR') {
     return false;
   }
 
@@ -193,27 +276,63 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case 'CAPTURE_PAGE': {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tab?.id) {
+        if (!tab?.id || !tab?.url) {
           throw new Error('No active tab found');
         }
+
+        // Check if the tab URL is capturable (not chrome://, chrome-extension://, etc.)
+        const url = tab.url;
+        if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') ||
+            url.startsWith('edge://') || url.startsWith('about:') ||
+            url.startsWith('devtools://')) {
+          throw new Error('Cannot capture browser internal pages');
+        }
+
         try {
-          const response = await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_PAGE' });
-          return response;
-        } catch (error) {
-          // Content script not loaded - try injecting it first
-          console.log('Content script not loaded, injecting...');
-          if ((error as Error).message?.includes('Could not establish connection')) {
+          // Get page metadata from content script
+          let metadata: { url: string; title: string; viewport: { width: number; height: number } };
+          try {
+            const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_METADATA' });
+            metadata = response.payload;
+          } catch {
+            // Content script not loaded - inject it and try again
+            console.log('Content script not loaded, injecting...');
             await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               files: ['content.js'],
             });
-            // Wait a moment for script to initialize
             await new Promise(resolve => setTimeout(resolve, 100));
-            // Try again after injection
-            const response = await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_PAGE' });
-            return response;
+            const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_METADATA' });
+            metadata = response.payload;
           }
-          throw error;
+
+          // Capture the page as MHTML and convert to HTML (via offscreen document)
+          const { html } = await capturePageAsMhtml(tab.id, metadata.url);
+
+          // Create the snapshot
+          const snapshot: Snapshot = {
+            id: generateId(),
+            url: metadata.url,
+            title: metadata.title,
+            html: html,
+            viewport: metadata.viewport,
+            annotations: { text: [], region: [] },
+            questions: [],
+            status: 'pending',
+            capturedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            tags: [],
+          };
+
+          // Save the snapshot
+          await saveSnapshot(snapshot);
+
+          console.log(`refine.page: Snapshot saved, id: ${snapshot.id}, size: ${(html.length / 1024).toFixed(1)}KB`);
+
+          return { type: 'CAPTURE_COMPLETE', payload: { snapshotId: snapshot.id } };
+        } catch (error) {
+          console.error('refine.page: Capture error:', error);
+          return { type: 'CAPTURE_ERROR', payload: { error: (error as Error).message || 'Unknown error' } };
         }
       }
 

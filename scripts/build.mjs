@@ -24,6 +24,7 @@ const entryPoints = {
   'viewer': join(srcDir, 'viewer/viewer.ts'),
   'snapshot': join(srcDir, 'snapshot/snapshot.ts'),
   'iframe-annotator': join(srcDir, 'iframe/annotator.ts'),
+  'offscreen': join(srcDir, 'offscreen/offscreen.ts'),
 };
 
 // Common esbuild options
@@ -109,6 +110,14 @@ async function buildScripts() {
     format: 'iife',
     plugins: [inlineCssPlugin],
   });
+
+  // Offscreen document script - for MHTML conversion (needs DOM access)
+  await esbuild.build({
+    ...commonOptions,
+    entryPoints: [entryPoints.offscreen],
+    outfile: join(distDir, 'offscreen.js'),
+    format: 'iife',
+  });
 }
 
 // Copy static files
@@ -145,6 +154,11 @@ function copyStaticFiles() {
 
   // Copy iframe.html (used for annotation in iframe context)
   copyFileSync(join(srcDir, 'iframe/iframe.html'), join(distDir, 'iframe.html'));
+
+  // Copy offscreen.html (used for MHTML conversion with DOM access)
+  const offscreenHtml = readFileSync(join(srcDir, 'offscreen/offscreen.html'), 'utf-8')
+    .replace('src="offscreen.js"', 'src="offscreen.js"');
+  writeFileSync(join(distDir, 'offscreen.html'), offscreenHtml);
 
   // Copy CSS files
   if (existsSync(join(srcDir, 'popup/popup.css'))) {
@@ -211,6 +225,12 @@ async function watch() {
       ...commonOptions,
       entryPoints: [entryPoints.snapshot],
       outfile: join(distDir, 'snapshot.js'),
+    }),
+    esbuild.context({
+      ...commonOptions,
+      entryPoints: [entryPoints.offscreen],
+      outfile: join(distDir, 'offscreen.js'),
+      format: 'iife',
     }),
   ]);
 
