@@ -1084,31 +1084,55 @@ function handleMessage(event: MessageEvent) {
 console.log('[Iframe Annotator] Script loaded, waiting for messages...');
 window.addEventListener('message', handleMessage);
 
-// Forward keyboard shortcuts to parent when iframe has focus
-document.addEventListener('keydown', (e) => {
-  // Don't intercept if user is typing in an input
-  if ((e.target as HTMLElement).tagName === 'INPUT' ||
-      (e.target as HTMLElement).tagName === 'TEXTAREA') {
-    return;
+// Forward keyboard shortcuts to parent when iframe has focus.
+// This keeps viewer-level shortcuts working even after clicking into the iframe.
+function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+
+  // Respect contenteditable regions
+  if (el.isContentEditable) return true;
+
+  const tag = el.tagName;
+  if (tag === 'TEXTAREA') {
+    const ta = el as HTMLTextAreaElement;
+    return !ta.disabled && !ta.readOnly;
+  }
+  if (tag === 'INPUT') {
+    const input = el as HTMLInputElement;
+    return !input.disabled && !input.readOnly;
+  }
+  if (tag === 'SELECT') {
+    const select = el as HTMLSelectElement;
+    return !select.disabled;
   }
 
-  // Don't intercept when modifier keys are held (allow Ctrl+R, Cmd+R, etc.)
-  if (e.ctrlKey || e.metaKey || e.altKey) {
-    return;
-  }
+  return false;
+}
 
-  // Tool switching shortcuts
-  if (e.key === '1' || e.key === 'r') {
-    e.preventDefault();
-    window.parent.postMessage({ type: 'KEY_PRESSED', payload: { key: 'r' } }, '*');
-  } else if (e.key === '2' || e.key === 'a') {
-    e.preventDefault();
-    window.parent.postMessage({ type: 'KEY_PRESSED', payload: { key: 'a' } }, '*');
-  } else if (e.key === 'Escape' || e.key === '0' || e.key === 's') {
-    e.preventDefault();
-    window.parent.postMessage({ type: 'KEY_PRESSED', payload: { key: 's' } }, '*');
-  }
-});
+window.addEventListener(
+  'keydown',
+  (e) => {
+    if (isEditableTarget(e.target)) return;
+
+    // Send the full key context so the parent can run its normal shortcut logic.
+    window.parent.postMessage(
+      {
+        type: 'IFRAME_KEYDOWN',
+        payload: {
+          key: e.key,
+          code: e.code,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+          altKey: e.altKey,
+          shiftKey: e.shiftKey,
+        },
+      },
+      '*'
+    );
+  },
+  true // capture: run even if libs stop propagation
+);
 
 // Signal that the iframe is ready to receive content
 window.parent.postMessage({ type: 'IFRAME_LOADED' }, '*');
