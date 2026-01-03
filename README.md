@@ -5,7 +5,7 @@ A web extension for capturing and annotating web page snapshots for labeling and
 
 ## Features
 
-- **High-Fidelity Snapshots**: Captures complete web pages as self-contained HTML files using SingleFile-style capture
+- **High-Fidelity Snapshots**: Captures complete web pages as self-contained HTML files using mhtml capture
 - **Inert Snapshots**: All interactive elements (links, forms, scripts) are disabled to preserve the exact state
 - **Text Annotations**: Highlight and label text content with different annotation types:
   - **Relevant**: Mark content that is relevant to a query
@@ -103,7 +103,6 @@ refine-page/
 
 ## Dependencies
 
-- **single-file-core**: High-fidelity web page capture
 - **@annotorious/annotorious**: Image/region annotation (for future use)
 - **@recogito/text-annotator**: Text annotation (for future use)
 
