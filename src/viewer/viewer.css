@@ -148,13 +148,19 @@ body {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
+}
+
+.app-logo {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
 }
 
 .app-name {
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--color-text-muted);
 }
 
 .header-dot {
