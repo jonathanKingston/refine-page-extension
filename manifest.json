@@ -30,13 +30,6 @@
     "service_worker": "src/background/background.ts",
     "type": "module"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["src/content/capture.ts"],
-      "run_at": "document_idle"
-    }
-  ],
   "web_accessible_resources": [
     {
       "resources": ["viewer.html", "viewer.js", "viewer.css", "snapshot.html", "snapshot.js"],
