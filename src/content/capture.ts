@@ -31,5 +31,3 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 });
-
-console.log('refine.page: Content script loaded');

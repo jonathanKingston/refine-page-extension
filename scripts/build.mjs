@@ -127,7 +127,6 @@ function copyStaticFiles() {
 
   // Update paths in manifest for dist
   manifest.background = { service_worker: 'background.js' }; // Remove "type": "module" since we use IIFE
-  manifest.content_scripts[0].js = ['content.js'];
   manifest.action.default_popup = 'popup.html';
   manifest.web_accessible_resources[0].resources = [
     'viewer.html', 'viewer.js', 'viewer.css',
