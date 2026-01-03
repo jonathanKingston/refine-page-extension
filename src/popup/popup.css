@@ -97,13 +97,19 @@ body {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+
+.app-logo {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
 }
 
 .popup-header h1 {
   font-size: 16px;
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--color-text-muted);
 }
 
 .subtitle {
