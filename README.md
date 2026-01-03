@@ -1,6 +1,7 @@
 # refine.page
 
-A web extension for capturing and annotating web page snapshots for labeling and review. Similar to Zotero's snapshot functionality, but focused on creating labeled datasets from web pages.
+A web extension for capturing and annotating web page snapshots for labeling and review. Create labeled datasets from web pages with high-fidelity snapshots.
+
 
 ## Features
 
