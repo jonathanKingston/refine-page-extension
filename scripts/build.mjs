@@ -49,15 +49,34 @@ const inlineCssPlugin = {
       if (args.kind === 'import-statement') {
         try {
           // Try to resolve the CSS file using Node's require.resolve
-          const resolvedPath = require.resolve(args.path, { paths: [args.importer ? dirname(args.importer) : rootDir, rootDir] });
-          return {
-            path: resolvedPath,
-            namespace: 'css',
-          };
-        } catch (e) {
-          // If resolution fails, try to resolve relative to the importer
+          const resolvePaths = [];
           if (args.importer) {
-            const resolvedPath = resolve(dirname(args.importer), args.path);
+            resolvePaths.push(dirname(args.importer));
+          }
+          resolvePaths.push(rootDir);
+          
+          const resolvedPath = require.resolve(args.path, { paths: resolvePaths });
+          if (existsSync(resolvedPath)) {
+            return {
+              path: resolvedPath,
+              namespace: 'css',
+            };
+          }
+        } catch (e) {
+          // If resolution fails, try manual resolution
+          // First try: resolve from rootDir node_modules
+          let resolvedPath = resolve(rootDir, 'node_modules', args.path);
+          if (existsSync(resolvedPath)) {
+            return {
+              path: resolvedPath,
+              namespace: 'css',
+            };
+          }
+          
+          // Second try: if dist path doesn't exist, try src path (for packages without built files)
+          if (args.path.includes('/dist/')) {
+            const srcPath = args.path.replace('/dist/', '/src/').replace('text-annotator.css', 'TextAnnotator.css');
+            resolvedPath = resolve(rootDir, 'node_modules', srcPath);
             if (existsSync(resolvedPath)) {
               return {
                 path: resolvedPath,
@@ -65,16 +84,17 @@ const inlineCssPlugin = {
               };
             }
           }
-          // Fallback: try resolving from rootDir
-          const resolvedPath = resolve(rootDir, 'node_modules', args.path);
-          if (existsSync(resolvedPath)) {
-            return {
-              path: resolvedPath,
-              namespace: 'css',
-            };
+          
+          // Third try: resolve relative to importer
+          if (args.importer) {
+            resolvedPath = resolve(dirname(args.importer), args.path);
+            if (existsSync(resolvedPath)) {
+              return {
+                path: resolvedPath,
+                namespace: 'css',
+              };
+            }
           }
-          // If all else fails, return the path as-is and let esbuild handle it
-          return null;
         }
       }
       return null;
