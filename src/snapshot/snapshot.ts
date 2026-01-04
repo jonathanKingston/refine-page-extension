@@ -61,7 +61,6 @@ async function loadSnapshot(snapshotId: string) {
       const viewerUrl = chrome.runtime.getURL(`viewer.html?id=${snapshotId}`);
       chrome.tabs.create({ url: viewerUrl });
     });
-
   } catch (error) {
     console.error('Failed to load snapshot:', error);
     showError((error as Error).message);

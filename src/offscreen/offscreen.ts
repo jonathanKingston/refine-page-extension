@@ -44,7 +44,10 @@ function cleanResourceUrls(doc: Document): void {
     if (src && !src.startsWith('data:') && !src.startsWith('blob:')) {
       // Keep the element but use a transparent placeholder
       img.setAttribute('data-original-src', src);
-      img.setAttribute('src', 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+      img.setAttribute(
+        'src',
+        'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+      );
     }
   });
 }
@@ -91,7 +94,17 @@ function makeInert(html: string, baseUrl?: string): string {
   });
 
   // Remove event handler attributes
-  const eventAttrs = ['onclick', 'onmouseover', 'onmouseout', 'onload', 'onerror', 'onsubmit', 'onchange', 'onfocus', 'onblur'];
+  const eventAttrs = [
+    'onclick',
+    'onmouseover',
+    'onmouseout',
+    'onload',
+    'onerror',
+    'onsubmit',
+    'onchange',
+    'onfocus',
+    'onblur',
+  ];
   doc.querySelectorAll('*').forEach((el) => {
     eventAttrs.forEach((attr) => el.removeAttribute(attr));
   });
@@ -106,7 +119,10 @@ function makeInert(html: string, baseUrl?: string): string {
   // Add strict CSP meta tag - allow inline styles since MHTML inlines everything
   const cspMeta = doc.createElement('meta');
   cspMeta.setAttribute('http-equiv', 'Content-Security-Policy');
-  cspMeta.setAttribute('content', "default-src 'self' data: blob:; script-src 'none'; style-src 'unsafe-inline' data: blob:; font-src data: blob:; img-src 'self' data: blob:; frame-src 'none'; object-src 'none';");
+  cspMeta.setAttribute(
+    'content',
+    "default-src 'self' data: blob:; script-src 'none'; style-src 'unsafe-inline' data: blob:; font-src data: blob:; img-src 'self' data: blob:; frame-src 'none'; object-src 'none';"
+  );
   doc.head?.insertBefore(cspMeta, doc.head.firstChild);
 
   // Add inert styles
@@ -127,7 +143,8 @@ function convertMhtmlToHtml(mhtmlText: string, baseUrl?: string): { html: string
   const startTime = Date.now();
 
   // Get the convert function - handle both default and named exports
-  const convertFn = (mhtml2html as any).default?.convert || (mhtml2html as any).convert || mhtml2html.convert;
+  const convertFn =
+    (mhtml2html as any).default?.convert || (mhtml2html as any).convert || mhtml2html.convert;
 
   if (!convertFn) {
     throw new Error('mhtml2html.convert function not found');
@@ -152,7 +169,9 @@ function convertMhtmlToHtml(mhtmlText: string, baseUrl?: string): { html: string
   const inertHtml = makeInert(htmlString, baseUrl);
 
   const duration = Date.now() - startTime;
-  console.log(`refine.page offscreen: Conversion complete in ${duration}ms, HTML size: ${(inertHtml.length / 1024).toFixed(1)}KB`);
+  console.log(
+    `refine.page offscreen: Conversion complete in ${duration}ms, HTML size: ${(inertHtml.length / 1024).toFixed(1)}KB`
+  );
 
   return { html: inertHtml, title };
 }

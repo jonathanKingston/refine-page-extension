@@ -277,9 +277,7 @@ export interface ElementMark {
 }
 
 // Helper to convert W3C annotation back to our format
-export function fromW3CAnnotation(
-  w3c: WebAnnotation
-): TextAnnotation | RegionAnnotation | null {
+export function fromW3CAnnotation(w3c: WebAnnotation): TextAnnotation | RegionAnnotation | null {
   const body = Array.isArray(w3c.body) ? w3c.body[0] : w3c.body;
   const selector = Array.isArray(w3c.target.selector)
     ? w3c.target.selector[0]

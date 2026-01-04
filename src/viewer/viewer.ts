@@ -19,13 +19,15 @@ import type {
 import '@recogito/text-annotator/packages/text-annotator/dist/text-annotator.css';
 import '@annotorious/annotorious/annotorious.css';
 
-
 // Strip CSP meta tags from HTML to allow our annotation scripts to run
 function stripCspFromHtml(html: string): string {
   // Remove Content-Security-Policy meta tags
   return html
     .replace(/<meta[^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '')
-    .replace(/<meta[^>]*content=["'][^"']*script-src[^"']*["'][^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '');
+    .replace(
+      /<meta[^>]*content=["'][^"']*script-src[^"']*["'][^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi,
+      ''
+    );
 }
 
 // Lightweight snapshot summary (without HTML) for listing
@@ -251,7 +253,7 @@ function updateUI() {
 
 // Track if iframe annotator is ready
 let iframeAnnotatorReady = false;
-let pendingIframeMessages: Array<{type: string; payload?: unknown}> = [];
+let pendingIframeMessages: Array<{ type: string; payload?: unknown }> = [];
 let currentMessageHandler: ((event: MessageEvent) => void) | null = null;
 
 // Send message to iframe annotator
@@ -293,17 +295,20 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
       case 'IFRAME_LOADED':
         // Iframe is ready, send the HTML content
         console.log('Iframe loaded, sending HTML content...');
-        iframe.contentWindow?.postMessage({
-          type: 'LOAD_HTML',
-          payload: { html: htmlContent }
-        }, '*');
+        iframe.contentWindow?.postMessage(
+          {
+            type: 'LOAD_HTML',
+            payload: { html: htmlContent },
+          },
+          '*'
+        );
         break;
 
       case 'ANNOTATOR_READY':
         iframeAnnotatorReady = true;
         console.log('Annotator ready');
         // Send any pending messages
-        pendingIframeMessages.forEach(msg => {
+        pendingIframeMessages.forEach((msg) => {
           iframe.contentWindow?.postMessage(msg, '*');
         });
         pendingIframeMessages = [];
@@ -311,21 +316,35 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
         sendToIframe(iframe, 'SET_TOOL', currentTool);
         // Load annotations for current question only
         if (currentSnapshot && currentQuestionId) {
-          const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+          const question = currentSnapshot.questions.find((q) => q.id === currentQuestionId);
           if (question) {
             const annotationIds = new Set(question.annotationIds);
             // Load text annotations
-            const questionTextAnnotations = currentSnapshot.annotations.text.filter(a => annotationIds.has(a.id));
-            console.log('Loading text annotations for question:', currentQuestionId, 'count:', questionTextAnnotations.length);
+            const questionTextAnnotations = currentSnapshot.annotations.text.filter((a) =>
+              annotationIds.has(a.id)
+            );
+            console.log(
+              'Loading text annotations for question:',
+              currentQuestionId,
+              'count:',
+              questionTextAnnotations.length
+            );
             if (questionTextAnnotations.length > 0) {
-              const w3cAnnotations = questionTextAnnotations.map(a => convertToW3CText(a));
+              const w3cAnnotations = questionTextAnnotations.map((a) => convertToW3CText(a));
               sendToIframe(iframe, 'LOAD_ANNOTATIONS', w3cAnnotations);
             }
             // Load region annotations (image annotators are now in the iframe)
-            const questionRegionAnnotations = currentSnapshot.annotations.region.filter(a => annotationIds.has(a.id));
-            console.log('Loading region annotations for question:', currentQuestionId, 'count:', questionRegionAnnotations.length);
+            const questionRegionAnnotations = currentSnapshot.annotations.region.filter((a) =>
+              annotationIds.has(a.id)
+            );
+            console.log(
+              'Loading region annotations for question:',
+              currentQuestionId,
+              'count:',
+              questionRegionAnnotations.length
+            );
             if (questionRegionAnnotations.length > 0) {
-              const regionData = questionRegionAnnotations.map(a => ({
+              const regionData = questionRegionAnnotations.map((a) => ({
                 id: a.id,
                 imageId: a.targetSelector,
                 bounds: a.bounds,
@@ -334,14 +353,18 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
               sendToIframe(iframe, 'LOAD_REGION_ANNOTATIONS', regionData);
             }
             // Load element annotations (text annotations with CSS selectors)
-            const elementAnnotations = questionTextAnnotations.filter(a => a.selector.type === 'css');
+            const elementAnnotations = questionTextAnnotations.filter(
+              (a) => a.selector.type === 'css'
+            );
             if (elementAnnotations.length > 0) {
               // Find their indices in the full list for consistent numbering
-              const allAnnotations = [...questionTextAnnotations, ...questionRegionAnnotations]
-                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-              
-              const elementData = elementAnnotations.map(a => {
-                const index = allAnnotations.findIndex(ann => ann.id === a.id) + 1;
+              const allAnnotations = [
+                ...questionTextAnnotations,
+                ...questionRegionAnnotations,
+              ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+              const elementData = elementAnnotations.map((a) => {
+                const index = allAnnotations.findIndex((ann) => ann.id === a.id) + 1;
                 return {
                   id: a.id,
                   selector: a.selector.value,
@@ -354,7 +377,8 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
             }
 
             // Set the annotation index to total count for consistent numbering
-            const totalAnnotations = questionTextAnnotations.length + questionRegionAnnotations.length;
+            const totalAnnotations =
+              questionTextAnnotations.length + questionRegionAnnotations.length;
             sendToIframe(iframe, 'SET_ANNOTATION_INDEX', { index: totalAnnotations });
           }
         }
@@ -428,7 +452,7 @@ function handleAnnotationCreated(payload: { annotation: unknown; tool: string })
     currentSnapshot.annotations.text.push(textAnnotation);
 
     if (currentQuestionId) {
-      const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+      const question = currentSnapshot.questions.find((q) => q.id === currentQuestionId);
       if (question) {
         question.annotationIds.push(textAnnotation.id);
       }
@@ -451,10 +475,10 @@ function handleAnnotationDeleted(payload: { annotation: unknown }) {
   const id = annotation?.id;
   if (!id) return;
 
-  currentSnapshot.annotations.text = currentSnapshot.annotations.text.filter(a => a.id !== id);
+  currentSnapshot.annotations.text = currentSnapshot.annotations.text.filter((a) => a.id !== id);
 
   for (const question of currentSnapshot.questions) {
-    question.annotationIds = question.annotationIds.filter(aid => aid !== id);
+    question.annotationIds = question.annotationIds.filter((aid) => aid !== id);
   }
 
   updateAnnotationCounts();
@@ -463,7 +487,11 @@ function handleAnnotationDeleted(payload: { annotation: unknown }) {
 }
 
 // Handle region annotation created from iframe
-function handleRegionAnnotationCreated(payload: { annotation: unknown; tool: string; imageId: string }) {
+function handleRegionAnnotationCreated(payload: {
+  annotation: unknown;
+  tool: string;
+  imageId: string;
+}) {
   if (!currentSnapshot) return;
 
   const { annotation, tool, imageId } = payload;
@@ -473,7 +501,7 @@ function handleRegionAnnotationCreated(payload: { annotation: unknown; tool: str
     currentSnapshot.annotations.region.push(regionAnnotation);
 
     if (currentQuestionId) {
-      const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+      const question = currentSnapshot.questions.find((q) => q.id === currentQuestionId);
       if (question) {
         question.annotationIds.push(regionAnnotation.id);
       }
@@ -539,7 +567,7 @@ function highlightMarkInList(label: string) {
   if (!listEl) return;
 
   // Remove previous active state
-  listEl.querySelectorAll('.mark-item').forEach(item => {
+  listEl.querySelectorAll('.mark-item').forEach((item) => {
     item.classList.remove('active');
   });
 
@@ -554,7 +582,7 @@ function highlightMarkInList(label: string) {
 // Delete a detected mark
 function deleteMark(label: string) {
   // Remove from detected marks
-  detectedMarks = detectedMarks.filter(m => m.label !== label);
+  detectedMarks = detectedMarks.filter((m) => m.label !== label);
 
   // Update iframe to remove the mark visual
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
@@ -577,7 +605,7 @@ function elevateMarkToAnnotation(label: string, type?: AnnotationType) {
     return;
   }
 
-  const mark = detectedMarks.find(m => m.label === label);
+  const mark = detectedMarks.find((m) => m.label === label);
   if (!mark) return;
 
   // Use provided type, or fall back to current tool, or default to 'relevant'
@@ -602,7 +630,7 @@ function elevateMarkToAnnotation(label: string, type?: AnnotationType) {
   currentSnapshot.annotations.text.push(textAnnotation);
 
   // Link to current question
-  const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+  const question = currentSnapshot.questions.find((q) => q.id === currentQuestionId);
   if (question) {
     question.annotationIds.push(textAnnotation.id);
   }
@@ -623,7 +651,7 @@ function elevateMarkToAnnotation(label: string, type?: AnnotationType) {
   }
 
   // Remove from detected marks list (but visual stays in iframe)
-  detectedMarks = detectedMarks.filter(m => m.label !== label);
+  detectedMarks = detectedMarks.filter((m) => m.label !== label);
   renderMarksList();
 
   // Hide panel if no marks left
@@ -655,11 +683,14 @@ function renderMarksList() {
   }
 
   if (detectedMarks.length === 0) {
-    listEl.innerHTML = '<div class="empty-state">Click Auto-detect to find interactive elements</div>';
+    listEl.innerHTML =
+      '<div class="empty-state">Click Auto-detect to find interactive elements</div>';
     return;
   }
 
-  listEl.innerHTML = detectedMarks.map(mark => `
+  listEl.innerHTML = detectedMarks
+    .map(
+      (mark) => `
     <div class="mark-item" data-label="${mark.label}">
       <span class="mark-number">${mark.label}</span>
       <div class="mark-info">
@@ -676,10 +707,12 @@ function renderMarksList() {
         <button class="mark-action-btn delete" data-label="${mark.label}" title="Delete">×</button>
       </div>
     </div>
-  `).join('');
+  `
+    )
+    .join('');
 
   // Add event handlers for mark items
-  listEl.querySelectorAll('.mark-item').forEach(item => {
+  listEl.querySelectorAll('.mark-item').forEach((item) => {
     const label = (item as HTMLElement).dataset.label!;
 
     // Click on item (but not buttons) to highlight
@@ -694,13 +727,13 @@ function renderMarksList() {
       }
 
       // Visual feedback
-      listEl.querySelectorAll('.mark-item').forEach(i => i.classList.remove('active'));
+      listEl.querySelectorAll('.mark-item').forEach((i) => i.classList.remove('active'));
       item.classList.add('active');
     });
   });
 
   // Add event handlers for annotate buttons
-  listEl.querySelectorAll('.mark-action-btn.relevant').forEach(btn => {
+  listEl.querySelectorAll('.mark-action-btn.relevant').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const label = (btn as HTMLElement).dataset.label!;
@@ -708,7 +741,7 @@ function renderMarksList() {
     });
   });
 
-  listEl.querySelectorAll('.mark-action-btn.answer').forEach(btn => {
+  listEl.querySelectorAll('.mark-action-btn.answer').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const label = (btn as HTMLElement).dataset.label!;
@@ -716,7 +749,7 @@ function renderMarksList() {
     });
   });
 
-  listEl.querySelectorAll('.mark-action-btn.delete').forEach(btn => {
+  listEl.querySelectorAll('.mark-action-btn.delete').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const label = (btn as HTMLElement).dataset.label!;
@@ -753,10 +786,12 @@ function handleRegionAnnotationDeleted(payload: { annotation: unknown; imageId: 
   const id = annotation?.id;
   if (!id) return;
 
-  currentSnapshot.annotations.region = currentSnapshot.annotations.region.filter(a => a.id !== id);
+  currentSnapshot.annotations.region = currentSnapshot.annotations.region.filter(
+    (a) => a.id !== id
+  );
 
   for (const question of currentSnapshot.questions) {
-    question.annotationIds = question.annotationIds.filter(aid => aid !== id);
+    question.annotationIds = question.annotationIds.filter((aid) => aid !== id);
   }
 
   updateAnnotationCounts();
@@ -863,39 +898,6 @@ function injectAnnotationStyles(doc: Document) {
   doc.head?.appendChild(style);
 }
 
-// Load existing text annotations into the text annotator
-function loadExistingTextAnnotations() {
-  if (!textAnnotator || !currentSnapshot) return;
-
-  for (const annotation of currentSnapshot.annotations.text) {
-    try {
-      // Create W3C annotation format for the library
-      const w3cAnnotation = {
-        '@context': 'http://www.w3.org/ns/anno.jsonld',
-        type: 'Annotation',
-        id: annotation.id,
-        body: [{
-          type: 'TextualBody',
-          purpose: 'tagging',
-          value: annotation.type,
-        }],
-        target: {
-          source: currentSnapshot.id,
-          selector: {
-            type: 'TextQuoteSelector',
-            exact: annotation.selectedText,
-          },
-        },
-      };
-
-      textAnnotator.addAnnotation(w3cAnnotation);
-      updateAnnotationAppearance(annotation.id, annotation.type);
-    } catch (error) {
-      console.warn('Failed to load annotation:', annotation.selectedText.substring(0, 30), error);
-    }
-  }
-}
-
 // Update the visual appearance of an annotation based on its type
 function updateAnnotationAppearance(annotationId: string, type: AnnotationType) {
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
@@ -904,8 +906,10 @@ function updateAnnotationAppearance(annotationId: string, type: AnnotationType) 
 
   // Find the annotation element and add the type class
   setTimeout(() => {
-    const elements = doc.querySelectorAll(`[data-annotation="${annotationId}"], [data-id="${annotationId}"]`);
-    elements.forEach(el => {
+    const elements = doc.querySelectorAll(
+      `[data-annotation="${annotationId}"], [data-id="${annotationId}"]`
+    );
+    elements.forEach((el) => {
       el.classList.remove('relevant', 'answer', 'no_content');
       el.classList.add(type);
     });
@@ -918,19 +922,23 @@ function updateAnnotationAppearance(annotationId: string, type: AnnotationType) 
 function convertToW3CText(annotation: TextAnnotation): unknown {
   return {
     id: annotation.id,
-    bodies: [{
-      type: 'TextualBody',
-      purpose: 'tagging',
-      value: annotation.type,
-    }],
+    bodies: [
+      {
+        type: 'TextualBody',
+        purpose: 'tagging',
+        value: annotation.type,
+      },
+    ],
     target: {
       annotation: annotation.id,
-      selector: [{
-        quote: annotation.selectedText,
-        start: annotation.startOffset,
-        end: annotation.endOffset,
-      }]
-    }
+      selector: [
+        {
+          quote: annotation.selectedText,
+          start: annotation.startOffset,
+          end: annotation.endOffset,
+        },
+      ],
+    },
   };
 }
 
@@ -938,11 +946,13 @@ function convertToW3CText(annotation: TextAnnotation): unknown {
 function normalizeSelectedText(text: string): string {
   // Insert space between lowercase followed by uppercase (e.g., "HomeNews" -> "Home News")
   // This handles text that spans multiple DOM elements with no whitespace
-  return text
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    // Also handle numbers followed by letters
-    .replace(/([0-9])([A-Za-z])/g, '$1 $2')
-    .replace(/([A-Za-z])([0-9])/g, '$1 $2');
+  return (
+    text
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      // Also handle numbers followed by letters
+      .replace(/([0-9])([A-Za-z])/g, '$1 $2')
+      .replace(/([A-Za-z])([0-9])/g, '$1 $2')
+  );
 }
 
 // Convert W3C text annotation to our format
@@ -1004,7 +1014,11 @@ function convertFromW3CText(w3c: any, type: AnnotationType): TextAnnotation | nu
 }
 
 // Convert W3C region annotation to our format
-function convertFromW3CRegion(w3c: unknown, type: AnnotationType, targetSelector: string): RegionAnnotation | null {
+function convertFromW3CRegion(
+  w3c: unknown,
+  type: AnnotationType,
+  targetSelector: string
+): RegionAnnotation | null {
   try {
     console.log('Converting region annotation:', JSON.stringify(w3c, null, 2));
 
@@ -1173,14 +1187,19 @@ function scrollSidebarToAnnotation(annotationId: string) {
   if (!listEl) return;
 
   console.log('[Viewer] Looking for annotation:', annotationId);
-  console.log('[Viewer] Available items:', Array.from(listEl.querySelectorAll('.annotation-item')).map(el => (el as HTMLElement).dataset.id));
+  console.log(
+    '[Viewer] Available items:',
+    Array.from(listEl.querySelectorAll('.annotation-item')).map(
+      (el) => (el as HTMLElement).dataset.id
+    )
+  );
 
   // Find the annotation item in the sidebar
   const item = listEl.querySelector(`.annotation-item[data-id="${annotationId}"]`);
   if (item) {
     console.log('[Viewer] Found annotation item, highlighting');
     // Remove previous selection
-    listEl.querySelectorAll('.annotation-item').forEach(i => i.classList.remove('selected'));
+    listEl.querySelectorAll('.annotation-item').forEach((i) => i.classList.remove('selected'));
     // Add selection to this item
     item.classList.add('selected');
     // Scroll into view
@@ -1199,7 +1218,7 @@ function highlightNewAnnotation(annotationId: string) {
   const item = listEl.querySelector(`.annotation-item[data-id="${annotationId}"]`);
   if (item) {
     // Remove any previous selections and newly-added states
-    listEl.querySelectorAll('.annotation-item').forEach(i => {
+    listEl.querySelectorAll('.annotation-item').forEach((i) => {
       i.classList.remove('selected', 'newly-added');
     });
     // Add highlight class for animation
@@ -1213,7 +1232,10 @@ function highlightNewAnnotation(annotationId: string) {
 function syncIframeAnnotations() {
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
   if (!iframe || !iframeAnnotatorReady) {
-    console.log('syncIframeAnnotations: iframe not ready', { iframe: !!iframe, ready: iframeAnnotatorReady });
+    console.log('syncIframeAnnotations: iframe not ready', {
+      iframe: !!iframe,
+      ready: iframeAnnotatorReady,
+    });
     return;
   }
 
@@ -1223,18 +1245,25 @@ function syncIframeAnnotations() {
 
   // Get annotations for current question
   const { text: textAnnotations, region: regionAnnotations } = getAnnotationsForCurrentQuestion();
-  console.log('syncIframeAnnotations: question', currentQuestionId, 'text:', textAnnotations.length, 'region:', regionAnnotations.length);
+  console.log(
+    'syncIframeAnnotations: question',
+    currentQuestionId,
+    'text:',
+    textAnnotations.length,
+    'region:',
+    regionAnnotations.length
+  );
 
   // Load only this question's text annotations
   if (textAnnotations.length > 0) {
-    const w3cAnnotations = textAnnotations.map(a => convertToW3CText(a));
+    const w3cAnnotations = textAnnotations.map((a) => convertToW3CText(a));
     console.log('syncIframeAnnotations: loading text annotations', w3cAnnotations);
     sendToIframe(iframe, 'LOAD_ANNOTATIONS', w3cAnnotations);
   }
 
   // Load only this question's region annotations
   if (regionAnnotations.length > 0) {
-    const regionData = regionAnnotations.map(a => ({
+    const regionData = regionAnnotations.map((a) => ({
       id: a.id,
       imageId: a.targetSelector,
       bounds: a.bounds,
@@ -1245,14 +1274,15 @@ function syncIframeAnnotations() {
   }
 
   // Load element annotations (text annotations with CSS selectors)
-  const elementAnnotations = textAnnotations.filter(a => a.selector.type === 'css');
+  const elementAnnotations = textAnnotations.filter((a) => a.selector.type === 'css');
   if (elementAnnotations.length > 0) {
     // Find their indices in the full list for consistent numbering
-    const allAnnotations = [...textAnnotations, ...regionAnnotations]
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    
-    const elementData = elementAnnotations.map(a => {
-      const index = allAnnotations.findIndex(ann => ann.id === a.id) + 1;
+    const allAnnotations = [...textAnnotations, ...regionAnnotations].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+
+    const elementData = elementAnnotations.map((a) => {
+      const index = allAnnotations.findIndex((ann) => ann.id === a.id) + 1;
       return {
         id: a.id,
         selector: a.selector.value,
@@ -1269,7 +1299,6 @@ function syncIframeAnnotations() {
   sendToIframe(iframe, 'SET_ANNOTATION_INDEX', { index: totalAnnotations });
 }
 
-
 // Update annotation counts (for current question)
 function updateAnnotationCounts() {
   if (!currentSnapshot) return;
@@ -1278,8 +1307,8 @@ function updateAnnotationCounts() {
   const { text: textAnnotations, region: regionAnnotations } = getAnnotationsForCurrentQuestion();
   const allAnnotations = [...textAnnotations, ...regionAnnotations];
 
-  const relevantCount = allAnnotations.filter(a => a.type === 'relevant').length;
-  const answerCount = allAnnotations.filter(a => a.type === 'answer').length;
+  const relevantCount = allAnnotations.filter((a) => a.type === 'relevant').length;
+  const answerCount = allAnnotations.filter((a) => a.type === 'answer').length;
 
   // Update right sidebar counts
   const relevantEl = document.getElementById('relevant-count');
@@ -1297,15 +1326,20 @@ function updateAnnotationCounts() {
 }
 
 // Get annotations for the current question
-function getAnnotationsForCurrentQuestion(): { text: typeof currentSnapshot.annotations.text; region: typeof currentSnapshot.annotations.region } {
-  if (!currentSnapshot) return { text: [], region: [] };
+function getAnnotationsForCurrentQuestion(): {
+  text: TextAnnotation[];
+  region: RegionAnnotation[];
+} {
+  if (!currentSnapshot) {
+    return { text: [], region: [] };
+  }
 
   // If no question selected, show no annotations
   if (!currentQuestionId) {
     return { text: [], region: [] };
   }
 
-  const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+  const question = currentSnapshot.questions.find((q) => q.id === currentQuestionId);
   if (!question) {
     return { text: [], region: [] };
   }
@@ -1319,8 +1353,8 @@ function getAnnotationsForCurrentQuestion(): { text: typeof currentSnapshot.anno
     totalRegionAnnotations: currentSnapshot.annotations.region.length,
   });
   return {
-    text: currentSnapshot.annotations.text.filter(a => annotationIds.has(a.id)),
-    region: currentSnapshot.annotations.region.filter(a => annotationIds.has(a.id)),
+    text: currentSnapshot.annotations.text.filter((a) => annotationIds.has(a.id)),
+    region: currentSnapshot.annotations.region.filter((a) => annotationIds.has(a.id)),
   };
 }
 
@@ -1338,7 +1372,8 @@ function renderAnnotationList() {
   }
 
   if (textAnnotations.length === 0 && regionAnnotations.length === 0) {
-    listEl.innerHTML = '<div class="empty-state">No annotations yet. Select text or draw on images to annotate.</div>';
+    listEl.innerHTML =
+      '<div class="empty-state">No annotations yet. Select text or draw on images to annotate.</div>';
     return;
   }
 
@@ -1376,18 +1411,15 @@ function renderAnnotationList() {
 
   // Render sorted annotations with index numbers
   const items = allAnnotations.map((a, idx) => {
-    const displayText = a.annotationType === 'text'
-      ? `${escapeHtml(a.displayText.substring(0, 25))}${a.displayText.length > 25 ? '...' : ''}`
-      : a.displayText.substring(0, 25) + (a.displayText.length > 25 ? '...' : '');
+    const displayText =
+      a.annotationType === 'text'
+        ? `${escapeHtml(a.displayText.substring(0, 25))}${a.displayText.length > 25 ? '...' : ''}`
+        : a.displayText.substring(0, 25) + (a.displayText.length > 25 ? '...' : '');
     const titleAttr = ` title="${escapeHtml(a.displayText)}"`;
-    
+
     // Get tag name for element annotations, use type indicator for others
     let tagName = '';
-    if (a.annotationType === 'element') {
-      // Extract tag from displayText which is like "[img] description"
-      const match = a.displayText.match(/^\[(\w+)\]/);
-      tagName = match ? match[1] : 'elem';
-    } else if (a.annotationType === 'region') {
+    if (a.annotationType === 'region') {
       tagName = 'region';
     } else {
       tagName = 'text';
@@ -1413,7 +1445,7 @@ function renderAnnotationList() {
       if ((e.target as HTMLElement).classList.contains('annotation-delete')) return;
       const id = (item as HTMLElement).dataset.id;
       if (id) {
-        listEl.querySelectorAll('.annotation-item').forEach(i => i.classList.remove('selected'));
+        listEl.querySelectorAll('.annotation-item').forEach((i) => i.classList.remove('selected'));
         item.classList.add('selected');
         scrollToAnnotation(id);
       }
@@ -1438,27 +1470,29 @@ function deleteAnnotation(id: string, type: 'text' | 'region') {
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
 
   if (type === 'text') {
-    currentSnapshot.annotations.text = currentSnapshot.annotations.text.filter(a => a.id !== id);
+    currentSnapshot.annotations.text = currentSnapshot.annotations.text.filter((a) => a.id !== id);
     // Tell iframe to remove the annotation
     if (iframe) {
       sendToIframe(iframe, 'REMOVE_ANNOTATION', { annotationId: id });
     }
   } else {
     // Find the region annotation to get the imageId
-    const regionAnn = currentSnapshot.annotations.region.find(a => a.id === id);
-    currentSnapshot.annotations.region = currentSnapshot.annotations.region.filter(a => a.id !== id);
+    const regionAnn = currentSnapshot.annotations.region.find((a) => a.id === id);
+    currentSnapshot.annotations.region = currentSnapshot.annotations.region.filter(
+      (a) => a.id !== id
+    );
     // Tell iframe to remove the region annotation
     if (iframe) {
       sendToIframe(iframe, 'REMOVE_REGION_ANNOTATION', {
         annotationId: id,
-        imageId: regionAnn?.targetSelector
+        imageId: regionAnn?.targetSelector,
       });
     }
   }
 
   // Remove from questions
   for (const question of currentSnapshot.questions) {
-    question.annotationIds = question.annotationIds.filter(aid => aid !== id);
+    question.annotationIds = question.annotationIds.filter((aid) => aid !== id);
   }
 
   updateAnnotationCounts();
@@ -1479,29 +1513,44 @@ function updateStatusDisplay() {
 // Update evaluation form
 function updateEvaluationForm() {
   // Clear all toggle buttons
-  document.querySelectorAll('#correctness-toggle .toggle-btn, #quick-correctness .quick-btn').forEach((b) => b.classList.remove('active'));
-  document.querySelectorAll('#in-page-toggle .toggle-btn, #quick-in-page .quick-btn').forEach((b) => b.classList.remove('active'));
-  document.querySelectorAll('#quality-toggle .toggle-btn, #quick-quality .quick-btn').forEach((b) => b.classList.remove('active'));
+  document
+    .querySelectorAll('#correctness-toggle .toggle-btn, #quick-correctness .quick-btn')
+    .forEach((b) => b.classList.remove('active'));
+  document
+    .querySelectorAll('#in-page-toggle .toggle-btn, #quick-in-page .quick-btn')
+    .forEach((b) => b.classList.remove('active'));
+  document
+    .querySelectorAll('#quality-toggle .toggle-btn, #quick-quality .quick-btn')
+    .forEach((b) => b.classList.remove('active'));
 
   if (!currentSnapshot || !currentQuestionId) return;
 
-  const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+  const question = currentSnapshot.questions.find((q) => q.id === currentQuestionId);
   if (!question) return;
 
   // Set toggle button active states
   if (question.evaluation.answerCorrectness) {
-    document.querySelectorAll(`#correctness-toggle .toggle-btn[data-value="${question.evaluation.answerCorrectness}"], #quick-correctness .quick-btn[data-value="${question.evaluation.answerCorrectness}"]`)
-      .forEach(btn => btn.classList.add('active'));
+    document
+      .querySelectorAll(
+        `#correctness-toggle .toggle-btn[data-value="${question.evaluation.answerCorrectness}"], #quick-correctness .quick-btn[data-value="${question.evaluation.answerCorrectness}"]`
+      )
+      .forEach((btn) => btn.classList.add('active'));
   }
 
   if (question.evaluation.answerInPage) {
-    document.querySelectorAll(`#in-page-toggle .toggle-btn[data-value="${question.evaluation.answerInPage}"], #quick-in-page .quick-btn[data-value="${question.evaluation.answerInPage}"]`)
-      .forEach(btn => btn.classList.add('active'));
+    document
+      .querySelectorAll(
+        `#in-page-toggle .toggle-btn[data-value="${question.evaluation.answerInPage}"], #quick-in-page .quick-btn[data-value="${question.evaluation.answerInPage}"]`
+      )
+      .forEach((btn) => btn.classList.add('active'));
   }
 
   if (question.evaluation.pageQuality) {
-    document.querySelectorAll(`#quality-toggle .toggle-btn[data-value="${question.evaluation.pageQuality}"], #quick-quality .quick-btn[data-value="${question.evaluation.pageQuality}"]`)
-      .forEach(btn => btn.classList.add('active'));
+    document
+      .querySelectorAll(
+        `#quality-toggle .toggle-btn[data-value="${question.evaluation.pageQuality}"], #quick-quality .quick-btn[data-value="${question.evaluation.pageQuality}"]`
+      )
+      .forEach((btn) => btn.classList.add('active'));
   }
 }
 
@@ -1517,7 +1566,7 @@ function updateCurrentQuestionLabel() {
   }
 
   const questionIdx = currentQuestionId
-    ? currentSnapshot.questions.findIndex(q => q.id === currentQuestionId)
+    ? currentSnapshot.questions.findIndex((q) => q.id === currentQuestionId)
     : -1;
   const totalQuestions = currentSnapshot.questions.length;
 
@@ -1537,7 +1586,9 @@ function updateReviewProgress() {
   const progressEl = document.getElementById('review-progress');
   if (!progressEl) return;
 
-  const reviewed = allSnapshots.filter(s => s.status === 'approved' || s.status === 'declined').length;
+  const reviewed = allSnapshots.filter(
+    (s) => s.status === 'approved' || s.status === 'declined'
+  ).length;
   const total = allSnapshots.length;
   progressEl.textContent = `${reviewed} of ${total} reviewed`;
 }
@@ -1552,20 +1603,24 @@ function updateQuestionsTabList() {
     return;
   }
 
-  listEl.innerHTML = currentSnapshot.questions.map((q, idx) => `
+  listEl.innerHTML = currentSnapshot.questions
+    .map(
+      (q, idx) => `
     <div class="question-item ${q.id === currentQuestionId ? 'active' : ''}" data-id="${q.id}">
       <span class="question-number">Q${idx + 1}</span>
       <span class="question-text">${escapeHtml(q.query.substring(0, 40))}${q.query.length > 40 ? '...' : ''}</span>
       <button class="question-delete" data-id="${q.id}" title="Delete">×</button>
     </div>
-  `).join('');
+  `
+    )
+    .join('');
 
   // Update question editor with current question
   const queryInput = document.getElementById('query-input') as HTMLTextAreaElement;
   const expectedInput = document.getElementById('expected-answer-input') as HTMLInputElement;
 
   if (currentQuestionId) {
-    const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+    const question = currentSnapshot.questions.find((q) => q.id === currentQuestionId);
     if (question) {
       if (queryInput) queryInput.value = question.query;
       if (expectedInput) expectedInput.value = question.expectedAnswer;
@@ -1581,7 +1636,7 @@ function navigateQuestion(direction: 'prev' | 'next') {
   if (!currentSnapshot || currentSnapshot.questions.length === 0) return;
 
   const currentIdx = currentQuestionId
-    ? currentSnapshot.questions.findIndex(q => q.id === currentQuestionId)
+    ? currentSnapshot.questions.findIndex((q) => q.id === currentQuestionId)
     : -1;
 
   let newIdx: number;
@@ -1690,9 +1745,9 @@ async function loadAllSnapshots(filter: string = 'all') {
 
     let filtered = snapshots;
     if (filter === 'pending') {
-      filtered = snapshots.filter(s => s.status === 'pending');
+      filtered = snapshots.filter((s) => s.status === 'pending');
     } else if (filter === 'approved') {
-      filtered = snapshots.filter(s => s.status === 'approved' || s.status === 'declined');
+      filtered = snapshots.filter((s) => s.status === 'approved' || s.status === 'declined');
     }
 
     renderSnapshotNav(filtered);
@@ -1706,7 +1761,7 @@ async function loadAllSnapshots(filter: string = 'all') {
 function updateCurrentSnapshotSummary() {
   if (!currentSnapshot) return;
 
-  const index = allSnapshots.findIndex(s => s.id === currentSnapshot!.id);
+  const index = allSnapshots.findIndex((s) => s.id === currentSnapshot!.id);
   if (index >= 0) {
     allSnapshots[index] = {
       ...allSnapshots[index],
@@ -1772,7 +1827,7 @@ function renderSnapshotNav(snapshots: SnapshotSummary[]) {
       e.preventDefault();
       const id = (li as HTMLElement).dataset.id;
       if (id) {
-        const snapshot = allSnapshots.find(s => s.id === id);
+        const snapshot = allSnapshots.find((s) => s.id === id);
         const title = snapshot?.title || 'Untitled';
         if (confirm(`Delete snapshot "${title}"?\n\nThis cannot be undone.`)) {
           await deleteSnapshotById(id);
@@ -1782,7 +1837,6 @@ function renderSnapshotNav(snapshots: SnapshotSummary[]) {
   });
 }
 
-
 // Delete a snapshot by ID
 async function deleteSnapshotById(id: string) {
   try {
@@ -1791,7 +1845,7 @@ async function deleteSnapshotById(id: string) {
 
     if (currentSnapshot?.id === id) {
       currentSnapshot = null;
-      const remaining = allSnapshots.filter(s => s.id !== id);
+      const remaining = allSnapshots.filter((s) => s.id !== id);
       if (remaining.length > 0) {
         await loadSnapshot(remaining[0].id);
       } else {
@@ -1868,7 +1922,7 @@ function addQuestion() {
 // Set tool
 function setTool(tool: 'select' | AnnotationType) {
   currentTool = tool;
-  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tool-btn').forEach((b) => b.classList.remove('active'));
   const btn = document.querySelector(`.tool-btn[data-tool="${tool}"]`);
   btn?.classList.add('active');
 
@@ -1882,7 +1936,7 @@ function setTool(tool: 'select' | AnnotationType) {
 // Set evaluation value
 function setEvaluationValue(name: string, value: string) {
   if (!currentSnapshot || !currentQuestionId) return;
-  const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+  const question = currentSnapshot.questions.find((q) => q.id === currentQuestionId);
   if (!question) return;
 
   // Update data
@@ -1903,9 +1957,11 @@ function setEvaluationValue(name: string, value: string) {
 function setupKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
     // Skip if in input fields
-    if ((e.target as HTMLElement).tagName === 'INPUT' ||
-        (e.target as HTMLElement).tagName === 'TEXTAREA' ||
-        (e.target as HTMLElement).tagName === 'SELECT') {
+    if (
+      (e.target as HTMLElement).tagName === 'INPUT' ||
+      (e.target as HTMLElement).tagName === 'TEXTAREA' ||
+      (e.target as HTMLElement).tagName === 'SELECT'
+    ) {
       return;
     }
 
@@ -1921,7 +1977,9 @@ function setupKeyboardShortcuts() {
           updateStatusDisplay();
           saveCurrentSnapshot();
           loadAllSnapshots();
-          const nextPending = allSnapshots.find(s => s.status === 'pending' && s.id !== currentSnapshot?.id);
+          const nextPending = allSnapshots.find(
+            (s) => s.status === 'pending' && s.id !== currentSnapshot?.id
+          );
           if (nextPending) {
             loadSnapshot(nextPending.id);
           }
@@ -2044,7 +2102,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const tabName = (tab as HTMLElement).dataset.tab;
 
       // Update tab buttons
-      document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
 
       // Update tab content
@@ -2071,7 +2129,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Filter tabs
   document.querySelectorAll('.filter-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.filter-tab').forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
       const filter = (tab as HTMLElement).dataset.filter || 'all';
       loadAllSnapshots(filter);
@@ -2123,8 +2181,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Question navigation (bottom bar)
-  document.getElementById('prev-question')?.addEventListener('click', () => navigateQuestion('prev'));
-  document.getElementById('next-question')?.addEventListener('click', () => navigateQuestion('next'));
+  document
+    .getElementById('prev-question')
+    ?.addEventListener('click', () => navigateQuestion('prev'));
+  document
+    .getElementById('next-question')
+    ?.addEventListener('click', () => navigateQuestion('next'));
 
   // Approve/Decline/Skip buttons
   document.getElementById('approve-btn')?.addEventListener('click', () => {
@@ -2147,7 +2209,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('skip-btn')?.addEventListener('click', () => {
     // Move to next pending snapshot
-    const nextPending = allSnapshots.find(s => s.status === 'pending' && s.id !== currentSnapshot?.id);
+    const nextPending = allSnapshots.find(
+      (s) => s.status === 'pending' && s.id !== currentSnapshot?.id
+    );
     if (nextPending) {
       window.history.pushState({}, '', `?id=${nextPending.id}`);
       loadSnapshot(nextPending.id);
@@ -2172,7 +2236,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const queryInput = document.getElementById('query-input') as HTMLTextAreaElement;
   queryInput?.addEventListener('input', () => {
     if (!currentSnapshot || !currentQuestionId) return;
-    const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+    const question = currentSnapshot.questions.find((q) => q.id === currentQuestionId);
     if (question) {
       question.query = queryInput.value;
       question.updatedAt = new Date().toISOString();
@@ -2185,7 +2249,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const expectedInput = document.getElementById('expected-answer-input') as HTMLInputElement;
   expectedInput?.addEventListener('input', () => {
     if (!currentSnapshot || !currentQuestionId) return;
-    const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+    const question = currentSnapshot.questions.find((q) => q.id === currentQuestionId);
     if (question) {
       question.expectedAnswer = expectedInput.value;
       question.updatedAt = new Date().toISOString();
@@ -2201,7 +2265,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (target.classList.contains('question-delete')) {
       const id = target.dataset.id;
       if (id && currentSnapshot) {
-        currentSnapshot.questions = currentSnapshot.questions.filter(q => q.id !== id);
+        currentSnapshot.questions = currentSnapshot.questions.filter((q) => q.id !== id);
         if (currentQuestionId === id) {
           currentQuestionId = currentSnapshot.questions[0]?.id || null;
         }

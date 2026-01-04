@@ -6,7 +6,7 @@
 
 import { createTextAnnotator } from '@recogito/text-annotator/packages/text-annotator/dist/text-annotator.es.js';
 import { createImageAnnotator } from '@annotorious/annotorious';
-import { mark, unmark, isMarked, type MarkedElement } from 'webmarker-js';
+import { mark, unmark, type MarkedElement } from 'webmarker-js';
 import { autoUpdate, computePosition } from '@floating-ui/dom';
 import '@recogito/text-annotator/packages/text-annotator/dist/text-annotator.css';
 import '@annotorious/annotorious/annotorious.css';
@@ -36,6 +36,8 @@ let annotationIndex = 0; // Track annotation numbers
 let regionAnnotationIndex = 0; // Track region annotation numbers
 
 // Flag to suppress delete events during clear operations (e.g., switching questions)
+// Note: Currently not modified, but kept as let for potential future use
+// eslint-disable-next-line prefer-const
 let suppressDeleteEvents = false;
 
 // Webmarker state
@@ -60,13 +62,33 @@ interface ElementAnnotationData {
 }
 const elementAnnotationVisuals: Map<string, ElementAnnotationData> = new Map();
 
-
 // Block-level elements that should have space/newline between them
 const BLOCK_ELEMENTS = new Set([
-  'DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-  'LI', 'TR', 'TD', 'TH', 'BLOCKQUOTE', 'PRE',
-  'SECTION', 'ARTICLE', 'HEADER', 'FOOTER', 'NAV',
-  'ASIDE', 'MAIN', 'FIGURE', 'FIGCAPTION', 'DT', 'DD'
+  'DIV',
+  'P',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'LI',
+  'TR',
+  'TD',
+  'TH',
+  'BLOCKQUOTE',
+  'PRE',
+  'SECTION',
+  'ARTICLE',
+  'HEADER',
+  'FOOTER',
+  'NAV',
+  'ASIDE',
+  'MAIN',
+  'FIGURE',
+  'FIGCAPTION',
+  'DT',
+  'DD',
 ]);
 
 // Get normalized text from current selection, adding spaces at element boundaries
@@ -160,10 +182,12 @@ function applyAnnotationStyle(annotationId: string, tool: string, index?: number
 
   // Recogito uses data attributes on highlight spans
   const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
-  
+
   // If no elements found, try alternative selector or let MutationObserver handle it
   if (elements.length === 0) {
-    const altElements = document.querySelectorAll(`.r6o-annotation[data-annotation="${annotationId}"]`);
+    const altElements = document.querySelectorAll(
+      `.r6o-annotation[data-annotation="${annotationId}"]`
+    );
     if (altElements.length === 0) {
       // Elements not yet rendered - MutationObserver will catch them when they appear
       return;
@@ -175,9 +199,9 @@ function applyAnnotationStyle(annotationId: string, tool: string, index?: number
     });
     return;
   }
-  
+
   // Note: Highlight layer and parent container styles are handled by CSS (annotator.css)
-  
+
   elements.forEach((el, i) => {
     const htmlEl = el as HTMLElement;
     applyStylesToElement(htmlEl, el, tool, i === 0 ? index : undefined);
@@ -185,19 +209,25 @@ function applyAnnotationStyle(annotationId: string, tool: string, index?: number
 }
 
 // Helper function to apply styles to a single element
-function applyStylesToElement(htmlEl: HTMLElement, el: Element, tool: string, index?: number, skipLog = false) {
+function applyStylesToElement(
+  htmlEl: HTMLElement,
+  el: Element,
+  tool: string,
+  index?: number,
+  skipLog = false
+) {
   // Check if class is already applied to avoid unnecessary updates
   if (el.classList.contains(`annotation-${tool}`) && !skipLog) {
     return; // Skip if already styled correctly
   }
-  
+
   // Add class for CSS styling - CSS handles all the styling with !important rules
-    el.classList.add(`annotation-${tool}`);
-    // Add number badge to first element only
+  el.classList.add(`annotation-${tool}`);
+  // Add number badge to first element only
   if (index !== undefined) {
-      el.setAttribute('data-annotation-index', String(index));
-      el.classList.add('has-index');
-    }
+    el.setAttribute('data-annotation-index', String(index));
+    el.classList.add('has-index');
+  }
 }
 
 // Re-apply all annotation styles (called by MutationObserver)
@@ -225,13 +255,13 @@ const REGION_COLORS = {
 // Apply style to a specific annotation (used when loading saved annotations)
 function applyRegionAnnotationStyle(annotationId: string, tool: string) {
   const colors = REGION_COLORS[tool as keyof typeof REGION_COLORS] || REGION_COLORS.relevant;
-  
+
   // Find and style the annotation element
   setTimeout(() => {
     const annotationLayers = document.querySelectorAll(ANNOTORIOUS_CLASSES.annotationLayer);
-    annotationLayers.forEach(layer => {
+    annotationLayers.forEach((layer) => {
       const groups = layer.querySelectorAll(`g${ANNOTORIOUS_CLASSES.annotation}`);
-      groups.forEach(g => {
+      groups.forEach((g) => {
         const dataId = g.getAttribute('data-id') || g.id || '';
         if (dataId === annotationId || dataId.includes(annotationId)) {
           g.classList.add(`annotation-${tool}`);
@@ -246,7 +276,6 @@ function applyRegionAnnotationStyle(annotationId: string, tool: string) {
     });
   }, 50);
 }
-
 
 // MutationObserver to re-apply styles when Recogito re-renders
 let styleObserver: MutationObserver | null = null;
@@ -274,7 +303,7 @@ async function initializeAnnotator(container: HTMLElement) {
 
   // Add custom styles for annotation colors - await to ensure it's loaded
   // This ensures CSS is available before any annotations are created
-  await injectAnnotationStyles().catch(err => {
+  await injectAnnotationStyles().catch((err) => {
     console.error('[Iframe Annotator] Error injecting styles:', err);
   });
 
@@ -288,15 +317,19 @@ async function initializeAnnotator(container: HTMLElement) {
   let reapplyTimeout: number | null = null;
   styleObserver = new MutationObserver((mutations) => {
     // Only react to mutations that aren't from our own style changes
-    const hasNonStyleMutation = mutations.some(m => {
+    const hasNonStyleMutation = mutations.some((m) => {
       if (m.type === 'attributes' && m.attributeName === 'style') {
         // Check if this is from Recogito, not from us
         const target = m.target as HTMLElement;
-        return !target.hasAttribute('data-annotation') || !target.classList.contains('annotation-relevant') && !target.classList.contains('annotation-answer');
+        return (
+          !target.hasAttribute('data-annotation') ||
+          (!target.classList.contains('annotation-relevant') &&
+            !target.classList.contains('annotation-answer'))
+        );
       }
       return m.type !== 'attributes' || m.attributeName !== 'style';
     });
-    
+
     if (hasNonStyleMutation) {
       // Debounce re-application with longer delay to avoid loops
       if (reapplyTimeout) {
@@ -313,7 +346,7 @@ async function initializeAnnotator(container: HTMLElement) {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['class']
+    attributeFilter: ['class'],
   });
 
   if (currentTool !== 'select') {
@@ -356,10 +389,13 @@ async function initializeAnnotator(container: HTMLElement) {
       applyAnnotationStyle(ann.id, currentTool, annotationIndex);
     }
 
-    window.parent.postMessage({
-      type: 'ANNOTATION_CREATED',
-      payload: { annotation: serialized, tool: currentTool, index: annotationIndex }
-    }, '*');
+    window.parent.postMessage(
+      {
+        type: 'ANNOTATION_CREATED',
+        payload: { annotation: serialized, tool: currentTool, index: annotationIndex },
+      },
+      '*'
+    );
   });
 
   // Handle annotation deletion
@@ -374,10 +410,13 @@ async function initializeAnnotator(container: HTMLElement) {
 
     const serialized = serializeAnnotation(annotation);
 
-    window.parent.postMessage({
-      type: 'ANNOTATION_DELETED',
-      payload: { annotation: serialized }
-    }, '*');
+    window.parent.postMessage(
+      {
+        type: 'ANNOTATION_DELETED',
+        payload: { annotation: serialized },
+      },
+      '*'
+    );
   });
 
   // Handle annotation click/selection
@@ -386,10 +425,13 @@ async function initializeAnnotator(container: HTMLElement) {
     const ann = annotation as { id?: string };
     if (ann.id) {
       highlightAnnotation(ann.id);
-      window.parent.postMessage({
-        type: 'ANNOTATION_CLICKED',
-        payload: { annotationId: ann.id }
-      }, '*');
+      window.parent.postMessage(
+        {
+          type: 'ANNOTATION_CLICKED',
+          payload: { annotationId: ann.id },
+        },
+        '*'
+      );
     }
   });
 }
@@ -399,7 +441,7 @@ function initializeImageAnnotators(container: HTMLElement) {
   console.log('[Iframe Annotator] Initializing image annotators');
 
   // Destroy existing image annotators
-  imageAnnotators.forEach(ann => {
+  imageAnnotators.forEach((ann) => {
     try {
       ann.destroy();
     } catch (e) {
@@ -440,15 +482,17 @@ function initializeImageAnnotators(container: HTMLElement) {
       const imageAnnotator = createImageAnnotator(img, {
         drawingEnabled: currentTool !== 'select',
         // Style function reads type from annotation bodies, not current tool
-        style: (annotation: unknown) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        style: (annotation: any) => {
           const ann = annotation as { bodies?: Array<{ purpose?: string; value?: string }> };
           // Find the tagging body that stores our type
-          const typeBody = ann.bodies?.find(b => b.purpose === 'tagging');
+          const typeBody = ann.bodies?.find((b) => b.purpose === 'tagging');
           const type = typeBody?.value || 'relevant';
-          const colors = REGION_COLORS[type as keyof typeof REGION_COLORS] || REGION_COLORS.relevant;
+          const colors =
+            REGION_COLORS[type as keyof typeof REGION_COLORS] || REGION_COLORS.relevant;
           return {
-            fill: colors.fill,
-            stroke: colors.stroke,
+            fill: colors.fill as any,
+            stroke: colors.stroke as any,
             strokeWidth: 2,
           };
         },
@@ -460,10 +504,18 @@ function initializeImageAnnotators(container: HTMLElement) {
         const wrapperRect = wrapper.getBoundingClientRect();
 
         // Only apply explicit dimensions if the wrapper collapsed (much smaller than original)
-        const collapsed = wrapperRect.width < originalWidth * 0.5 || wrapperRect.height < originalHeight * 0.5;
+        const collapsed =
+          wrapperRect.width < originalWidth * 0.5 || wrapperRect.height < originalHeight * 0.5;
 
         if (collapsed && originalWidth > 0 && originalHeight > 0) {
-          console.log('[Iframe Annotator] Fixing collapsed wrapper for:', imgId, 'original:', originalWidth, 'x', originalHeight);
+          console.log(
+            '[Iframe Annotator] Fixing collapsed wrapper for:',
+            imgId,
+            'original:',
+            originalWidth,
+            'x',
+            originalHeight
+          );
           wrapper.style.cssText = `
             display: ${originalDisplay === 'inline' ? 'inline-block' : originalDisplay} !important;
             width: ${originalWidth}px !important;
@@ -487,9 +539,16 @@ function initializeImageAnnotators(container: HTMLElement) {
       imageAnnotator.on('createAnnotation', (annotation: unknown) => {
         if (currentTool === 'select') return;
 
-        console.log('[Iframe Annotator] Region annotation created (raw):', JSON.stringify(annotation, null, 2));
+        console.log(
+          '[Iframe Annotator] Region annotation created (raw):',
+          JSON.stringify(annotation, null, 2)
+        );
 
-        const ann = annotation as { id?: string; target?: unknown; bodies?: Array<{ purpose?: string; value?: string }> };
+        const ann = annotation as {
+          id?: string;
+          target?: unknown;
+          bodies?: Array<{ purpose?: string; value?: string }>;
+        };
         regionAnnotationIndex++;
 
         // Add type body to the annotation so the style function can read it
@@ -497,34 +556,44 @@ function initializeImageAnnotators(container: HTMLElement) {
           const typeBody = { purpose: 'tagging', value: currentTool };
           const updatedAnn = {
             ...ann,
-            bodies: [...(ann.bodies || []), typeBody]
+            bodies: [...(ann.bodies || []), typeBody],
           };
           // Update the annotation with the type body
-          imageAnnotator.updateAnnotation(updatedAnn);
-          
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          imageAnnotator.updateAnnotation(updatedAnn as any);
+
           // Apply additional styling
           applyRegionAnnotationStyle(ann.id, currentTool);
         }
 
         const serialized = serializeAnnotation(annotation);
-        console.log('[Iframe Annotator] Region annotation serialized:', JSON.stringify(serialized, null, 2));
+        console.log(
+          '[Iframe Annotator] Region annotation serialized:',
+          JSON.stringify(serialized, null, 2)
+        );
 
-        window.parent.postMessage({
-          type: 'REGION_ANNOTATION_CREATED',
-          payload: {
-            annotation: serialized,
-            tool: currentTool,
-            imageId: imgId,
-            index: regionAnnotationIndex
-          }
-        }, '*');
+        window.parent.postMessage(
+          {
+            type: 'REGION_ANNOTATION_CREATED',
+            payload: {
+              annotation: serialized,
+              tool: currentTool,
+              imageId: imgId,
+              index: regionAnnotationIndex,
+            },
+          },
+          '*'
+        );
       });
 
       // Handle region annotation deletion
       imageAnnotator.on('deleteAnnotation', (annotation: unknown) => {
         // Don't send delete events during clear operations (e.g., switching questions)
         if (suppressDeleteEvents) {
-          console.log('[Iframe Annotator] Region annotation delete suppressed (clearing):', annotation);
+          console.log(
+            '[Iframe Annotator] Region annotation delete suppressed (clearing):',
+            annotation
+          );
           return;
         }
 
@@ -532,10 +601,13 @@ function initializeImageAnnotators(container: HTMLElement) {
 
         const serialized = serializeAnnotation(annotation);
 
-        window.parent.postMessage({
-          type: 'REGION_ANNOTATION_DELETED',
-          payload: { annotation: serialized, imageId: imgId }
-        }, '*');
+        window.parent.postMessage(
+          {
+            type: 'REGION_ANNOTATION_DELETED',
+            payload: { annotation: serialized, imageId: imgId },
+          },
+          '*'
+        );
       });
 
       // Handle region annotation click
@@ -543,10 +615,13 @@ function initializeImageAnnotators(container: HTMLElement) {
         console.log('[Iframe Annotator] Region annotation clicked:', annotation);
         const ann = annotation as { id?: string };
         if (ann.id) {
-          window.parent.postMessage({
-            type: 'ANNOTATION_CLICKED',
-            payload: { annotationId: ann.id }
-          }, '*');
+          window.parent.postMessage(
+            {
+              type: 'ANNOTATION_CLICKED',
+              payload: { annotationId: ann.id },
+            },
+            '*'
+          );
         }
       });
 
@@ -562,7 +637,7 @@ function initializeImageAnnotators(container: HTMLElement) {
 
 // Update drawing enabled state for all image annotators
 function updateImageAnnotatorsEnabled(enabled: boolean) {
-  imageAnnotators.forEach(ann => {
+  imageAnnotators.forEach((ann) => {
     try {
       ann.setDrawingEnabled(enabled);
     } catch (e) {
@@ -576,7 +651,7 @@ function highlightAnnotation(annotationId: string) {
   console.log('[Iframe Annotator] Highlighting annotation:', annotationId);
 
   // Remove previous selection
-  document.querySelectorAll('.selected, .pl-selected').forEach(el => {
+  document.querySelectorAll('.selected, .pl-selected').forEach((el) => {
     el.classList.remove('selected', 'pl-selected');
   });
 
@@ -591,7 +666,7 @@ function highlightAnnotation(annotationId: string) {
     const elements = document.querySelectorAll(selector);
     console.log('[Iframe Annotator] Trying selector:', selector, 'found:', elements.length);
     if (elements.length > 0) {
-      elements.forEach(el => {
+      elements.forEach((el) => {
         el.classList.add('selected', 'pl-selected');
       });
 
@@ -612,7 +687,7 @@ function highlightAnnotation(annotationId: string) {
           document.body.scrollTop = scrollTarget;
           window.scrollTo({
             top: scrollTarget,
-            behavior: 'smooth'
+            behavior: 'smooth',
           });
           console.log('[Iframe Annotator] Scrolling to position:', scrollTarget);
           return;
@@ -627,7 +702,12 @@ function highlightAnnotation(annotationId: string) {
 
   // DOM elements don't exist (annotation is off-screen) - search for text instead
   const searchText = annotationText.get(annotationId);
-  console.log('[Iframe Annotator] Text stored for annotation:', annotationId, '=', searchText?.substring(0, 50));
+  console.log(
+    '[Iframe Annotator] Text stored for annotation:',
+    annotationId,
+    '=',
+    searchText?.substring(0, 50)
+  );
 
   if (searchText) {
     console.log('[Iframe Annotator] Searching for text in document:', searchText.substring(0, 50));
@@ -646,7 +726,7 @@ function highlightAnnotation(annotationId: string) {
       document.body.scrollTop = scrollTarget;
       window.scrollTo({
         top: Math.max(0, scrollTarget),
-        behavior: 'smooth'
+        behavior: 'smooth',
       });
       console.log('[Iframe Annotator] Scrolled to text at:', scrollTarget);
       return;
@@ -663,17 +743,13 @@ function findTextInDocument(searchText: string): { node: Node; offset: number } 
 
   // Try different search strategies
   const searchStrategies = [
-    normalizedSearch,                           // Full normalized text
-    normalizedSearch.substring(0, 50),          // First 50 chars
-    normalizedSearch.substring(0, 30),          // First 30 chars
+    normalizedSearch, // Full normalized text
+    normalizedSearch.substring(0, 50), // First 50 chars
+    normalizedSearch.substring(0, 30), // First 30 chars
     normalizedSearch.split(' ').slice(0, 5).join(' '), // First 5 words
   ];
 
-  const walker = document.createTreeWalker(
-    document.body,
-    NodeFilter.SHOW_TEXT,
-    null
-  );
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
 
   // Build a map of text content for searching
   const textNodes: Array<{ node: Node; text: string; normalizedText: string }> = [];
@@ -684,7 +760,7 @@ function findTextInDocument(searchText: string): { node: Node; offset: number } 
       textNodes.push({
         node,
         text,
-        normalizedText: text.replace(/\s+/g, ' ')
+        normalizedText: text.replace(/\s+/g, ' '),
       });
     }
   }
@@ -711,7 +787,10 @@ function findTextInDocument(searchText: string): { node: Node; offset: number } 
       // Try case-insensitive match
       index = normalizedText.toLowerCase().indexOf(searchStr.toLowerCase());
       if (index !== -1) {
-        console.log('[Iframe Annotator] Found case-insensitive match for:', searchStr.substring(0, 30));
+        console.log(
+          '[Iframe Annotator] Found case-insensitive match for:',
+          searchStr.substring(0, 30)
+        );
         return { node, offset: index };
       }
     }
@@ -736,7 +815,7 @@ async function injectAnnotationStyles() {
 
   const cssUrl = chrome.runtime.getURL('annotator.css');
   console.log('[Iframe Annotator] Injecting styles from:', cssUrl);
-  
+
   // Try to fetch and inject CSS as inline style to avoid CSP blocking
   // Some sites block external stylesheets even from extension resources
   try {
@@ -744,8 +823,8 @@ async function injectAnnotationStyles() {
     if (response.ok) {
       const cssText = await response.text();
       console.log('[Iframe Annotator] CSS fetched, length:', cssText.length);
-  const style = document.createElement('style');
-  style.id = 'pl-annotation-styles';
+      const style = document.createElement('style');
+      style.id = 'pl-annotation-styles';
       style.textContent = cssText;
       document.head.appendChild(style);
       console.log('[Iframe Annotator] CSS injected as inline style');
@@ -782,16 +861,24 @@ function getUniqueSelector(element: Element): string {
 
     // Add class if available
     if (current.className && typeof current.className === 'string') {
-      const classes = current.className.trim().split(/\s+/).filter(c => c && !c.startsWith('webmarker'));
+      const classes = current.className
+        .trim()
+        .split(/\s+/)
+        .filter((c) => c && !c.startsWith('webmarker'));
       if (classes.length > 0) {
-        selector += '.' + classes.slice(0, 2).map(c => CSS.escape(c)).join('.');
+        selector +=
+          '.' +
+          classes
+            .slice(0, 2)
+            .map((c) => CSS.escape(c))
+            .join('.');
       }
     }
 
     // Add nth-child if needed for uniqueness
     const parent = current.parentElement;
     if (parent) {
-      const siblings = Array.from(parent.children).filter(c => c.tagName === current!.tagName);
+      const siblings = Array.from(parent.children).filter((c) => c.tagName === current!.tagName);
       if (siblings.length > 1) {
         const index = siblings.indexOf(current) + 1;
         selector += `:nth-of-type(${index})`;
@@ -817,7 +904,8 @@ function getTextPreview(element: Element): string {
   const placeholder = element.getAttribute('placeholder') || '';
   const value = (element as HTMLInputElement).value || '';
 
-  const preview = text || ariaLabel || title || placeholder || value || element.tagName.toLowerCase();
+  const preview =
+    text || ariaLabel || title || placeholder || value || element.tagName.toLowerCase();
   return preview.substring(0, 50) + (preview.length > 50 ? '...' : '');
 }
 
@@ -828,14 +916,20 @@ function elementContains(a: Element, b: Element): boolean {
 
 // Calculate overlap ratio (how much of the smaller element is covered by the larger)
 function getOverlapRatio(rectA: DOMRect, rectB: DOMRect): number {
-  const xOverlap = Math.max(0, Math.min(rectA.right, rectB.right) - Math.max(rectA.left, rectB.left));
-  const yOverlap = Math.max(0, Math.min(rectA.bottom, rectB.bottom) - Math.max(rectA.top, rectB.top));
+  const xOverlap = Math.max(
+    0,
+    Math.min(rectA.right, rectB.right) - Math.max(rectA.left, rectB.left)
+  );
+  const yOverlap = Math.max(
+    0,
+    Math.min(rectA.bottom, rectB.bottom) - Math.max(rectA.top, rectB.top)
+  );
   const overlapArea = xOverlap * yOverlap;
-  
+
   const areaA = rectA.width * rectA.height;
   const areaB = rectB.width * rectB.height;
   const smallerArea = Math.min(areaA, areaB);
-  
+
   if (smallerArea === 0) return 0;
   return overlapArea / smallerArea;
 }
@@ -845,13 +939,15 @@ function isAnnotatorElement(element: Element): boolean {
   // Check if element or any ancestor is an annotator overlay
   let current: Element | null = element;
   while (current) {
-    if (current.classList.contains('a9s-annotationlayer') ||
-        current.classList.contains('a9s-annotation') ||
-        current.classList.contains('r6o-annotation') ||
-        current.classList.contains('webmarker') ||
-        current.classList.contains('webmarker-bounding-box') ||
-        current.classList.contains('element-annotation') ||
-        current.classList.contains('element-annotation-badge')) {
+    if (
+      current.classList.contains('a9s-annotationlayer') ||
+      current.classList.contains('a9s-annotation') ||
+      current.classList.contains('r6o-annotation') ||
+      current.classList.contains('webmarker') ||
+      current.classList.contains('webmarker-bounding-box') ||
+      current.classList.contains('element-annotation') ||
+      current.classList.contains('element-annotation-badge')
+    ) {
       return true;
     }
     // Check for SVG annotation layers
@@ -864,55 +960,71 @@ function isAnnotatorElement(element: Element): boolean {
 }
 
 // Deduplicate overlapping elements - keep the largest one
-function dedupeMarkedElements(markedElements: Record<string, MarkedElement>): Record<string, MarkedElement> {
+function dedupeMarkedElements(
+  markedElements: Record<string, MarkedElement>
+): Record<string, MarkedElement> {
   const entries = Object.entries(markedElements);
   const toRemove = new Set<string>();
-  
+
   // First pass: remove annotator elements
   for (const [label, marked] of entries) {
     if (isAnnotatorElement(marked.element)) {
       toRemove.add(label);
-      console.log('[Iframe Annotator] Filtering out annotator element:', label, marked.element.tagName);
+      console.log(
+        '[Iframe Annotator] Filtering out annotator element:',
+        label,
+        marked.element.tagName
+      );
     }
   }
-  
+
   for (let i = 0; i < entries.length; i++) {
     const [labelA, markedA] = entries[i];
     if (toRemove.has(labelA)) continue;
-    
+
     const rectA = markedA.element.getBoundingClientRect();
     const areaA = rectA.width * rectA.height;
-    
+
     for (let j = i + 1; j < entries.length; j++) {
       const [labelB, markedB] = entries[j];
       if (toRemove.has(labelB)) continue;
-      
+
       const rectB = markedB.element.getBoundingClientRect();
       const areaB = rectB.width * rectB.height;
-      
+
       // Check if one contains the other in DOM
       const aContainsB = elementContains(markedA.element, markedB.element);
       const bContainsA = elementContains(markedB.element, markedA.element);
-      
+
       // Check overlap ratio
       const overlapRatio = getOverlapRatio(rectA, rectB);
-      
+
       // If significant overlap (>70%) or one contains the other, keep the larger one
       if (overlapRatio > 0.7 || aContainsB || bContainsA) {
         if (areaA >= areaB) {
           toRemove.add(labelB);
-          console.log('[Iframe Annotator] Deduping:', labelB, 'covered by', labelA, 
-            `(overlap: ${(overlapRatio * 100).toFixed(0)}%, contains: ${aContainsB})`);
+          console.log(
+            '[Iframe Annotator] Deduping:',
+            labelB,
+            'covered by',
+            labelA,
+            `(overlap: ${(overlapRatio * 100).toFixed(0)}%, contains: ${aContainsB})`
+          );
         } else {
           toRemove.add(labelA);
-          console.log('[Iframe Annotator] Deduping:', labelA, 'covered by', labelB,
-            `(overlap: ${(overlapRatio * 100).toFixed(0)}%, contains: ${bContainsA})`);
+          console.log(
+            '[Iframe Annotator] Deduping:',
+            labelA,
+            'covered by',
+            labelB,
+            `(overlap: ${(overlapRatio * 100).toFixed(0)}%, contains: ${bContainsA})`
+          );
           break; // A is removed, no need to compare it further
         }
       }
     }
   }
-  
+
   // Remove the duplicates from webmarker visuals and return filtered result
   const result: Record<string, MarkedElement> = {};
   for (const [label, marked] of entries) {
@@ -925,15 +1037,21 @@ function dedupeMarkedElements(markedElements: Record<string, MarkedElement>): Re
       result[label] = marked;
     }
   }
-  
-  console.log('[Iframe Annotator] Deduped from', entries.length, 'to', Object.keys(result).length, 'elements');
+
+  console.log(
+    '[Iframe Annotator] Deduped from',
+    entries.length,
+    'to',
+    Object.keys(result).length,
+    'elements'
+  );
   return result;
 }
 
 // Get selectors of already annotated elements
 function getAnnotatedSelectors(): Set<string> {
   const selectors = new Set<string>();
-  elementAnnotationVisuals.forEach(data => {
+  elementAnnotationVisuals.forEach((data) => {
     selectors.add(data.selector);
   });
   return selectors;
@@ -948,13 +1066,14 @@ function enableMarks(container: HTMLElement) {
   console.log('[Iframe Annotator] Enabling webmarker detection');
 
   // Custom selector that includes images and links (with href or data-original-href from MHTML capture)
-  const selector = 'a[href], a[data-original-href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [tabindex]:not([tabindex="-1"]), img';
-  
+  const selector =
+    'a[href], a[data-original-href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [tabindex]:not([tabindex="-1"]), img';
+
   // Get already annotated element selectors to filter them out
   const annotatedSelectors = getAnnotatedSelectors();
-  
+
   // Custom styling for marks
-  let rawMarkedElements = mark({
+  const rawMarkedElements = mark({
     containerElement: container,
     selector,
     showBoundingBoxes: true,
@@ -980,14 +1099,15 @@ function enableMarks(container: HTMLElement) {
   // Filter out already annotated elements
   const filteredMarkedElements: Record<string, MarkedElement> = {};
   for (const [label, marked] of Object.entries(rawMarkedElements)) {
-    const elementSelector = getUniqueSelector(marked.element);
+    const markedEl = marked as MarkedElement;
+    const elementSelector = getUniqueSelector(markedEl.element);
     if (annotatedSelectors.has(elementSelector)) {
       // Remove the mark visual since this element is already annotated
-      marked.markElement.remove();
-      marked.boundingBoxElement?.remove();
+      markedEl.markElement.remove();
+      markedEl.boundingBoxElement?.remove();
       console.log('[Iframe Annotator] Skipping already annotated element:', elementSelector);
     } else {
-      filteredMarkedElements[label] = marked;
+      filteredMarkedElements[label] = markedEl;
     }
   }
 
@@ -1018,37 +1138,46 @@ function enableMarks(container: HTMLElement) {
   // Add click handlers to marks for naming
   // Note: pointer-events and cursor are handled by CSS (.webmarker, .webmarker-bounding-box)
   Object.entries(currentMarkedElements).forEach(([label, markedEl]) => {
-    markedEl.markElement.addEventListener('click', (e) => {
+    markedEl.markElement.addEventListener('click', (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
       console.log('[Iframe Annotator] Mark clicked:', label);
 
       // Notify parent that a mark was clicked
-      window.parent.postMessage({
-        type: 'MARK_CLICKED',
-        payload: { label }
-      }, '*');
+      window.parent.postMessage(
+        {
+          type: 'MARK_CLICKED',
+          payload: { label },
+        },
+        '*'
+      );
     });
 
     // Also add click handler to bounding box
     if (markedEl.boundingBoxElement) {
-      markedEl.boundingBoxElement.addEventListener('click', (e) => {
+      markedEl.boundingBoxElement.addEventListener('click', (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
         console.log('[Iframe Annotator] Mark bounding box clicked:', label);
 
-        window.parent.postMessage({
-          type: 'MARK_CLICKED',
-          payload: { label }
-        }, '*');
+        window.parent.postMessage(
+          {
+            type: 'MARK_CLICKED',
+            payload: { label },
+          },
+          '*'
+        );
       });
     }
   });
 
-  window.parent.postMessage({
-    type: 'MARKS_DETECTED',
-    payload: { marks: marksData }
-  }, '*');
+  window.parent.postMessage(
+    {
+      type: 'MARKS_DETECTED',
+      payload: { marks: marksData },
+    },
+    '*'
+  );
 }
 
 // Disable webmarker detection
@@ -1060,10 +1189,13 @@ function disableMarks() {
   marksEnabled = false;
   currentMarkedElements = {};
 
-  window.parent.postMessage({
-    type: 'MARKS_CLEARED',
-    payload: {}
-  }, '*');
+  window.parent.postMessage(
+    {
+      type: 'MARKS_CLEARED',
+      payload: {},
+    },
+    '*'
+  );
 }
 
 // Highlight a specific mark
@@ -1072,9 +1204,11 @@ function highlightMark(label: string) {
   if (!markedEl) return;
 
   // Remove previous highlights
-  document.querySelectorAll('.webmarker-highlighted, .webmarker-bounding-box-highlighted').forEach(el => {
-    el.classList.remove('webmarker-highlighted', 'webmarker-bounding-box-highlighted');
-  });
+  document
+    .querySelectorAll('.webmarker-highlighted, .webmarker-bounding-box-highlighted')
+    .forEach((el) => {
+      el.classList.remove('webmarker-highlighted', 'webmarker-bounding-box-highlighted');
+    });
 
   // Add highlight to this mark
   markedEl.markElement.classList.add('webmarker-highlighted');
@@ -1129,7 +1263,12 @@ function removeMark(label: string) {
 
 // Convert a mark to an annotation visual
 // Removes webmarker elements and creates fresh ones using the unified createElementAnnotationVisual
-function convertMarkToAnnotation(label: string, annotationId: string, annotationType: 'relevant' | 'answer', index?: number) {
+function convertMarkToAnnotation(
+  label: string,
+  annotationId: string,
+  annotationType: 'relevant' | 'answer',
+  index?: number
+) {
   const markedEl = currentMarkedElements[label];
   if (!markedEl) return;
 
@@ -1151,11 +1290,23 @@ function convertMarkToAnnotation(label: string, annotationId: string, annotation
   // Create fresh annotation visual using the unified function
   createElementAnnotationVisual(annotationId, selector, annotationType, annotationNumber);
 
-  console.log('[Iframe Annotator] Converted mark to annotation:', label, '->', annotationId, 'index:', annotationNumber);
+  console.log(
+    '[Iframe Annotator] Converted mark to annotation:',
+    label,
+    '->',
+    annotationId,
+    'index:',
+    annotationNumber
+  );
 }
 
 // Create element annotation visual from a CSS selector (for reloading saved annotations)
-function createElementAnnotationVisual(annotationId: string, selector: string, annotationType: 'relevant' | 'answer', index: number) {
+function createElementAnnotationVisual(
+  annotationId: string,
+  selector: string,
+  annotationType: 'relevant' | 'answer',
+  index: number
+) {
   // Try to find the element
   let element: Element | null = null;
   try {
@@ -1185,10 +1336,13 @@ function createElementAnnotationVisual(annotationId: string, selector: string, a
   box.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    window.parent.postMessage({
-      type: 'ANNOTATION_CLICKED',
-      payload: { annotationId }
-    }, '*');
+    window.parent.postMessage(
+      {
+        type: 'ANNOTATION_CLICKED',
+        payload: { annotationId },
+      },
+      '*'
+    );
   };
   document.body.appendChild(box);
 
@@ -1207,10 +1361,13 @@ function createElementAnnotationVisual(annotationId: string, selector: string, a
   badge.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    window.parent.postMessage({
-      type: 'ANNOTATION_CLICKED',
-      payload: { annotationId }
-    }, '*');
+    window.parent.postMessage(
+      {
+        type: 'ANNOTATION_CLICKED',
+        payload: { annotationId },
+      },
+      '*'
+    );
   };
   document.body.appendChild(badge);
 
@@ -1247,10 +1404,15 @@ function createElementAnnotationVisual(annotationId: string, selector: string, a
     index,
     box,
     badge,
-    cleanup: () => cleanupFns.forEach(fn => fn()),
+    cleanup: () => cleanupFns.forEach((fn) => fn()),
   });
 
-  console.log('[Iframe Annotator] Created element annotation visual:', annotationId, 'at', selector);
+  console.log(
+    '[Iframe Annotator] Created element annotation visual:',
+    annotationId,
+    'at',
+    selector
+  );
 }
 
 // Remove element annotation visual
@@ -1299,7 +1461,7 @@ async function handleMessage(event: MessageEvent) {
         const images = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
         if (images.length > 0) {
           // Create promises for all image loads
-          const imageLoadPromises = images.map(img => {
+          const imageLoadPromises = images.map((img) => {
             if (img.complete) {
               return Promise.resolve();
             }
@@ -1363,7 +1525,7 @@ async function handleMessage(event: MessageEvent) {
           annotationIndex = annotations.length;
 
           // Store annotation text for scroll functionality
-          annotations.forEach(ann => {
+          annotations.forEach((ann) => {
             if (ann.id && ann.target?.selector?.[0]?.quote) {
               annotationText.set(ann.id, ann.target.selector[0].quote);
             }
@@ -1381,9 +1543,18 @@ async function handleMessage(event: MessageEvent) {
             annotations.forEach((ann, idx) => {
               if (ann.id) {
                 // Extract type from bodies (Recogito v3 format)
-                const typeBody = ann.bodies?.find(b => b.value === 'relevant' || b.value === 'answer');
+                const typeBody = ann.bodies?.find(
+                  (b) => b.value === 'relevant' || b.value === 'answer'
+                );
                 const tool = typeBody?.value || 'relevant';
-                console.log('[Iframe Annotator] Applying style to', ann.id, 'tool:', tool, 'index:', idx + 1);
+                console.log(
+                  '[Iframe Annotator] Applying style to',
+                  ann.id,
+                  'tool:',
+                  tool,
+                  'index:',
+                  idx + 1
+                );
                 applyAnnotationStyle(ann.id, tool, idx + 1);
               }
             });
@@ -1438,7 +1609,7 @@ async function handleMessage(event: MessageEvent) {
 
         // Also manually remove DOM elements as fallback
         const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
-        elements.forEach(el => {
+        elements.forEach((el) => {
           // Unwrap the highlight span - move children out and remove the span
           const parent = el.parentNode;
           if (parent) {
@@ -1449,7 +1620,12 @@ async function handleMessage(event: MessageEvent) {
           }
         });
         if (elements.length > 0) {
-          console.log('[Iframe Annotator] Manually removed', elements.length, 'DOM elements for:', annotationId);
+          console.log(
+            '[Iframe Annotator] Manually removed',
+            elements.length,
+            'DOM elements for:',
+            annotationId
+          );
         }
 
         // Remove element annotation visuals (bounding box and badge)
@@ -1470,12 +1646,15 @@ async function handleMessage(event: MessageEvent) {
         type?: string;
       }>;
       console.log('[Iframe Annotator] LOAD_REGION_ANNOTATIONS received:', regionAnnotations);
-      console.log('[Iframe Annotator] Available image annotators:', Array.from(imageAnnotators.keys()));
+      console.log(
+        '[Iframe Annotator] Available image annotators:',
+        Array.from(imageAnnotators.keys())
+      );
 
       if (regionAnnotations?.length) {
         regionAnnotationIndex = regionAnnotations.length;
 
-        regionAnnotations.forEach(ann => {
+        regionAnnotations.forEach((ann) => {
           const imageAnnotator = imageAnnotators.get(ann.imageId);
           if (!imageAnnotator) {
             console.warn('[Iframe Annotator] No image annotator found for:', ann.imageId);
@@ -1486,11 +1665,13 @@ async function handleMessage(event: MessageEvent) {
               // Create annotation in Annotorious native format (RECTANGLE)
               const annotoriousAnnotation = {
                 id: ann.id,
-                bodies: [{
-                  type: 'TextualBody',
-                  purpose: 'tagging',
-                  value: ann.type || 'relevant',
-                }],
+                bodies: [
+                  {
+                    type: 'TextualBody',
+                    purpose: 'tagging',
+                    value: ann.type || 'relevant',
+                  },
+                ],
                 target: {
                   annotation: ann.id,
                   selector: {
@@ -1510,7 +1691,10 @@ async function handleMessage(event: MessageEvent) {
                   },
                 },
               };
-              console.log('[Iframe Annotator] Adding region annotation:', JSON.stringify(annotoriousAnnotation, null, 2));
+              console.log(
+                '[Iframe Annotator] Adding region annotation:',
+                JSON.stringify(annotoriousAnnotation, null, 2)
+              );
               imageAnnotator.addAnnotation(annotoriousAnnotation);
               console.log('[Iframe Annotator] Loaded region annotation:', ann.id);
 
@@ -1529,7 +1713,7 @@ async function handleMessage(event: MessageEvent) {
 
     case 'CLEAR_REGION_ANNOTATIONS':
       // Use setAnnotations([]) instead of clearAnnotations() to avoid triggering delete events
-      imageAnnotators.forEach(ann => {
+      imageAnnotators.forEach((ann) => {
         try {
           ann.setAnnotations([]);
         } catch (e) {
@@ -1540,7 +1724,10 @@ async function handleMessage(event: MessageEvent) {
       break;
 
     case 'REMOVE_REGION_ANNOTATION': {
-      const { annotationId, imageId } = message.payload as { annotationId: string; imageId?: string };
+      const { annotationId, imageId } = message.payload as {
+        annotationId: string;
+        imageId?: string;
+      };
       if (annotationId) {
         if (imageId) {
           // Remove from specific image annotator
@@ -1555,7 +1742,7 @@ async function handleMessage(event: MessageEvent) {
           }
         } else {
           // Try to remove from all image annotators
-          imageAnnotators.forEach(ann => {
+          imageAnnotators.forEach((ann) => {
             try {
               ann.removeAnnotation(annotationId);
             } catch (e) {
@@ -1619,10 +1806,13 @@ async function handleMessage(event: MessageEvent) {
     }
 
     case 'GET_MARKS_STATUS':
-      window.parent.postMessage({
-        type: 'MARKS_STATUS',
-        payload: { enabled: marksEnabled, count: Object.keys(currentMarkedElements).length }
-      }, '*');
+      window.parent.postMessage(
+        {
+          type: 'MARKS_STATUS',
+          payload: { enabled: marksEnabled, count: Object.keys(currentMarkedElements).length },
+        },
+        '*'
+      );
       break;
 
     case 'SET_ANNOTATION_INDEX': {
@@ -1640,7 +1830,7 @@ async function handleMessage(event: MessageEvent) {
         index: number;
       }>;
       console.log('[Iframe Annotator] Loading element annotations:', elementAnnotations);
-      
+
       for (const ann of elementAnnotations) {
         createElementAnnotationVisual(ann.id, ann.selector, ann.type, ann.index);
       }
@@ -1653,12 +1843,13 @@ async function handleMessage(event: MessageEvent) {
 console.log('[Iframe Annotator] Script loaded, waiting for messages...');
 window.addEventListener('message', handleMessage);
 
-
 // Forward keyboard shortcuts to parent when iframe has focus
 document.addEventListener('keydown', (e) => {
   // Don't intercept if user is typing in an input
-  if ((e.target as HTMLElement).tagName === 'INPUT' ||
-      (e.target as HTMLElement).tagName === 'TEXTAREA') {
+  if (
+    (e.target as HTMLElement).tagName === 'INPUT' ||
+    (e.target as HTMLElement).tagName === 'TEXTAREA'
+  ) {
     return;
   }
 

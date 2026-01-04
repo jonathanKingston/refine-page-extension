@@ -42,14 +42,17 @@ async function ensureOffscreenDocument(): Promise<void> {
   try {
     await creatingOffscreen;
     // Small delay to allow the offscreen document's script to register its message listener
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   } finally {
     creatingOffscreen = null;
   }
 }
 
 // Capture page using Chrome's MHTML API and convert to HTML via offscreen document
-async function capturePageAsMhtml(tabId: number, pageUrl: string): Promise<{ html: string; title: string }> {
+async function capturePageAsMhtml(
+  tabId: number,
+  pageUrl: string
+): Promise<{ html: string; title: string }> {
   console.log('refine.page: Capturing page as MHTML for tab', tabId);
   const startTime = Date.now();
 
@@ -83,7 +86,9 @@ async function capturePageAsMhtml(tabId: number, pageUrl: string): Promise<{ htm
   }
 
   const duration = Date.now() - startTime;
-  console.log(`refine.page: Capture complete in ${duration}ms, HTML size: ${(response.payload.html.length / 1024).toFixed(1)}KB`);
+  console.log(
+    `refine.page: Capture complete in ${duration}ms, HTML size: ${(response.payload.html.length / 1024).toFixed(1)}KB`
+  );
 
   return { html: response.payload.html, title: response.payload.title };
 }
@@ -133,8 +138,8 @@ async function getAllSnapshots(): Promise<Snapshot[]> {
     }
   }
 
-  return snapshots.sort((a, b) =>
-    new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()
+  return snapshots.sort(
+    (a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()
   );
 }
 
@@ -164,8 +169,8 @@ async function getAllSnapshotSummaries(): Promise<SnapshotSummary[]> {
     }
   }
 
-  return summaries.sort((a, b) =>
-    new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()
+  return summaries.sort(
+    (a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()
   );
 }
 
@@ -180,7 +185,10 @@ async function deleteSnapshot(id: string): Promise<void> {
   await chrome.storage.local.set({ snapshotIndex: newIndex });
 }
 
-async function updateSnapshot(id: string, updates: Partial<Snapshot>): Promise<Snapshot | undefined> {
+async function updateSnapshot(
+  id: string,
+  updates: Partial<Snapshot>
+): Promise<Snapshot | undefined> {
   const existing = await getSnapshot(id);
   if (!existing) return undefined;
 
@@ -269,10 +277,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'IMPORT_DATA':
         return importData(message.payload.data);
 
-      case 'OPEN_VIEWER':
+      case 'OPEN_VIEWER': {
         const viewerUrl = chrome.runtime.getURL(`viewer.html?id=${message.payload.snapshotId}`);
         await chrome.tabs.create({ url: viewerUrl });
         return { success: true };
+      }
 
       case 'CAPTURE_PAGE': {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -282,9 +291,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         // Check if the tab URL is capturable (not chrome://, chrome-extension://, etc.)
         const url = tab.url;
-        if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') ||
-            url.startsWith('edge://') || url.startsWith('about:') ||
-            url.startsWith('devtools://')) {
+        if (
+          url.startsWith('chrome://') ||
+          url.startsWith('chrome-extension://') ||
+          url.startsWith('edge://') ||
+          url.startsWith('about:') ||
+          url.startsWith('devtools://')
+        ) {
           throw new Error('Cannot capture browser internal pages');
         }
 
@@ -301,7 +314,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               target: { tabId: tab.id },
               files: ['content.js'],
             });
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
             const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_METADATA' });
             metadata = response.payload;
           }
@@ -327,12 +340,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Save the snapshot
           await saveSnapshot(snapshot);
 
-          console.log(`refine.page: Snapshot saved, id: ${snapshot.id}, size: ${(html.length / 1024).toFixed(1)}KB`);
+          console.log(
+            `refine.page: Snapshot saved, id: ${snapshot.id}, size: ${(html.length / 1024).toFixed(1)}KB`
+          );
 
           return { type: 'CAPTURE_COMPLETE', payload: { snapshotId: snapshot.id } };
         } catch (error) {
           console.error('refine.page: Capture error:', error);
-          return { type: 'CAPTURE_ERROR', payload: { error: (error as Error).message || 'Unknown error' } };
+          return {
+            type: 'CAPTURE_ERROR',
+            payload: { error: (error as Error).message || 'Unknown error' },
+          };
         }
       }
 
@@ -343,8 +361,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   };
 
   // Check if this is a message type we handle
-  const knownTypes = ['GET_ALL_SNAPSHOTS', 'GET_SNAPSHOT', 'SAVE_SNAPSHOT', 'UPDATE_SNAPSHOT',
-                      'DELETE_SNAPSHOT', 'EXPORT_DATA', 'IMPORT_DATA', 'OPEN_VIEWER', 'CAPTURE_PAGE'];
+  const knownTypes = [
+    'GET_ALL_SNAPSHOTS',
+    'GET_SNAPSHOT',
+    'SAVE_SNAPSHOT',
+    'UPDATE_SNAPSHOT',
+    'DELETE_SNAPSHOT',
+    'EXPORT_DATA',
+    'IMPORT_DATA',
+    'OPEN_VIEWER',
+    'CAPTURE_PAGE',
+  ];
   if (!knownTypes.includes(message.type)) {
     return false; // Let other listeners handle it
   }

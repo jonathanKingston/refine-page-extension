@@ -1,12 +1,14 @@
 import * as esbuild from 'esbuild';
 import { copyFileSync, mkdirSync, cpSync, existsSync, rmSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const srcDir = join(rootDir, 'src');
 const distDir = join(rootDir, 'dist');
+const require = createRequire(import.meta.url);
 
 const isWatch = process.argv.includes('--watch');
 
@@ -42,7 +44,86 @@ const commonOptions = {
 const inlineCssPlugin = {
   name: 'inline-css',
   setup(build) {
+    // Resolve CSS imports from node_modules
+    build.onResolve({ filter: /\.css$/ }, (args) => {
+      if (args.kind === 'import-statement') {
+        try {
+          // Try to resolve the CSS file using Node's require.resolve
+          const resolvePaths = [];
+          if (args.importer) {
+            resolvePaths.push(dirname(args.importer));
+          }
+          resolvePaths.push(rootDir);
+          
+          const resolvedPath = require.resolve(args.path, { paths: resolvePaths });
+          if (existsSync(resolvedPath)) {
+            return {
+              path: resolvedPath,
+              namespace: 'css',
+            };
+          }
+        } catch (e) {
+          // If resolution fails, try manual resolution
+          // First try: resolve from rootDir node_modules
+          let resolvedPath = resolve(rootDir, 'node_modules', args.path);
+          if (existsSync(resolvedPath)) {
+            return {
+              path: resolvedPath,
+              namespace: 'css',
+            };
+          }
+          
+          // Second try: if dist path doesn't exist, try src path (for packages without built files)
+          if (args.path.includes('/dist/')) {
+            const srcPath = args.path.replace('/dist/', '/src/').replace('text-annotator.css', 'TextAnnotator.css');
+            resolvedPath = resolve(rootDir, 'node_modules', srcPath);
+            if (existsSync(resolvedPath)) {
+              return {
+                path: resolvedPath,
+                namespace: 'css',
+              };
+            }
+          }
+          
+          // Third try: resolve relative to importer
+          if (args.importer) {
+            resolvedPath = resolve(dirname(args.importer), args.path);
+            if (existsSync(resolvedPath)) {
+              return {
+                path: resolvedPath,
+                namespace: 'css',
+              };
+            }
+          }
+        }
+      }
+      return null;
+    });
+
+    // Load and inline CSS files
+    build.onLoad({ filter: /.*/, namespace: 'css' }, async (args) => {
+      const css = readFileSync(args.path, 'utf8');
+      // Escape backticks and backslashes for template literal
+      const escaped = css.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+      return {
+        contents: `
+          (function() {
+            if (typeof document !== 'undefined') {
+              const style = document.createElement('style');
+              style.textContent = \`${escaped}\`;
+              document.head.appendChild(style);
+            }
+          })();
+        `,
+        loader: 'js',
+      };
+    });
+
+    // Also handle CSS files that are already resolved (fallback)
     build.onLoad({ filter: /\.css$/ }, async (args) => {
+      if (!existsSync(args.path)) {
+        return null;
+      }
       const css = readFileSync(args.path, 'utf8');
       // Escape backticks and backslashes for template literal
       const escaped = css.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
