@@ -131,7 +131,7 @@ function copyStaticFiles() {
   manifest.web_accessible_resources[0].resources = [
     'viewer.html', 'viewer.js', 'viewer.css',
     'snapshot.html', 'snapshot.js',
-    'iframe.html', 'iframe-annotator.js'
+    'iframe.html', 'iframe-annotator.js', 'annotator.css'
   ];
 
   writeFileSync(join(distDir, 'manifest.json'), JSON.stringify(manifest, null, 2));

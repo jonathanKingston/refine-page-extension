@@ -60,11 +60,6 @@ interface ElementAnnotationData {
 }
 const elementAnnotationVisuals: Map<string, ElementAnnotationData> = new Map();
 
-// Color mapping for annotation types (matching theme colors)
-const ANNOTATION_COLORS: Record<string, string> = {
-  relevant: 'rgba(6, 182, 212, 0.4)',   // cyan (matches theme relevant)
-  answer: 'rgba(236, 72, 153, 0.4)',    // pink (matches theme answer)
-};
 
 // Block-level elements that should have space/newline between them
 const BLOCK_ELEMENTS = new Set([
@@ -158,52 +153,64 @@ function serializeAnnotation(annotation: unknown): unknown {
 // Apply custom styling to annotations based on tool type
 function applyAnnotationStyle(annotationId: string, tool: string, index?: number) {
   // Store metadata for re-applying after Recogito re-renders
+  // This ensures the MutationObserver can pick up elements when they appear
   if (index !== undefined) {
     annotationMeta.set(annotationId, { tool, index });
   }
 
-  // Find the annotation elements and apply color
-  const color = ANNOTATION_COLORS[tool] || ANNOTATION_COLORS.relevant;
-  const borderColor = tool === 'answer' ? 'rgb(236, 72, 153)' : 'rgb(6, 182, 212)';
   // Recogito uses data attributes on highlight spans
   const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
+  
+  // If no elements found, try alternative selector or let MutationObserver handle it
+  if (elements.length === 0) {
+    const altElements = document.querySelectorAll(`.r6o-annotation[data-annotation="${annotationId}"]`);
+    if (altElements.length === 0) {
+      // Elements not yet rendered - MutationObserver will catch them when they appear
+      return;
+    }
+    // Use alternative elements if found
+    altElements.forEach((el, i) => {
+      const htmlEl = el as HTMLElement;
+      applyStylesToElement(htmlEl, el, tool, i === 0 ? index : undefined);
+    });
+    return;
+  }
+  
+  // Note: Highlight layer and parent container styles are handled by CSS (annotator.css)
+  
   elements.forEach((el, i) => {
     const htmlEl = el as HTMLElement;
-    // Apply inline styles with highest priority
-    htmlEl.style.setProperty('background-color', color, 'important');
-    htmlEl.style.setProperty('background', color, 'important');
-    htmlEl.style.setProperty('border-bottom', `2px solid ${borderColor}`, 'important');
-    htmlEl.style.setProperty('opacity', '1', 'important');
-    htmlEl.style.setProperty('visibility', 'visible', 'important');
-    el.classList.add(`annotation-${tool}`);
-    // Add number badge to first element only
-    if (i === 0 && index !== undefined) {
-      el.setAttribute('data-annotation-index', String(index));
-      el.classList.add('has-index');
-    }
+    applyStylesToElement(htmlEl, el, tool, i === 0 ? index : undefined);
   });
 }
 
+// Helper function to apply styles to a single element
+function applyStylesToElement(htmlEl: HTMLElement, el: Element, tool: string, index?: number, skipLog = false) {
+  // Check if class is already applied to avoid unnecessary updates
+  if (el.classList.contains(`annotation-${tool}`) && !skipLog) {
+    return; // Skip if already styled correctly
+  }
+  
+  // Add class for CSS styling - CSS handles all the styling with !important rules
+    el.classList.add(`annotation-${tool}`);
+    // Add number badge to first element only
+  if (index !== undefined) {
+      el.setAttribute('data-annotation-index', String(index));
+      el.classList.add('has-index');
+    }
+}
+
 // Re-apply all annotation styles (called by MutationObserver)
-function reapplyAllStyles() {
+function reapplyAllStyles(skipLog = false) {
+  // Note: Container and highlight layer styles are handled by CSS (annotator.css)
+  // which is loaded as an inline style tag with !important rules
+
   annotationMeta.forEach((meta, annotationId) => {
     const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
     if (elements.length > 0) {
-      const color = ANNOTATION_COLORS[meta.tool] || ANNOTATION_COLORS.relevant;
-      const borderColor = meta.tool === 'answer' ? 'rgb(236, 72, 153)' : 'rgb(6, 182, 212)';
       elements.forEach((el, i) => {
         const htmlEl = el as HTMLElement;
-        // Always re-apply inline styles to override any page CSS
-        htmlEl.style.setProperty('background-color', color, 'important');
-        htmlEl.style.setProperty('background', color, 'important');
-        htmlEl.style.setProperty('border-bottom', `2px solid ${borderColor}`, 'important');
-        htmlEl.style.setProperty('opacity', '1', 'important');
-        htmlEl.style.setProperty('visibility', 'visible', 'important');
-        el.classList.add(`annotation-${meta.tool}`);
-        if (i === 0) {
-          el.setAttribute('data-annotation-index', String(meta.index));
-          el.classList.add('has-index');
-        }
+        applyStylesToElement(htmlEl, el, meta.tool, i === 0 ? meta.index : undefined, skipLog);
       });
     }
   });
@@ -245,7 +252,7 @@ function applyRegionAnnotationStyle(annotationId: string, tool: string) {
 let styleObserver: MutationObserver | null = null;
 
 // Initialize annotator on the content
-function initializeAnnotator(container: HTMLElement) {
+async function initializeAnnotator(container: HTMLElement) {
   console.log('[Iframe Annotator] Initializing annotator on container');
 
   // Destroy existing annotator if any
@@ -265,8 +272,11 @@ function initializeAnnotator(container: HTMLElement) {
   // Clear old metadata
   annotationMeta.clear();
 
-  // Add custom styles for annotation colors
-  injectAnnotationStyles();
+  // Add custom styles for annotation colors - await to ensure it's loaded
+  // This ensures CSS is available before any annotations are created
+  await injectAnnotationStyles().catch(err => {
+    console.error('[Iframe Annotator] Error injecting styles:', err);
+  });
 
   // Don't use style function - it would apply currentTool color to ALL annotations
   // Instead we apply colors per-annotation via applyAnnotationStyle
@@ -275,18 +285,35 @@ function initializeAnnotator(container: HTMLElement) {
   });
 
   // Set up MutationObserver to re-apply styles when Recogito modifies DOM
-  styleObserver = new MutationObserver(() => {
-    // Debounce re-application
-    requestAnimationFrame(() => {
-      reapplyAllStyles();
+  let reapplyTimeout: number | null = null;
+  styleObserver = new MutationObserver((mutations) => {
+    // Only react to mutations that aren't from our own style changes
+    const hasNonStyleMutation = mutations.some(m => {
+      if (m.type === 'attributes' && m.attributeName === 'style') {
+        // Check if this is from Recogito, not from us
+        const target = m.target as HTMLElement;
+        return !target.hasAttribute('data-annotation') || !target.classList.contains('annotation-relevant') && !target.classList.contains('annotation-answer');
+      }
+      return m.type !== 'attributes' || m.attributeName !== 'style';
     });
+    
+    if (hasNonStyleMutation) {
+      // Debounce re-application with longer delay to avoid loops
+      if (reapplyTimeout) {
+        clearTimeout(reapplyTimeout);
+      }
+      reapplyTimeout = window.setTimeout(() => {
+        reapplyAllStyles(true); // Pass skipLog=true to reduce noise
+        reapplyTimeout = null;
+      }, 100);
+    }
   });
 
   styleObserver.observe(container, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['class', 'style']
+    attributeFilter: ['class']
   });
 
   if (currentTool !== 'select') {
@@ -695,8 +722,11 @@ function findTextInDocument(searchText: string): { node: Node; offset: number } 
 }
 
 // Inject custom styles for annotation colors
-function injectAnnotationStyles() {
-  if (document.getElementById('pl-annotation-styles')) return;
+async function injectAnnotationStyles() {
+  if (document.getElementById('pl-annotation-styles')) {
+    console.log('[Iframe Annotator] Styles already injected');
+    return;
+  }
 
   // Get URL for extension resource (available in extension-owned iframes)
   if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.getURL) {
@@ -705,6 +735,30 @@ function injectAnnotationStyles() {
   }
 
   const cssUrl = chrome.runtime.getURL('annotator.css');
+  console.log('[Iframe Annotator] Injecting styles from:', cssUrl);
+  
+  // Try to fetch and inject CSS as inline style to avoid CSP blocking
+  // Some sites block external stylesheets even from extension resources
+  try {
+    const response = await fetch(cssUrl);
+    if (response.ok) {
+      const cssText = await response.text();
+      console.log('[Iframe Annotator] CSS fetched, length:', cssText.length);
+  const style = document.createElement('style');
+  style.id = 'pl-annotation-styles';
+      style.textContent = cssText;
+      document.head.appendChild(style);
+      console.log('[Iframe Annotator] CSS injected as inline style');
+      return;
+    } else {
+      console.warn('[Iframe Annotator] CSS fetch failed with status:', response.status);
+    }
+  } catch (error) {
+    console.warn('[Iframe Annotator] CSS fetch error:', error);
+    // Fallback to link tag if fetch fails
+  }
+
+  // Fallback to link tag if fetch fails (shouldn't happen in extension context)
   const link = document.createElement('link');
   link.id = 'pl-annotation-styles';
   link.rel = 'stylesheet';
@@ -962,10 +1016,8 @@ function enableMarks(container: HTMLElement) {
   console.log('[Iframe Annotator] Detected', marksData.length, 'interactive elements');
 
   // Add click handlers to marks for naming
+  // Note: pointer-events and cursor are handled by CSS (.webmarker, .webmarker-bounding-box)
   Object.entries(currentMarkedElements).forEach(([label, markedEl]) => {
-    markedEl.markElement.style.pointerEvents = 'auto';
-    markedEl.markElement.style.cursor = 'pointer';
-
     markedEl.markElement.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -980,9 +1032,6 @@ function enableMarks(container: HTMLElement) {
 
     // Also add click handler to bounding box
     if (markedEl.boundingBoxElement) {
-      markedEl.boundingBoxElement.style.pointerEvents = 'auto';
-      markedEl.boundingBoxElement.style.cursor = 'pointer';
-
       markedEl.boundingBoxElement.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1124,14 +1173,15 @@ function createElementAnnotationVisual(annotationId: string, selector: string, a
   const box = document.createElement('div');
   box.className = `element-annotation element-annotation-${annotationType}`;
   box.setAttribute('data-annotation-id', annotationId);
-  Object.assign(box.style, {
-    position: 'absolute',
-    outline: `2px solid ${annotationType === 'answer' ? 'rgb(236, 72, 153)' : 'rgb(6, 182, 212)'}`,
-    backgroundColor: annotationType === 'answer' ? 'rgba(236, 72, 153, 0.15)' : 'rgba(6, 182, 212, 0.15)',
-    pointerEvents: 'auto',
-    cursor: 'pointer',
-    zIndex: '999999998',
-  });
+  // Only set positioning-related inline styles - let CSS handle colors/outline
+  // This ensures CSS !important rules can apply properly
+  box.style.position = 'absolute';
+  box.style.display = 'block';
+  box.style.pointerEvents = 'auto';
+  box.style.cursor = 'pointer';
+  box.style.zIndex = '2147483646'; // Match text annotation z-index
+  box.style.visibility = 'visible';
+  box.style.opacity = '1';
   box.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1147,22 +1197,13 @@ function createElementAnnotationVisual(annotationId: string, selector: string, a
   badge.className = `element-annotation-badge element-annotation-badge-${annotationType}`;
   badge.setAttribute('data-annotation-id', annotationId);
   badge.textContent = String(index);
-  Object.assign(badge.style, {
-    position: 'absolute',
-    minWidth: '20px',
-    padding: '3px 6px',
-    fontSize: '11px',
-    fontWeight: 'bold',
-    borderRadius: '4px',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-    pointerEvents: 'auto',
-    cursor: 'pointer',
-    textAlign: 'center',
-    zIndex: '999999999',
-    backgroundColor: annotationType === 'answer' ? 'rgb(219, 39, 119)' : 'rgb(8, 145, 178)',
-    color: 'white',
-  });
+  // Only set positioning-related inline styles - let CSS handle colors/styling
+  // This ensures CSS !important rules can apply properly
+  badge.style.position = 'absolute';
+  badge.style.display = 'block';
+  badge.style.zIndex = '2147483647'; // Maximum z-index to be above everything
+  badge.style.visibility = 'visible';
+  badge.style.opacity = '1';
   badge.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1177,6 +1218,7 @@ function createElementAnnotationVisual(annotationId: string, selector: string, a
   const cleanupFns: (() => void)[] = [];
 
   // Position the bounding box to cover the element (same as webmarker)
+  // Use Floating UI's autoUpdate for smooth, efficient positioning
   function updateBoxPosition() {
     computePosition(element!, box, { placement: 'top-start' }).then(({ x, y }) => {
       const { width, height } = element!.getBoundingClientRect();
@@ -1223,7 +1265,7 @@ function removeElementAnnotationVisual(annotationId: string) {
 }
 
 // Handle messages from parent
-function handleMessage(event: MessageEvent) {
+async function handleMessage(event: MessageEvent) {
   const message = event.data as AnnotatorMessage;
   if (!message?.type) return;
 
@@ -1242,8 +1284,8 @@ function handleMessage(event: MessageEvent) {
         container.innerHTML = html;
         console.log('[Iframe Annotator] HTML content loaded');
 
-        // Initialize annotator on the loaded content
-        initializeAnnotator(container);
+        // Initialize annotator on the loaded content (await to ensure CSS is loaded)
+        await initializeAnnotator(container);
 
         // Initialize image annotators after a brief delay to allow images to load
         // Send ANNOTATOR_READY only after both text and image annotators are ready
