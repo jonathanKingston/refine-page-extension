@@ -1,0 +1,24 @@
+<!--
+  DEV-ONLY: This file should be excluded from production builds.
+  
+  This is a simple redirect to viewer.html which uses the actual extension codebase.
+  For screenshot automation, we navigate directly to viewer.html which will
+  automatically load snapshots from storage.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>refine.page - Demo</title>
+  <script>
+    // Redirect to viewer.html - uses the actual extension codebase
+    window.location.href = chrome.runtime.getURL('viewer.html');
+  </script>
+</head>
+<body>
+  <div style="display: flex; align-items: center; justify-content: center; height: 100vh; font-family: system-ui;">
+    <p>Redirecting to viewer...</p>
+  </div>
+</body>
+</html>
