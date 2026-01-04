@@ -1284,6 +1284,44 @@ async function handleMessage(event: MessageEvent) {
         container.innerHTML = html;
         console.log('[Iframe Annotator] HTML content loaded');
 
+        // Force layout recalculation to ensure body/html expands to fit content
+        // This fixes the issue where the page appears white at the bottom until scrolled
+        const forceLayoutRecalculation = () => {
+          // Force a reflow by reading layout properties
+          void container.offsetHeight;
+          void document.body.offsetHeight;
+          void document.documentElement.offsetHeight;
+          // Trigger a scroll event to force layout recalculation
+          window.scrollTo(0, 0);
+        };
+
+        // Wait for images to load, then force layout recalculation
+        const images = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
+        if (images.length > 0) {
+          // Create promises for all image loads
+          const imageLoadPromises = images.map(img => {
+            if (img.complete) {
+              return Promise.resolve();
+            }
+            return new Promise<void>((resolve) => {
+              img.addEventListener('load', () => resolve(), { once: true });
+              img.addEventListener('error', () => resolve(), { once: true });
+            });
+          });
+
+          // Wait for all images, then recalculate layout
+          Promise.all(imageLoadPromises).then(() => {
+            requestAnimationFrame(() => {
+              forceLayoutRecalculation();
+            });
+          });
+        } else {
+          // No images, just force layout recalculation on next frame
+          requestAnimationFrame(() => {
+            forceLayoutRecalculation();
+          });
+        }
+
         // Initialize annotator on the loaded content (await to ensure CSS is loaded)
         await initializeAnnotator(container);
 
