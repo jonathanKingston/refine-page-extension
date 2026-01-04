@@ -166,6 +166,9 @@ function copyStaticFiles() {
   if (existsSync(join(srcDir, 'viewer/viewer.css'))) {
     copyFileSync(join(srcDir, 'viewer/viewer.css'), join(distDir, 'viewer.css'));
   }
+  if (existsSync(join(srcDir, 'iframe/annotator.css'))) {
+    copyFileSync(join(srcDir, 'iframe/annotator.css'), join(distDir, 'annotator.css'));
+  }
 
   // Copy icons
   if (existsSync(join(rootDir, 'icons'))) {

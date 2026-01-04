@@ -12,6 +12,7 @@ import type {
   AnswerCorrectness,
   AnswerInPage,
   PageQuality,
+  ElementMark,
 } from '@/types';
 
 // Import annotation library types (actual annotators are now in iframe)
@@ -47,6 +48,16 @@ let currentTool: 'select' | AnnotationType = 'select';
 let zoomLevel = 100;
 let allSnapshots: SnapshotSummary[] = [];
 let focusMode = false;
+
+// Webmarker state
+let marksEnabled = false;
+let detectedMarks: Array<{
+  label: string;
+  tagName: string;
+  textPreview: string;
+  selector: string;
+  bounds: { x: number; y: number; width: number; height: number };
+}> = [];
 
 // Note: Annotation library instances are now managed in the iframe
 
@@ -124,6 +135,18 @@ async function loadSnapshot(snapshotId: string) {
     if (!snapshot) {
       console.error('Snapshot not found:', snapshotId);
       return;
+    }
+
+    // Reset marks state when loading new snapshot
+    marksEnabled = false;
+    detectedMarks = [];
+    const marksPanel = document.getElementById('marks-panel');
+    if (marksPanel) {
+      marksPanel.classList.add('hidden');
+    }
+    const autoDetectBtn = document.getElementById('auto-detect-btn');
+    if (autoDetectBtn) {
+      autoDetectBtn.classList.remove('active');
     }
 
     currentSnapshot = snapshot;
@@ -310,6 +333,29 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
               }));
               sendToIframe(iframe, 'LOAD_REGION_ANNOTATIONS', regionData);
             }
+            // Load element annotations (text annotations with CSS selectors)
+            const elementAnnotations = questionTextAnnotations.filter(a => a.selector.type === 'css');
+            if (elementAnnotations.length > 0) {
+              // Find their indices in the full list for consistent numbering
+              const allAnnotations = [...questionTextAnnotations, ...questionRegionAnnotations]
+                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+              
+              const elementData = elementAnnotations.map(a => {
+                const index = allAnnotations.findIndex(ann => ann.id === a.id) + 1;
+                return {
+                  id: a.id,
+                  selector: a.selector.value,
+                  type: a.type,
+                  index,
+                };
+              });
+              console.log('Loading element annotations:', elementData);
+              sendToIframe(iframe, 'LOAD_ELEMENT_ANNOTATIONS', elementData);
+            }
+
+            // Set the annotation index to total count for consistent numbering
+            const totalAnnotations = questionTextAnnotations.length + questionRegionAnnotations.length;
+            sendToIframe(iframe, 'SET_ANNOTATION_INDEX', { index: totalAnnotations });
           }
         }
         break;
@@ -324,6 +370,7 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
 
       case 'ANNOTATION_CLICKED': {
         const { annotationId } = message.payload as { annotationId: string };
+        console.log('[Viewer] Annotation clicked:', annotationId);
         if (annotationId) {
           scrollSidebarToAnnotation(annotationId);
         }
@@ -348,6 +395,19 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
 
       case 'REGION_ANNOTATION_DELETED':
         handleRegionAnnotationDeleted(message.payload);
+        break;
+
+      // Webmarker messages
+      case 'MARKS_DETECTED':
+        handleMarksDetected(message.payload as { marks: typeof detectedMarks });
+        break;
+
+      case 'MARKS_CLEARED':
+        handleMarksCleared();
+        break;
+
+      case 'MARK_CLICKED':
+        handleMarkClicked(message.payload as { label: string });
         break;
     }
   };
@@ -425,6 +485,263 @@ function handleRegionAnnotationCreated(payload: { annotation: unknown; tool: str
     highlightNewAnnotation(regionAnnotation.id);
     saveCurrentSnapshot();
     console.log('Region annotation created:', regionAnnotation.id);
+  }
+}
+
+// Handle marks detected from iframe
+function handleMarksDetected(payload: { marks: typeof detectedMarks }) {
+  detectedMarks = payload.marks;
+  marksEnabled = true;
+
+  // Show the marks panel
+  const marksPanel = document.getElementById('marks-panel');
+  if (marksPanel) {
+    marksPanel.classList.remove('hidden');
+  }
+
+  // Update auto-detect button state
+  const autoDetectBtn = document.getElementById('auto-detect-btn');
+  if (autoDetectBtn) {
+    autoDetectBtn.classList.add('active');
+  }
+
+  renderMarksList();
+  console.log('Marks detected:', detectedMarks.length);
+}
+
+// Handle marks cleared from iframe
+function handleMarksCleared() {
+  detectedMarks = [];
+  marksEnabled = false;
+
+  // Hide the marks panel
+  const marksPanel = document.getElementById('marks-panel');
+  if (marksPanel) {
+    marksPanel.classList.add('hidden');
+  }
+
+  // Update auto-detect button state
+  const autoDetectBtn = document.getElementById('auto-detect-btn');
+  if (autoDetectBtn) {
+    autoDetectBtn.classList.remove('active');
+  }
+}
+
+// Handle mark clicked from iframe
+function handleMarkClicked(payload: { label: string }) {
+  const { label } = payload;
+  highlightMarkInList(label);
+}
+
+// Highlight a mark in the list
+function highlightMarkInList(label: string) {
+  const listEl = document.getElementById('marks-list');
+  if (!listEl) return;
+
+  // Remove previous active state
+  listEl.querySelectorAll('.mark-item').forEach(item => {
+    item.classList.remove('active');
+  });
+
+  // Add active state to clicked mark
+  const markItem = listEl.querySelector(`.mark-item[data-label="${label}"]`);
+  if (markItem) {
+    markItem.classList.add('active');
+    markItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+// Delete a detected mark
+function deleteMark(label: string) {
+  // Remove from detected marks
+  detectedMarks = detectedMarks.filter(m => m.label !== label);
+
+  // Update iframe to remove the mark visual
+  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+  if (iframe) {
+    sendToIframe(iframe, 'REMOVE_MARK', { label });
+  }
+
+  renderMarksList();
+
+  // Hide panel if no marks left
+  if (detectedMarks.length === 0) {
+    handleMarksCleared();
+  }
+}
+
+// Elevate a mark to an annotation (keeps visual bounding box with annotation color)
+function elevateMarkToAnnotation(label: string, type?: AnnotationType) {
+  if (!currentSnapshot || !currentQuestionId) {
+    showNotification('Select a question first to add annotations', 'error');
+    return;
+  }
+
+  const mark = detectedMarks.find(m => m.label === label);
+  if (!mark) return;
+
+  // Use provided type, or fall back to current tool, or default to 'relevant'
+  const annotationType: AnnotationType = type || (currentTool === 'answer' ? 'answer' : 'relevant');
+
+  // Create a text annotation with the element's info
+  const textAnnotation: TextAnnotation = {
+    id: generateId(),
+    type: annotationType,
+    startOffset: 0,
+    endOffset: 0,
+    selectedText: `[${mark.tagName}] ${mark.textPreview}`,
+    selector: {
+      type: 'css',
+      value: mark.selector,
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Add to annotations
+  currentSnapshot.annotations.text.push(textAnnotation);
+
+  // Link to current question
+  const question = currentSnapshot.questions.find(q => q.id === currentQuestionId);
+  if (question) {
+    question.annotationIds.push(textAnnotation.id);
+  }
+
+  // Calculate the annotation index (position in current question's annotations)
+  const questionAnnotations = getAnnotationsForCurrentQuestion();
+  const annotationIndex = questionAnnotations.text.length + questionAnnotations.region.length;
+
+  // Convert the mark visual to annotation style (keeps bounding box with new color and number)
+  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+  if (iframe) {
+    sendToIframe(iframe, 'CONVERT_MARK_TO_ANNOTATION', {
+      label,
+      annotationId: textAnnotation.id,
+      annotationType,
+      index: annotationIndex,
+    });
+  }
+
+  // Remove from detected marks list (but visual stays in iframe)
+  detectedMarks = detectedMarks.filter(m => m.label !== label);
+  renderMarksList();
+
+  // Hide panel if no marks left
+  if (detectedMarks.length === 0) {
+    const marksPanel = document.getElementById('marks-panel');
+    if (marksPanel) marksPanel.classList.add('hidden');
+    const autoDetectBtn = document.getElementById('auto-detect-btn');
+    if (autoDetectBtn) autoDetectBtn.classList.remove('active');
+    marksEnabled = false;
+  }
+
+  // Update UI
+  updateAnnotationCounts();
+  renderAnnotationList();
+  saveCurrentSnapshot();
+
+  showNotification(`Element added as ${annotationType}`, 'success');
+}
+
+// Render marks list
+function renderMarksList() {
+  const listEl = document.getElementById('marks-list');
+  const countEl = document.getElementById('marks-count');
+  if (!listEl) return;
+
+  // Update count
+  if (countEl) {
+    countEl.textContent = String(detectedMarks.length);
+  }
+
+  if (detectedMarks.length === 0) {
+    listEl.innerHTML = '<div class="empty-state">Click Auto-detect to find interactive elements</div>';
+    return;
+  }
+
+  listEl.innerHTML = detectedMarks.map(mark => `
+    <div class="mark-item" data-label="${mark.label}">
+      <span class="mark-number">${mark.label}</span>
+      <div class="mark-info">
+        <span class="mark-tag">${mark.tagName}</span>
+        <span class="mark-text">${escapeHtml(mark.textPreview.substring(0, 25))}${mark.textPreview.length > 25 ? '...' : ''}</span>
+      </div>
+      <div class="mark-actions">
+        <button class="mark-action-btn relevant" data-label="${mark.label}" title="Add as Relevant">
+          <span class="action-dot relevant"></span>
+        </button>
+        <button class="mark-action-btn answer" data-label="${mark.label}" title="Add as Answer">
+          <span class="action-dot answer"></span>
+        </button>
+        <button class="mark-action-btn delete" data-label="${mark.label}" title="Delete">×</button>
+      </div>
+    </div>
+  `).join('');
+
+  // Add event handlers for mark items
+  listEl.querySelectorAll('.mark-item').forEach(item => {
+    const label = (item as HTMLElement).dataset.label!;
+
+    // Click on item (but not buttons) to highlight
+    item.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('.mark-action-btn')) return;
+
+      // Highlight in iframe
+      const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+      if (iframe) {
+        sendToIframe(iframe, 'HIGHLIGHT_MARK', { label });
+      }
+
+      // Visual feedback
+      listEl.querySelectorAll('.mark-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+    });
+  });
+
+  // Add event handlers for annotate buttons
+  listEl.querySelectorAll('.mark-action-btn.relevant').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const label = (btn as HTMLElement).dataset.label!;
+      elevateMarkToAnnotation(label, 'relevant');
+    });
+  });
+
+  listEl.querySelectorAll('.mark-action-btn.answer').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const label = (btn as HTMLElement).dataset.label!;
+      elevateMarkToAnnotation(label, 'answer');
+    });
+  });
+
+  listEl.querySelectorAll('.mark-action-btn.delete').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const label = (btn as HTMLElement).dataset.label!;
+      deleteMark(label);
+    });
+  });
+}
+
+// Toggle marks detection
+function toggleMarks() {
+  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+  if (!iframe) return;
+
+  if (marksEnabled) {
+    sendToIframe(iframe, 'DISABLE_MARKS', {});
+  } else {
+    sendToIframe(iframe, 'ENABLE_MARKS', {});
+  }
+}
+
+// Clear marks
+function clearMarks() {
+  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+  if (iframe) {
+    sendToIframe(iframe, 'DISABLE_MARKS', {});
   }
 }
 
@@ -855,15 +1172,21 @@ function scrollSidebarToAnnotation(annotationId: string) {
   const listEl = document.getElementById('annotation-list');
   if (!listEl) return;
 
+  console.log('[Viewer] Looking for annotation:', annotationId);
+  console.log('[Viewer] Available items:', Array.from(listEl.querySelectorAll('.annotation-item')).map(el => (el as HTMLElement).dataset.id));
+
   // Find the annotation item in the sidebar
   const item = listEl.querySelector(`.annotation-item[data-id="${annotationId}"]`);
   if (item) {
+    console.log('[Viewer] Found annotation item, highlighting');
     // Remove previous selection
     listEl.querySelectorAll('.annotation-item').forEach(i => i.classList.remove('selected'));
     // Add selection to this item
     item.classList.add('selected');
     // Scroll into view
     item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } else {
+    console.log('[Viewer] Annotation item not found in list');
   }
 }
 
@@ -920,6 +1243,30 @@ function syncIframeAnnotations() {
     console.log('syncIframeAnnotations: loading region annotations', regionData);
     sendToIframe(iframe, 'LOAD_REGION_ANNOTATIONS', regionData);
   }
+
+  // Load element annotations (text annotations with CSS selectors)
+  const elementAnnotations = textAnnotations.filter(a => a.selector.type === 'css');
+  if (elementAnnotations.length > 0) {
+    // Find their indices in the full list for consistent numbering
+    const allAnnotations = [...textAnnotations, ...regionAnnotations]
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    
+    const elementData = elementAnnotations.map(a => {
+      const index = allAnnotations.findIndex(ann => ann.id === a.id) + 1;
+      return {
+        id: a.id,
+        selector: a.selector.value,
+        type: a.type,
+        index,
+      };
+    });
+    console.log('syncIframeAnnotations: loading element annotations', elementData);
+    sendToIframe(iframe, 'LOAD_ELEMENT_ANNOTATIONS', elementData);
+  }
+
+  // Set the annotation index to total count so new annotations continue the sequence
+  const totalAnnotations = textAnnotations.length + regionAnnotations.length;
+  sendToIframe(iframe, 'SET_ANNOTATION_INDEX', { index: totalAnnotations });
 }
 
 
@@ -1030,14 +1377,29 @@ function renderAnnotationList() {
   // Render sorted annotations with index numbers
   const items = allAnnotations.map((a, idx) => {
     const displayText = a.annotationType === 'text'
-      ? `${escapeHtml(a.displayText.substring(0, 40))}${a.displayText.length > 40 ? '...' : ''}`
-      : a.displayText;
-    const titleAttr = a.annotationType === 'text' ? ` title="${escapeHtml(a.displayText)}"` : '';
+      ? `${escapeHtml(a.displayText.substring(0, 25))}${a.displayText.length > 25 ? '...' : ''}`
+      : a.displayText.substring(0, 25) + (a.displayText.length > 25 ? '...' : '');
+    const titleAttr = ` title="${escapeHtml(a.displayText)}"`;
+    
+    // Get tag name for element annotations, use type indicator for others
+    let tagName = '';
+    if (a.annotationType === 'element') {
+      // Extract tag from displayText which is like "[img] description"
+      const match = a.displayText.match(/^\[(\w+)\]/);
+      tagName = match ? match[1] : 'elem';
+    } else if (a.annotationType === 'region') {
+      tagName = 'region';
+    } else {
+      tagName = 'text';
+    }
 
     return `
       <div class="annotation-item" data-id="${a.id}" data-type="${a.annotationType}">
         <span class="annotation-index ${a.type}">${idx + 1}</span>
-        <span class="annotation-text"${titleAttr}>${displayText}</span>
+        <div class="annotation-info">
+          <span class="annotation-tag">${tagName}</span>
+          <span class="annotation-text"${titleAttr}>${displayText.replace(/^\[\w+\]\s*/, '')}</span>
+        </div>
         <button class="annotation-delete" data-id="${a.id}" title="Delete">×</button>
       </div>
     `;
@@ -1669,6 +2031,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     focusMode = !focusMode;
     document.body.classList.toggle('focus-mode', focusMode);
   });
+
+  // Auto-detect button (webmarker)
+  document.getElementById('auto-detect-btn')?.addEventListener('click', toggleMarks);
+
+  // Clear marks button
+  document.getElementById('clear-marks-btn')?.addEventListener('click', clearMarks);
 
   // Tab switching (Pages/Questions)
   document.querySelectorAll('.tab-btn[data-tab]').forEach((tab) => {

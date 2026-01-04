@@ -142,6 +142,16 @@
               <span class="tool-dot answer"></span>
               Answer
             </button>
+            <div class="toolbar-divider"></div>
+            <button class="tool-btn auto-detect-btn" id="auto-detect-btn" title="Auto-detect interactive elements (WebMarker)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+                <path d="M11 8v6"></path>
+                <path d="M8 11h6"></path>
+              </svg>
+              Auto-detect
+            </button>
           </div>
           <div class="toolbar-info">
             <span id="current-question-label">Q1: Loading...</span>
@@ -156,6 +166,25 @@
 
       <!-- Right Sidebar -->
       <aside class="sidebar sidebar-right" id="sidebar-right">
+        <!-- Detected Elements Section (WebMarker) -->
+        <div class="panel marks-panel hidden" id="marks-panel">
+          <div class="panel-header">
+            <span class="panel-title">Detected Elements</span>
+            <div class="marks-controls">
+              <span class="count-badge marks" id="marks-count">0</span>
+              <button class="icon-btn-tiny" id="clear-marks-btn" title="Clear all marks">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="marks-list" id="marks-list">
+            <div class="empty-state">Click Auto-detect to find interactive elements</div>
+          </div>
+        </div>
+
         <!-- Annotations Section -->
         <div class="panel annotations-panel">
           <div class="panel-header">
