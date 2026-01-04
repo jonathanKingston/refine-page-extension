@@ -2,6 +2,7 @@
   "name": "refine-page",
   "version": "1.0.0",
   "description": "Web extension for capturing and annotating page snapshots for labeling",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/build.mjs --watch",

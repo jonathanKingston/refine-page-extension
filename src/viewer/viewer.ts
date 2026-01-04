@@ -16,7 +16,7 @@ import type {
 } from '@/types';
 
 // Import annotation library types (actual annotators are now in iframe)
-import '@recogito/text-annotator/text-annotator.css';
+import '@recogito/text-annotator/packages/text-annotator/dist/text-annotator.css';
 import '@annotorious/annotorious/annotorious.css';
 
 
