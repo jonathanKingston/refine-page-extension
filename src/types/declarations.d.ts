@@ -19,15 +19,9 @@ declare module 'mhtml2html' {
     convertIframes?: boolean;
   }
 
-  export function parse(
-    mhtml: string,
-    options?: { htmlOnly?: boolean }
-  ): MhtmlParseResult;
+  export function parse(mhtml: string, options?: { htmlOnly?: boolean }): MhtmlParseResult;
 
-  export function convert(
-    mhtml: string | MhtmlParseResult,
-    options?: ConvertOptions
-  ): Document;
+  export function convert(mhtml: string | MhtmlParseResult, options?: ConvertOptions): Document;
 
   const mhtml2html: {
     parse: typeof parse;

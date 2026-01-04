@@ -38,7 +38,7 @@
 }
 
 /* Noir Theme (dark mode) */
-[data-theme="noir"] {
+[data-theme='noir'] {
   --color-bg: #0a0a0a;
   --color-surface: #171717;
   --color-border: #262626;
@@ -137,10 +137,18 @@ body {
 }
 
 /* Theme toggle icons */
-.icon-moon { display: block; }
-.icon-sun { display: none; }
-[data-theme="noir"] .icon-moon { display: none; }
-[data-theme="noir"] .icon-sun { display: block; }
+.icon-moon {
+  display: block;
+}
+.icon-sun {
+  display: none;
+}
+[data-theme='noir'] .icon-moon {
+  display: none;
+}
+[data-theme='noir'] .icon-sun {
+  display: block;
+}
 
 /* Action Buttons */
 .action-buttons {
@@ -358,17 +366,17 @@ body {
   color: #991b1b;
 }
 
-[data-theme="noir"] .snapshot-status.pending {
+[data-theme='noir'] .snapshot-status.pending {
   background: #422006;
   color: #fde68a;
 }
 
-[data-theme="noir"] .snapshot-status.approved {
+[data-theme='noir'] .snapshot-status.approved {
   background: #052e16;
   color: #86efac;
 }
 
-[data-theme="noir"] .snapshot-status.declined {
+[data-theme='noir'] .snapshot-status.declined {
   background: #450a0a;
   color: #fca5a5;
 }

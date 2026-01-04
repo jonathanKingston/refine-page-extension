@@ -2,7 +2,13 @@
  * Popup script for refine.page extension
  */
 
-import type { Snapshot, ExportData, ExportedSnapshot, ZipExportData, ZipIndexSnapshot } from '@/types';
+import type {
+  Snapshot,
+  ExportData,
+  ExportedSnapshot,
+  ZipExportData,
+  ZipIndexSnapshot,
+} from '@/types';
 import JSZip from 'jszip';
 
 // Direct storage access functions to bypass message size limits
@@ -86,14 +92,10 @@ async function updateStats() {
 
     if (totalEl) totalEl.textContent = String(snapshots.length);
     if (pendingEl) {
-      pendingEl.textContent = String(
-        snapshots.filter((s) => s.status === 'pending').length
-      );
+      pendingEl.textContent = String(snapshots.filter((s) => s.status === 'pending').length);
     }
     if (approvedEl) {
-      approvedEl.textContent = String(
-        snapshots.filter((s) => s.status === 'approved').length
-      );
+      approvedEl.textContent = String(snapshots.filter((s) => s.status === 'approved').length);
     }
 
     return snapshots;
@@ -289,15 +291,11 @@ async function importData(file: File) {
       throw new Error('Invalid export file format');
     }
 
-    const result = await sendMessage<{ imported: number; skipped: number }>(
-      'IMPORT_DATA',
-      { data }
-    );
+    const result = await sendMessage<{ imported: number; skipped: number }>('IMPORT_DATA', {
+      data,
+    });
 
-    showStatus(
-      `Imported ${result.imported} snapshots (${result.skipped} skipped)`,
-      'success'
-    );
+    showStatus(`Imported ${result.imported} snapshots (${result.skipped} skipped)`, 'success');
 
     await renderSnapshotList();
   } catch (error) {

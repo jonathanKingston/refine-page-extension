@@ -1,14 +1,19 @@
 {
   "name": "refine-page",
   "version": "1.1.0",
-  "description": "Web extension for capturing and annotating page snapshots for labeling",
+  "description": "Create labeled AI datasets from web pages. Capture high-fidelity snapshots, annotate text, and build Q&A pairs for ML training.",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/build.mjs --watch",
     "build": "node scripts/build.mjs",
     "lint": "eslint src --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,html}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,html}\"",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@annotorious/annotorious": "^3.0.17",
@@ -20,7 +25,15 @@
   "devDependencies": {
     "@types/chrome": "^0.0.268",
     "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "@vitest/ui": "^1.0.0",
     "esbuild": "^0.20.0",
-    "typescript": "^5.3.0"
+    "eslint": "^8.57.0",
+    "jsdom": "^23.0.0",
+    "prettier": "^3.2.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
   }
 }
