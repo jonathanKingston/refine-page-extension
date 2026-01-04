@@ -898,7 +898,6 @@ function injectAnnotationStyles(doc: Document) {
   doc.head?.appendChild(style);
 }
 
-
 // Update the visual appearance of an annotation based on its type
 function updateAnnotationAppearance(annotationId: string, type: AnnotationType) {
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
