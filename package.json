@@ -15,12 +15,11 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "capture:pages": "node refine-page-screenshots/tools/screenshots/capture-pages.mjs",
-    "import:snapshots": "node refine-page-screenshots/tools/screenshots/import-snapshots.mjs --extension-path=./dist",
-    "screenshots": "node refine-page-screenshots/tools/screenshots/capture.mjs --extension-path=./dist",
-    "screenshots:all": "node refine-page-screenshots/tools/screenshots/capture.mjs --extension-path=./dist --scenario=all",
-    "screenshots:store": "node refine-page-screenshots/tools/screenshots/capture.mjs --extension-path=./dist --scenario=store-marquee && node refine-page-screenshots/tools/screenshots/capture.mjs --extension-path=./dist --scenario=store-screenshot-1 && node refine-page-screenshots/tools/screenshots/capture.mjs --extension-path=./dist --scenario=store-screenshot-2",
-    "screenshots:hero": "node refine-page-screenshots/tools/screenshots/capture.mjs --extension-path=./dist --scenario=hero-light && node refine-page-screenshots/tools/screenshots/capture.mjs --extension-path=./dist --scenario=hero-dark"
+    "capture:pages": "node scripts/screenshots/capture-pages.mjs",
+    "screenshots": "node scripts/screenshots/capture.mjs --extension-path=./dist",
+    "screenshots:all": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=all",
+    "screenshots:store": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=store-marquee,store-screenshot-1,store-screenshot-2",
+    "screenshots:hero": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=hero-light,hero-dark"
   },
   "dependencies": {
     "@annotorious/annotorious": "^3.0.17",

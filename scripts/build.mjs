@@ -255,7 +255,7 @@ function copyStaticFiles() {
   // Copy demo.html for dev builds (screenshot automation)
   // demo.html is just a redirect to viewer.html which uses the actual extension codebase
   if (isDev) {
-    const demoHtmlPath = join(rootDir, 'refine-page-screenshots/src-extension/demo.html');
+    const demoHtmlPath = join(srcDir, 'demo/demo.html');
     if (existsSync(demoHtmlPath)) {
       copyFileSync(demoHtmlPath, join(distDir, 'demo.html'));
       console.log('📦 Included demo.html for screenshot automation');
