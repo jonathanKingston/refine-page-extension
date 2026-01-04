@@ -131,7 +131,7 @@ function copyStaticFiles() {
   manifest.web_accessible_resources[0].resources = [
     'viewer.html', 'viewer.js', 'viewer.css',
     'snapshot.html', 'snapshot.js',
-    'iframe.html', 'iframe-annotator.js'
+    'iframe.html', 'iframe-annotator.js', 'annotator.css'
   ];
 
   writeFileSync(join(distDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
@@ -165,6 +165,9 @@ function copyStaticFiles() {
   }
   if (existsSync(join(srcDir, 'viewer/viewer.css'))) {
     copyFileSync(join(srcDir, 'viewer/viewer.css'), join(distDir, 'viewer.css'));
+  }
+  if (existsSync(join(srcDir, 'iframe/annotator.css'))) {
+    copyFileSync(join(srcDir, 'iframe/annotator.css'), join(distDir, 'annotator.css'));
   }
 
   // Copy icons

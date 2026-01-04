@@ -1,7 +1,8 @@
 {
   "name": "refine-page",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Web extension for capturing and annotating page snapshots for labeling",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/build.mjs --watch",
@@ -11,9 +12,10 @@
   },
   "dependencies": {
     "@annotorious/annotorious": "^3.0.17",
-    "@recogito/text-annotator": "^3.0.17",
+    "@recogito/text-annotator": "github:jonathanKingston/text-annotator-js#jkt/remove-ua-parser",
     "jszip": "^3.10.1",
-    "mhtml2html": "^2.0.0"
+    "mhtml2html": "^2.0.0",
+    "webmarker-js": "^0.7.0"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",

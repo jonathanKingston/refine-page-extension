@@ -133,6 +133,8 @@ export interface Snapshot {
     text: TextAnnotation[];
     region: RegionAnnotation[];
   };
+  // Auto-detected element marks (from webmarker)
+  elementMarks?: ElementMark[];
   // Questions and answers for this snapshot
   questions: Question[];
   // Review status
@@ -248,6 +250,30 @@ export function toW3CAnnotation(
       annotationType: isText ? 'text' : 'region',
     },
   };
+}
+
+// Element mark (from webmarker auto-detection)
+export interface ElementMark {
+  id: string;
+  // The numeric label from webmarker (e.g., "0", "1", "2")
+  label: string;
+  // User-assigned name for this element
+  name: string;
+  // Element type (tag name)
+  tagName: string;
+  // Element text content preview
+  textPreview: string;
+  // CSS selector to locate the element
+  selector: string;
+  // Bounding box (for display/debugging)
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Helper to convert W3C annotation back to our format

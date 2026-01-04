@@ -1,12 +1,25 @@
 /**
  * Annotator script that runs inside the iframe context
  * This allows Recogito and Annotorious to properly detect text and image selections
+ * Also integrates webmarker for auto-detecting interactive elements
  */
 
-import { createTextAnnotator } from '@recogito/text-annotator';
+import { createTextAnnotator } from '@recogito/text-annotator/packages/text-annotator/dist/text-annotator.es.js';
 import { createImageAnnotator } from '@annotorious/annotorious';
-import '@recogito/text-annotator/text-annotator.css';
+import { mark, unmark, isMarked, type MarkedElement } from 'webmarker-js';
+import { autoUpdate, computePosition } from '@floating-ui/dom';
+import '@recogito/text-annotator/packages/text-annotator/dist/text-annotator.css';
 import '@annotorious/annotorious/annotorious.css';
+
+// Annotorious CSS class names (hardcoded by the library, not configurable)
+// These are used to query DOM elements created by Annotorious
+const ANNOTORIOUS_CLASSES = {
+  annotationLayer: '.a9s-annotationlayer',
+  annotation: '.a9s-annotation',
+  inner: '.a9s-inner',
+  selected: '.a9s-selected',
+  drawing: '.a9s-drawing',
+} as const;
 
 // Types for messages
 interface AnnotatorMessage {
@@ -25,17 +38,28 @@ let regionAnnotationIndex = 0; // Track region annotation numbers
 // Flag to suppress delete events during clear operations (e.g., switching questions)
 let suppressDeleteEvents = false;
 
+// Webmarker state
+let marksEnabled = false;
+let currentMarkedElements: Record<string, MarkedElement> = {};
+
 // Store annotation metadata for re-applying styles after Recogito re-renders
 const annotationMeta: Map<string, { tool: string; index: number }> = new Map();
 
 // Store annotation text for scrolling to off-screen annotations
 const annotationText: Map<string, string> = new Map();
 
-// Color mapping for annotation types (matching theme colors)
-const ANNOTATION_COLORS: Record<string, string> = {
-  relevant: 'rgba(6, 182, 212, 0.4)',   // cyan (matches theme relevant)
-  answer: 'rgba(236, 72, 153, 0.4)',    // pink (matches theme answer)
-};
+// Store element annotation data for position updates
+interface ElementAnnotationData {
+  annotationId: string;
+  selector: string;
+  annotationType: 'relevant' | 'answer';
+  index: number;
+  box: HTMLElement;
+  badge: HTMLElement;
+  cleanup: () => void; // Cleanup function for autoUpdate
+}
+const elementAnnotationVisuals: Map<string, ElementAnnotationData> = new Map();
+
 
 // Block-level elements that should have space/newline between them
 const BLOCK_ELEMENTS = new Set([
@@ -129,81 +153,97 @@ function serializeAnnotation(annotation: unknown): unknown {
 // Apply custom styling to annotations based on tool type
 function applyAnnotationStyle(annotationId: string, tool: string, index?: number) {
   // Store metadata for re-applying after Recogito re-renders
+  // This ensures the MutationObserver can pick up elements when they appear
   if (index !== undefined) {
     annotationMeta.set(annotationId, { tool, index });
   }
 
-  // Find the annotation elements and apply color
-  const color = ANNOTATION_COLORS[tool] || ANNOTATION_COLORS.relevant;
-  const borderColor = tool === 'answer' ? 'rgb(236, 72, 153)' : 'rgb(6, 182, 212)';
   // Recogito uses data attributes on highlight spans
   const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
+  
+  // If no elements found, try alternative selector or let MutationObserver handle it
+  if (elements.length === 0) {
+    const altElements = document.querySelectorAll(`.r6o-annotation[data-annotation="${annotationId}"]`);
+    if (altElements.length === 0) {
+      // Elements not yet rendered - MutationObserver will catch them when they appear
+      return;
+    }
+    // Use alternative elements if found
+    altElements.forEach((el, i) => {
+      const htmlEl = el as HTMLElement;
+      applyStylesToElement(htmlEl, el, tool, i === 0 ? index : undefined);
+    });
+    return;
+  }
+  
+  // Note: Highlight layer and parent container styles are handled by CSS (annotator.css)
+  
   elements.forEach((el, i) => {
     const htmlEl = el as HTMLElement;
-    // Apply inline styles with highest priority
-    htmlEl.style.setProperty('background-color', color, 'important');
-    htmlEl.style.setProperty('background', color, 'important');
-    htmlEl.style.setProperty('border-bottom', `2px solid ${borderColor}`, 'important');
-    htmlEl.style.setProperty('opacity', '1', 'important');
-    htmlEl.style.setProperty('visibility', 'visible', 'important');
+    applyStylesToElement(htmlEl, el, tool, i === 0 ? index : undefined);
+  });
+}
+
+// Helper function to apply styles to a single element
+function applyStylesToElement(htmlEl: HTMLElement, el: Element, tool: string, index?: number, skipLog = false) {
+  // Check if class is already applied to avoid unnecessary updates
+  if (el.classList.contains(`annotation-${tool}`) && !skipLog) {
+    return; // Skip if already styled correctly
+  }
+  
+  // Add class for CSS styling - CSS handles all the styling with !important rules
     el.classList.add(`annotation-${tool}`);
     // Add number badge to first element only
-    if (i === 0 && index !== undefined) {
+  if (index !== undefined) {
       el.setAttribute('data-annotation-index', String(index));
       el.classList.add('has-index');
     }
-  });
 }
 
 // Re-apply all annotation styles (called by MutationObserver)
-function reapplyAllStyles() {
+function reapplyAllStyles(skipLog = false) {
+  // Note: Container and highlight layer styles are handled by CSS (annotator.css)
+  // which is loaded as an inline style tag with !important rules
+
   annotationMeta.forEach((meta, annotationId) => {
     const elements = document.querySelectorAll(`[data-annotation="${annotationId}"]`);
     if (elements.length > 0) {
-      const color = ANNOTATION_COLORS[meta.tool] || ANNOTATION_COLORS.relevant;
-      const borderColor = meta.tool === 'answer' ? 'rgb(236, 72, 153)' : 'rgb(6, 182, 212)';
       elements.forEach((el, i) => {
         const htmlEl = el as HTMLElement;
-        // Always re-apply inline styles to override any page CSS
-        htmlEl.style.setProperty('background-color', color, 'important');
-        htmlEl.style.setProperty('background', color, 'important');
-        htmlEl.style.setProperty('border-bottom', `2px solid ${borderColor}`, 'important');
-        htmlEl.style.setProperty('opacity', '1', 'important');
-        htmlEl.style.setProperty('visibility', 'visible', 'important');
-        el.classList.add(`annotation-${meta.tool}`);
-        if (i === 0) {
-          el.setAttribute('data-annotation-index', String(meta.index));
-          el.classList.add('has-index');
-        }
+        applyStylesToElement(htmlEl, el, meta.tool, i === 0 ? meta.index : undefined, skipLog);
       });
     }
   });
 }
 
-// Apply custom styling to region (image) annotations
-function applyRegionAnnotationStyle(annotationId: string, tool: string) {
-  // Annotorious uses SVG elements with data-annotation attribute
-  setTimeout(() => {
-    // Find annotation elements by data attribute
-    const elements = document.querySelectorAll(`[data-annotation="${annotationId}"], g[data-id="${annotationId}"]`);
+// Colors for region annotations
+const REGION_COLORS = {
+  relevant: { fill: 'rgba(6, 182, 212, 0.25)', stroke: 'rgb(6, 182, 212)' },
+  answer: { fill: 'rgba(236, 72, 153, 0.25)', stroke: 'rgb(236, 72, 153)' },
+};
 
-    if (elements.length === 0) {
-      // Try finding in the SVG layer - Annotorious uses g elements with the annotation ID
-      const allGroups = document.querySelectorAll('.a9s-annotationlayer g');
-      allGroups.forEach(g => {
-        // Check if this group's annotation matches
-        const dataId = g.getAttribute('data-id') || g.id;
-        if (dataId === annotationId) {
-          g.classList.add('a9s-annotation', `annotation-${tool}`);
-          console.log('[Iframe Annotator] Applied style to region annotation via group search:', annotationId);
+// Apply style to a specific annotation (used when loading saved annotations)
+function applyRegionAnnotationStyle(annotationId: string, tool: string) {
+  const colors = REGION_COLORS[tool as keyof typeof REGION_COLORS] || REGION_COLORS.relevant;
+  
+  // Find and style the annotation element
+  setTimeout(() => {
+    const annotationLayers = document.querySelectorAll(ANNOTORIOUS_CLASSES.annotationLayer);
+    annotationLayers.forEach(layer => {
+      const groups = layer.querySelectorAll(`g${ANNOTORIOUS_CLASSES.annotation}`);
+      groups.forEach(g => {
+        const dataId = g.getAttribute('data-id') || g.id || '';
+        if (dataId === annotationId || dataId.includes(annotationId)) {
+          g.classList.add(`annotation-${tool}`);
+          const inner = g.querySelector(ANNOTORIOUS_CLASSES.inner);
+          if (inner) {
+            (inner as SVGElement).style.fill = colors.fill;
+            (inner as SVGElement).style.stroke = colors.stroke;
+            (inner as SVGElement).style.strokeWidth = '2px';
+          }
         }
       });
-    } else {
-      elements.forEach(el => {
-        el.classList.add(`annotation-${tool}`);
-      });
-      console.log('[Iframe Annotator] Applied style to region annotation:', annotationId, 'tool:', tool);
-    }
+    });
   }, 50);
 }
 
@@ -212,7 +252,7 @@ function applyRegionAnnotationStyle(annotationId: string, tool: string) {
 let styleObserver: MutationObserver | null = null;
 
 // Initialize annotator on the content
-function initializeAnnotator(container: HTMLElement) {
+async function initializeAnnotator(container: HTMLElement) {
   console.log('[Iframe Annotator] Initializing annotator on container');
 
   // Destroy existing annotator if any
@@ -232,8 +272,11 @@ function initializeAnnotator(container: HTMLElement) {
   // Clear old metadata
   annotationMeta.clear();
 
-  // Add custom styles for annotation colors
-  injectAnnotationStyles();
+  // Add custom styles for annotation colors - await to ensure it's loaded
+  // This ensures CSS is available before any annotations are created
+  await injectAnnotationStyles().catch(err => {
+    console.error('[Iframe Annotator] Error injecting styles:', err);
+  });
 
   // Don't use style function - it would apply currentTool color to ALL annotations
   // Instead we apply colors per-annotation via applyAnnotationStyle
@@ -242,18 +285,35 @@ function initializeAnnotator(container: HTMLElement) {
   });
 
   // Set up MutationObserver to re-apply styles when Recogito modifies DOM
-  styleObserver = new MutationObserver(() => {
-    // Debounce re-application
-    requestAnimationFrame(() => {
-      reapplyAllStyles();
+  let reapplyTimeout: number | null = null;
+  styleObserver = new MutationObserver((mutations) => {
+    // Only react to mutations that aren't from our own style changes
+    const hasNonStyleMutation = mutations.some(m => {
+      if (m.type === 'attributes' && m.attributeName === 'style') {
+        // Check if this is from Recogito, not from us
+        const target = m.target as HTMLElement;
+        return !target.hasAttribute('data-annotation') || !target.classList.contains('annotation-relevant') && !target.classList.contains('annotation-answer');
+      }
+      return m.type !== 'attributes' || m.attributeName !== 'style';
     });
+    
+    if (hasNonStyleMutation) {
+      // Debounce re-application with longer delay to avoid loops
+      if (reapplyTimeout) {
+        clearTimeout(reapplyTimeout);
+      }
+      reapplyTimeout = window.setTimeout(() => {
+        reapplyAllStyles(true); // Pass skipLog=true to reduce noise
+        reapplyTimeout = null;
+      }, 100);
+    }
   });
 
   styleObserver.observe(container, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['class', 'style']
+    attributeFilter: ['class']
   });
 
   if (currentTool !== 'select') {
@@ -379,6 +439,19 @@ function initializeImageAnnotators(container: HTMLElement) {
 
       const imageAnnotator = createImageAnnotator(img, {
         drawingEnabled: currentTool !== 'select',
+        // Style function reads type from annotation bodies, not current tool
+        style: (annotation: unknown) => {
+          const ann = annotation as { bodies?: Array<{ purpose?: string; value?: string }> };
+          // Find the tagging body that stores our type
+          const typeBody = ann.bodies?.find(b => b.purpose === 'tagging');
+          const type = typeBody?.value || 'relevant';
+          const colors = REGION_COLORS[type as keyof typeof REGION_COLORS] || REGION_COLORS.relevant;
+          return {
+            fill: colors.fill,
+            stroke: colors.stroke,
+            strokeWidth: 2,
+          };
+        },
       });
 
       // Check if Annotorious wrapped the image and if dimensions collapsed
@@ -416,11 +489,20 @@ function initializeImageAnnotators(container: HTMLElement) {
 
         console.log('[Iframe Annotator] Region annotation created (raw):', JSON.stringify(annotation, null, 2));
 
-        const ann = annotation as { id?: string; target?: unknown };
+        const ann = annotation as { id?: string; target?: unknown; bodies?: Array<{ purpose?: string; value?: string }> };
         regionAnnotationIndex++;
 
-        // Apply styling to the annotation element
+        // Add type body to the annotation so the style function can read it
         if (ann.id) {
+          const typeBody = { purpose: 'tagging', value: currentTool };
+          const updatedAnn = {
+            ...ann,
+            bodies: [...(ann.bodies || []), typeBody]
+          };
+          // Update the annotation with the type body
+          imageAnnotator.updateAnnotation(updatedAnn);
+          
+          // Apply additional styling
           applyRegionAnnotationStyle(ann.id, currentTool);
         }
 
@@ -640,190 +722,550 @@ function findTextInDocument(searchText: string): { node: Node; offset: number } 
 }
 
 // Inject custom styles for annotation colors
-function injectAnnotationStyles() {
-  if (document.getElementById('pl-annotation-styles')) return;
+async function injectAnnotationStyles() {
+  if (document.getElementById('pl-annotation-styles')) {
+    console.log('[Iframe Annotator] Styles already injected');
+    return;
+  }
 
+  // Get URL for extension resource (available in extension-owned iframes)
+  if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.getURL) {
+    console.error('[Iframe Annotator] chrome.runtime.getURL not available');
+    return;
+  }
+
+  const cssUrl = chrome.runtime.getURL('annotator.css');
+  console.log('[Iframe Annotator] Injecting styles from:', cssUrl);
+  
+  // Try to fetch and inject CSS as inline style to avoid CSP blocking
+  // Some sites block external stylesheets even from extension resources
+  try {
+    const response = await fetch(cssUrl);
+    if (response.ok) {
+      const cssText = await response.text();
+      console.log('[Iframe Annotator] CSS fetched, length:', cssText.length);
   const style = document.createElement('style');
   style.id = 'pl-annotation-styles';
-  // Use very high specificity selectors to override page styles
-  style.textContent = `
-    /* CRITICAL: Fix the highlight layer - disable mix-blend-mode which causes visibility issues */
-    .r6o-span-highlight-layer {
-      position: absolute !important;
-      top: 0 !important;
-      left: 0 !important;
-      width: 100% !important;
-      min-height: 100% !important;
-      height: auto !important;
-      pointer-events: none !important;
-      z-index: 2147483640 !important;
-      overflow: visible !important;
-      mix-blend-mode: normal !important;
-      isolation: isolate !important;
-      opacity: 1 !important;
-      visibility: visible !important;
-      clip: auto !important;
-      clip-path: none !important;
+      style.textContent = cssText;
+      document.head.appendChild(style);
+      console.log('[Iframe Annotator] CSS injected as inline style');
+      return;
+    } else {
+      console.warn('[Iframe Annotator] CSS fetch failed with status:', response.status);
+    }
+  } catch (error) {
+    console.warn('[Iframe Annotator] CSS fetch error:', error);
+    // Fallback to link tag if fetch fails
+  }
+
+  // Fallback to link tag if fetch fails (shouldn't happen in extension context)
+  const link = document.createElement('link');
+  link.id = 'pl-annotation-styles';
+  link.rel = 'stylesheet';
+  link.href = cssUrl;
+  document.head.appendChild(link);
+}
+
+// Generate a unique CSS selector for an element
+function getUniqueSelector(element: Element): string {
+  // Try ID first
+  if (element.id) {
+    return `#${CSS.escape(element.id)}`;
+  }
+
+  // Build path from element to a unique ancestor
+  const path: string[] = [];
+  let current: Element | null = element;
+
+  while (current && current !== document.body) {
+    let selector = current.tagName.toLowerCase();
+
+    // Add class if available
+    if (current.className && typeof current.className === 'string') {
+      const classes = current.className.trim().split(/\s+/).filter(c => c && !c.startsWith('webmarker'));
+      if (classes.length > 0) {
+        selector += '.' + classes.slice(0, 2).map(c => CSS.escape(c)).join('.');
+      }
     }
 
-    /* Ensure the annotatable container has proper positioning and doesn't clip */
-    .r6o-annotatable {
-      position: relative !important;
-      overflow: visible !important;
-      clip: auto !important;
-      clip-path: none !important;
+    // Add nth-child if needed for uniqueness
+    const parent = current.parentElement;
+    if (parent) {
+      const siblings = Array.from(parent.children).filter(c => c.tagName === current!.tagName);
+      if (siblings.length > 1) {
+        const index = siblings.indexOf(current) + 1;
+        selector += `:nth-of-type(${index})`;
+      }
     }
 
-    /* Make annotation spans visible with high z-index */
-    .r6o-span-highlight-layer .r6o-annotation,
-    .r6o-annotation {
-      position: absolute !important;
-      pointer-events: auto !important;
-      overflow: visible !important;
-      z-index: 2147483641 !important;
-      mix-blend-mode: normal !important;
-      opacity: 1 !important;
-      visibility: visible !important;
-    }
+    path.unshift(selector);
+    current = current.parentElement;
 
-    /* Custom annotation colors for relevant (cyan) */
-    .r6o-annotation.annotation-relevant,
-    [data-annotation].annotation-relevant {
-      background-color: rgba(6, 182, 212, 0.5) !important;
-      background: rgba(6, 182, 212, 0.5) !important;
-      border-bottom: 2px solid rgb(6, 182, 212) !important;
-      opacity: 1 !important;
-      visibility: visible !important;
-    }
+    // Stop if we have enough specificity
+    if (path.length >= 4) break;
+  }
 
-    /* Custom annotation colors for answer (pink) */
-    .r6o-annotation.annotation-answer,
-    [data-annotation].annotation-answer {
-      background-color: rgba(236, 72, 153, 0.5) !important;
-      background: rgba(236, 72, 153, 0.5) !important;
-      border-bottom: 2px solid rgb(236, 72, 153) !important;
-      opacity: 1 !important;
-      visibility: visible !important;
-    }
+  return path.join(' > ');
+}
 
-    /* Number badge for annotations */
-    .has-index {
-      overflow: visible !important;
-    }
-    .has-index::before {
-      content: attr(data-annotation-index) !important;
-      position: absolute !important;
-      top: -12px !important;
-      left: -6px !important;
-      background: #374151 !important;
-      color: white !important;
-      font-size: 10px !important;
-      font-weight: bold !important;
-      min-width: 16px !important;
-      height: 16px !important;
-      line-height: 16px !important;
-      text-align: center !important;
-      border-radius: 8px !important;
-      padding: 0 4px !important;
-      z-index: 2147483647 !important;
-      font-family: system-ui, -apple-system, sans-serif !important;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.4) !important;
-      pointer-events: none !important;
-      display: block !important;
-      visibility: visible !important;
-      opacity: 1 !important;
-    }
-    .has-index.annotation-relevant::before {
-      background: rgb(8, 145, 178) !important;
-    }
-    .has-index.annotation-answer::before {
-      background: rgb(219, 39, 119) !important;
-    }
+// Get text preview from element
+function getTextPreview(element: Element): string {
+  const text = element.textContent?.trim() || '';
+  // Also check for aria-label, title, placeholder, value
+  const ariaLabel = element.getAttribute('aria-label') || '';
+  const title = element.getAttribute('title') || '';
+  const placeholder = element.getAttribute('placeholder') || '';
+  const value = (element as HTMLInputElement).value || '';
 
-    /* Hover effect on annotations */
-    .r6o-annotation:hover,
-    [data-annotation]:hover {
-      filter: brightness(0.85) !important;
-      box-shadow: 0 0 0 2px rgba(0,0,0,0.15) !important;
-      cursor: pointer !important;
-    }
+  const preview = text || ariaLabel || title || placeholder || value || element.tagName.toLowerCase();
+  return preview.substring(0, 50) + (preview.length > 50 ? '...' : '');
+}
 
-    /* Selected annotation */
-    .r6o-annotation.selected,
-    .r6o-annotation.pl-selected,
-    [data-annotation].selected,
-    [data-annotation].pl-selected {
-      outline: 3px solid #f59e0b !important;
-      outline-offset: 1px !important;
-    }
-    .has-index.selected::before,
-    .has-index.pl-selected::before {
-      background: #f59e0b !important;
-    }
+// Check if element A contains/wraps element B (B is inside A)
+function elementContains(a: Element, b: Element): boolean {
+  return a !== b && a.contains(b);
+}
 
-    /* ========================================
-       Annotorious (Image Annotation) Styles
-       ======================================== */
+// Calculate overlap ratio (how much of the smaller element is covered by the larger)
+function getOverlapRatio(rectA: DOMRect, rectB: DOMRect): number {
+  const xOverlap = Math.max(0, Math.min(rectA.right, rectB.right) - Math.max(rectA.left, rectB.left));
+  const yOverlap = Math.max(0, Math.min(rectA.bottom, rectB.bottom) - Math.max(rectA.top, rectB.top));
+  const overlapArea = xOverlap * yOverlap;
+  
+  const areaA = rectA.width * rectA.height;
+  const areaB = rectB.width * rectB.height;
+  const smallerArea = Math.min(areaA, areaB);
+  
+  if (smallerArea === 0) return 0;
+  return overlapArea / smallerArea;
+}
 
-    /* Annotorious layer container */
-    .a9s-annotationlayer {
-      pointer-events: auto !important;
-      z-index: 100 !important;
+// Check if element is part of annotator overlays (should be excluded)
+function isAnnotatorElement(element: Element): boolean {
+  // Check if element or any ancestor is an annotator overlay
+  let current: Element | null = element;
+  while (current) {
+    if (current.classList.contains('a9s-annotationlayer') ||
+        current.classList.contains('a9s-annotation') ||
+        current.classList.contains('r6o-annotation') ||
+        current.classList.contains('webmarker') ||
+        current.classList.contains('webmarker-bounding-box') ||
+        current.classList.contains('element-annotation') ||
+        current.classList.contains('element-annotation-badge')) {
+      return true;
     }
+    // Check for SVG annotation layers
+    if (current.tagName === 'svg' && current.closest(ANNOTORIOUS_CLASSES.annotationLayer)) {
+      return true;
+    }
+    current = current.parentElement;
+  }
+  return false;
+}
 
-    /* Default annotation shape styling */
-    .a9s-annotation .a9s-inner {
-      fill: rgba(6, 182, 212, 0.2) !important;
-      stroke: rgb(6, 182, 212) !important;
-      stroke-width: 2px !important;
+// Deduplicate overlapping elements - keep the largest one
+function dedupeMarkedElements(markedElements: Record<string, MarkedElement>): Record<string, MarkedElement> {
+  const entries = Object.entries(markedElements);
+  const toRemove = new Set<string>();
+  
+  // First pass: remove annotator elements
+  for (const [label, marked] of entries) {
+    if (isAnnotatorElement(marked.element)) {
+      toRemove.add(label);
+      console.log('[Iframe Annotator] Filtering out annotator element:', label, marked.element.tagName);
     }
+  }
+  
+  for (let i = 0; i < entries.length; i++) {
+    const [labelA, markedA] = entries[i];
+    if (toRemove.has(labelA)) continue;
+    
+    const rectA = markedA.element.getBoundingClientRect();
+    const areaA = rectA.width * rectA.height;
+    
+    for (let j = i + 1; j < entries.length; j++) {
+      const [labelB, markedB] = entries[j];
+      if (toRemove.has(labelB)) continue;
+      
+      const rectB = markedB.element.getBoundingClientRect();
+      const areaB = rectB.width * rectB.height;
+      
+      // Check if one contains the other in DOM
+      const aContainsB = elementContains(markedA.element, markedB.element);
+      const bContainsA = elementContains(markedB.element, markedA.element);
+      
+      // Check overlap ratio
+      const overlapRatio = getOverlapRatio(rectA, rectB);
+      
+      // If significant overlap (>70%) or one contains the other, keep the larger one
+      if (overlapRatio > 0.7 || aContainsB || bContainsA) {
+        if (areaA >= areaB) {
+          toRemove.add(labelB);
+          console.log('[Iframe Annotator] Deduping:', labelB, 'covered by', labelA, 
+            `(overlap: ${(overlapRatio * 100).toFixed(0)}%, contains: ${aContainsB})`);
+        } else {
+          toRemove.add(labelA);
+          console.log('[Iframe Annotator] Deduping:', labelA, 'covered by', labelB,
+            `(overlap: ${(overlapRatio * 100).toFixed(0)}%, contains: ${bContainsA})`);
+          break; // A is removed, no need to compare it further
+        }
+      }
+    }
+  }
+  
+  // Remove the duplicates from webmarker visuals and return filtered result
+  const result: Record<string, MarkedElement> = {};
+  for (const [label, marked] of entries) {
+    if (toRemove.has(label)) {
+      // Remove the visual elements
+      marked.markElement.remove();
+      marked.boundingBoxElement?.remove();
+      marked.element.removeAttribute('data-mark-label');
+    } else {
+      result[label] = marked;
+    }
+  }
+  
+  console.log('[Iframe Annotator] Deduped from', entries.length, 'to', Object.keys(result).length, 'elements');
+  return result;
+}
 
-    /* Relevant annotation (cyan) */
-    .a9s-annotation.annotation-relevant .a9s-inner {
-      fill: rgba(6, 182, 212, 0.25) !important;
-      stroke: rgb(6, 182, 212) !important;
-      stroke-width: 2px !important;
-    }
+// Get selectors of already annotated elements
+function getAnnotatedSelectors(): Set<string> {
+  const selectors = new Set<string>();
+  elementAnnotationVisuals.forEach(data => {
+    selectors.add(data.selector);
+  });
+  return selectors;
+}
 
-    /* Answer annotation (pink) */
-    .a9s-annotation.annotation-answer .a9s-inner {
-      fill: rgba(236, 72, 153, 0.25) !important;
-      stroke: rgb(236, 72, 153) !important;
-      stroke-width: 2px !important;
-    }
+// Enable webmarker detection
+function enableMarks(container: HTMLElement) {
+  if (marksEnabled) {
+    unmark();
+  }
 
-    /* Hover effect on image annotations */
-    .a9s-annotation:hover .a9s-inner {
-      stroke-width: 3px !important;
-      filter: brightness(0.9) !important;
-    }
+  console.log('[Iframe Annotator] Enabling webmarker detection');
 
-    /* Selected image annotation */
-    .a9s-annotation.selected .a9s-inner,
-    .a9s-annotation.a9s-selected .a9s-inner {
-      stroke: #f59e0b !important;
-      stroke-width: 3px !important;
-    }
+  // Custom selector that includes images and links (with href or data-original-href from MHTML capture)
+  const selector = 'a[href], a[data-original-href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [tabindex]:not([tabindex="-1"]), img';
+  
+  // Get already annotated element selectors to filter them out
+  const annotatedSelectors = getAnnotatedSelectors();
+  
+  // Custom styling for marks
+  let rawMarkedElements = mark({
+    containerElement: container,
+    selector,
+    showBoundingBoxes: true,
+    markStyle: {
+      backgroundColor: '#6366f1',
+      color: 'white',
+      padding: '2px 6px',
+      fontSize: '11px',
+      fontWeight: 'bold',
+      borderRadius: '4px',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+      cursor: 'pointer',
+      pointerEvents: 'auto',
+    },
+    boundingBoxStyle: {
+      outline: '2px solid #6366f1',
+      backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    },
+    markPlacement: 'top-start',
+  });
 
-    /* Drawing/creation mode */
-    .a9s-annotation.a9s-drawing .a9s-inner {
-      stroke-dasharray: 5, 5 !important;
+  // Filter out already annotated elements
+  const filteredMarkedElements: Record<string, MarkedElement> = {};
+  for (const [label, marked] of Object.entries(rawMarkedElements)) {
+    const elementSelector = getUniqueSelector(marked.element);
+    if (annotatedSelectors.has(elementSelector)) {
+      // Remove the mark visual since this element is already annotated
+      marked.markElement.remove();
+      marked.boundingBoxElement?.remove();
+      console.log('[Iframe Annotator] Skipping already annotated element:', elementSelector);
+    } else {
+      filteredMarkedElements[label] = marked;
     }
+  }
 
-    /* Disable image dragging to allow region selection */
-    img {
-      -webkit-user-drag: none !important;
-      -khtml-user-drag: none !important;
-      -moz-user-drag: none !important;
-      -o-user-drag: none !important;
-      user-drag: none !important;
+  // Deduplicate overlapping elements
+  currentMarkedElements = dedupeMarkedElements(filteredMarkedElements);
+
+  marksEnabled = true;
+
+  // Convert marked elements to data format and send to parent
+  const marksData = Object.entries(currentMarkedElements).map(([label, markedEl]) => {
+    const rect = markedEl.element.getBoundingClientRect();
+    return {
+      label,
+      tagName: markedEl.element.tagName.toLowerCase(),
+      textPreview: getTextPreview(markedEl.element),
+      selector: getUniqueSelector(markedEl.element),
+      bounds: {
+        x: rect.left + window.scrollX,
+        y: rect.top + window.scrollY,
+        width: rect.width,
+        height: rect.height,
+      },
+    };
+  });
+
+  console.log('[Iframe Annotator] Detected', marksData.length, 'interactive elements');
+
+  // Add click handlers to marks for naming
+  // Note: pointer-events and cursor are handled by CSS (.webmarker, .webmarker-bounding-box)
+  Object.entries(currentMarkedElements).forEach(([label, markedEl]) => {
+    markedEl.markElement.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[Iframe Annotator] Mark clicked:', label);
+
+      // Notify parent that a mark was clicked
+      window.parent.postMessage({
+        type: 'MARK_CLICKED',
+        payload: { label }
+      }, '*');
+    });
+
+    // Also add click handler to bounding box
+    if (markedEl.boundingBoxElement) {
+      markedEl.boundingBoxElement.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[Iframe Annotator] Mark bounding box clicked:', label);
+
+        window.parent.postMessage({
+          type: 'MARK_CLICKED',
+          payload: { label }
+        }, '*');
+      });
     }
-  `;
-  document.head.appendChild(style);
+  });
+
+  window.parent.postMessage({
+    type: 'MARKS_DETECTED',
+    payload: { marks: marksData }
+  }, '*');
+}
+
+// Disable webmarker detection
+function disableMarks() {
+  if (!marksEnabled) return;
+
+  console.log('[Iframe Annotator] Disabling webmarker detection');
+  unmark();
+  marksEnabled = false;
+  currentMarkedElements = {};
+
+  window.parent.postMessage({
+    type: 'MARKS_CLEARED',
+    payload: {}
+  }, '*');
+}
+
+// Highlight a specific mark
+function highlightMark(label: string) {
+  const markedEl = currentMarkedElements[label];
+  if (!markedEl) return;
+
+  // Remove previous highlights
+  document.querySelectorAll('.webmarker-highlighted, .webmarker-bounding-box-highlighted').forEach(el => {
+    el.classList.remove('webmarker-highlighted', 'webmarker-bounding-box-highlighted');
+  });
+
+  // Add highlight to this mark
+  markedEl.markElement.classList.add('webmarker-highlighted');
+  if (markedEl.boundingBoxElement) {
+    markedEl.boundingBoxElement.classList.add('webmarker-bounding-box-highlighted');
+  }
+
+  // Scroll to the element
+  markedEl.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Update mark label with user-assigned name
+function updateMarkLabel(label: string, name: string) {
+  const markedEl = currentMarkedElements[label];
+  if (!markedEl) return;
+
+  // Update the mark element text
+  markedEl.markElement.textContent = name || label;
+
+  // Add 'named' class for styling
+  if (name) {
+    markedEl.markElement.classList.add('webmarker-named');
+  } else {
+    markedEl.markElement.classList.remove('webmarker-named');
+  }
+}
+
+// Remove a specific mark
+function removeMark(label: string) {
+  const markedEl = currentMarkedElements[label];
+  if (!markedEl) return;
+
+  // Remove mark element
+  markedEl.markElement.remove();
+
+  // Remove bounding box if exists
+  if (markedEl.boundingBoxElement) {
+    markedEl.boundingBoxElement.remove();
+  }
+
+  // Remove the data attribute from the element
+  markedEl.element.removeAttribute('data-mark-label');
+
+  // Remove from tracking
+  delete currentMarkedElements[label];
+
+  console.log('[Iframe Annotator] Removed mark:', label);
+}
+
+// Unified annotation index for all annotation types (text, region, element)
+// This gets synced from the viewer to ensure consistent numbering
+
+// Convert a mark to an annotation visual
+// Removes webmarker elements and creates fresh ones using the unified createElementAnnotationVisual
+function convertMarkToAnnotation(label: string, annotationId: string, annotationType: 'relevant' | 'answer', index?: number) {
+  const markedEl = currentMarkedElements[label];
+  if (!markedEl) return;
+
+  // Get the annotation index (passed from parent)
+  const annotationNumber = index ?? annotationIndex;
+  const element = markedEl.element;
+  const selector = getUniqueSelector(element);
+
+  // Remove the webmarker elements completely
+  markedEl.markElement.remove();
+  if (markedEl.boundingBoxElement) {
+    markedEl.boundingBoxElement.remove();
+  }
+  element.removeAttribute('data-mark-label');
+
+  // Remove from webmarker tracking
+  delete currentMarkedElements[label];
+
+  // Create fresh annotation visual using the unified function
+  createElementAnnotationVisual(annotationId, selector, annotationType, annotationNumber);
+
+  console.log('[Iframe Annotator] Converted mark to annotation:', label, '->', annotationId, 'index:', annotationNumber);
+}
+
+// Create element annotation visual from a CSS selector (for reloading saved annotations)
+function createElementAnnotationVisual(annotationId: string, selector: string, annotationType: 'relevant' | 'answer', index: number) {
+  // Try to find the element
+  let element: Element | null = null;
+  try {
+    element = document.querySelector(selector);
+  } catch (e) {
+    console.warn('[Iframe Annotator] Invalid selector:', selector);
+  }
+
+  if (!element) {
+    console.warn('[Iframe Annotator] Element not found for selector:', selector);
+    return;
+  }
+
+  // Create the bounding box
+  const box = document.createElement('div');
+  box.className = `element-annotation element-annotation-${annotationType}`;
+  box.setAttribute('data-annotation-id', annotationId);
+  // Only set positioning-related inline styles - let CSS handle colors/outline
+  // This ensures CSS !important rules can apply properly
+  box.style.position = 'absolute';
+  box.style.display = 'block';
+  box.style.pointerEvents = 'auto';
+  box.style.cursor = 'pointer';
+  box.style.zIndex = '2147483646'; // Match text annotation z-index
+  box.style.visibility = 'visible';
+  box.style.opacity = '1';
+  box.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window.parent.postMessage({
+      type: 'ANNOTATION_CLICKED',
+      payload: { annotationId }
+    }, '*');
+  };
+  document.body.appendChild(box);
+
+  // Create the badge
+  const badge = document.createElement('div');
+  badge.className = `element-annotation-badge element-annotation-badge-${annotationType}`;
+  badge.setAttribute('data-annotation-id', annotationId);
+  badge.textContent = String(index);
+  // Only set positioning-related inline styles - let CSS handle colors/styling
+  // This ensures CSS !important rules can apply properly
+  badge.style.position = 'absolute';
+  badge.style.display = 'block';
+  badge.style.zIndex = '2147483647'; // Maximum z-index to be above everything
+  badge.style.visibility = 'visible';
+  badge.style.opacity = '1';
+  badge.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window.parent.postMessage({
+      type: 'ANNOTATION_CLICKED',
+      payload: { annotationId }
+    }, '*');
+  };
+  document.body.appendChild(badge);
+
+  // Use autoUpdate for smooth position tracking - match webmarker's exact positioning approach
+  const cleanupFns: (() => void)[] = [];
+
+  // Position the bounding box to cover the element (same as webmarker)
+  // Use Floating UI's autoUpdate for smooth, efficient positioning
+  function updateBoxPosition() {
+    computePosition(element!, box, { placement: 'top-start' }).then(({ x, y }) => {
+      const { width, height } = element!.getBoundingClientRect();
+      box.style.left = `${x}px`;
+      box.style.top = `${y + height}px`; // webmarker adds height to cover element
+      box.style.width = `${width}px`;
+      box.style.height = `${height}px`;
+    });
+  }
+  cleanupFns.push(autoUpdate(element, box, updateBoxPosition));
+
+  // Position the badge at top-start of the element (same as webmarker mark placement)
+  function updateBadgePosition() {
+    computePosition(element!, badge, { placement: 'top-start' }).then(({ x, y }) => {
+      badge.style.left = `${x}px`;
+      badge.style.top = `${y}px`; // raw position from top-start, same as webmarker
+    });
+  }
+  cleanupFns.push(autoUpdate(element, badge, updateBadgePosition));
+
+  // Store for cleanup
+  elementAnnotationVisuals.set(annotationId, {
+    annotationId,
+    selector,
+    annotationType,
+    index,
+    box,
+    badge,
+    cleanup: () => cleanupFns.forEach(fn => fn()),
+  });
+
+  console.log('[Iframe Annotator] Created element annotation visual:', annotationId, 'at', selector);
+}
+
+// Remove element annotation visual
+function removeElementAnnotationVisual(annotationId: string) {
+  const data = elementAnnotationVisuals.get(annotationId);
+  if (data) {
+    data.cleanup(); // Stop autoUpdate
+    data.box.remove();
+    data.badge.remove();
+    elementAnnotationVisuals.delete(annotationId);
+  }
 }
 
 // Handle messages from parent
-function handleMessage(event: MessageEvent) {
+async function handleMessage(event: MessageEvent) {
   const message = event.data as AnnotatorMessage;
   if (!message?.type) return;
 
@@ -842,8 +1284,46 @@ function handleMessage(event: MessageEvent) {
         container.innerHTML = html;
         console.log('[Iframe Annotator] HTML content loaded');
 
-        // Initialize annotator on the loaded content
-        initializeAnnotator(container);
+        // Force layout recalculation to ensure body/html expands to fit content
+        // This fixes the issue where the page appears white at the bottom until scrolled
+        const forceLayoutRecalculation = () => {
+          // Force a reflow by reading layout properties
+          void container.offsetHeight;
+          void document.body.offsetHeight;
+          void document.documentElement.offsetHeight;
+          // Trigger a scroll event to force layout recalculation
+          window.scrollTo(0, 0);
+        };
+
+        // Wait for images to load, then force layout recalculation
+        const images = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
+        if (images.length > 0) {
+          // Create promises for all image loads
+          const imageLoadPromises = images.map(img => {
+            if (img.complete) {
+              return Promise.resolve();
+            }
+            return new Promise<void>((resolve) => {
+              img.addEventListener('load', () => resolve(), { once: true });
+              img.addEventListener('error', () => resolve(), { once: true });
+            });
+          });
+
+          // Wait for all images, then recalculate layout
+          Promise.all(imageLoadPromises).then(() => {
+            requestAnimationFrame(() => {
+              forceLayoutRecalculation();
+            });
+          });
+        } else {
+          // No images, just force layout recalculation on next frame
+          requestAnimationFrame(() => {
+            forceLayoutRecalculation();
+          });
+        }
+
+        // Initialize annotator on the loaded content (await to ensure CSS is loaded)
+        await initializeAnnotator(container);
 
         // Initialize image annotators after a brief delay to allow images to load
         // Send ANNOTATOR_READY only after both text and image annotators are ready
@@ -926,6 +1406,13 @@ function handleMessage(event: MessageEvent) {
         annotationText.clear();
         annotationIndex = 0;
       }
+      // Also clear element annotation visuals
+      elementAnnotationVisuals.forEach((data) => {
+        data.cleanup(); // Stop autoUpdate
+        data.box.remove();
+        data.badge.remove();
+      });
+      elementAnnotationVisuals.clear();
       break;
 
     case 'SCROLL_TO_ANNOTATION': {
@@ -964,6 +1451,9 @@ function handleMessage(event: MessageEvent) {
         if (elements.length > 0) {
           console.log('[Iframe Annotator] Manually removed', elements.length, 'DOM elements for:', annotationId);
         }
+
+        // Remove element annotation visuals (bounding box and badge)
+        removeElementAnnotationVisual(annotationId);
 
         // Clean up metadata
         annotationMeta.delete(annotationId);
@@ -1077,12 +1567,92 @@ function handleMessage(event: MessageEvent) {
       }
       break;
     }
+
+    // Webmarker messages
+    case 'ENABLE_MARKS': {
+      const container = document.getElementById('content-container');
+      if (container) {
+        enableMarks(container);
+      }
+      break;
+    }
+
+    case 'DISABLE_MARKS':
+      disableMarks();
+      break;
+
+    case 'HIGHLIGHT_MARK': {
+      const { label } = message.payload as { label: string };
+      if (label) {
+        highlightMark(label);
+      }
+      break;
+    }
+
+    case 'UPDATE_MARK_LABEL': {
+      const { label, name } = message.payload as { label: string; name: string };
+      if (label) {
+        updateMarkLabel(label, name);
+      }
+      break;
+    }
+
+    case 'REMOVE_MARK': {
+      const { label } = message.payload as { label: string };
+      if (label) {
+        removeMark(label);
+      }
+      break;
+    }
+
+    case 'CONVERT_MARK_TO_ANNOTATION': {
+      const { label, annotationId, annotationType, index } = message.payload as {
+        label: string;
+        annotationId: string;
+        annotationType: 'relevant' | 'answer';
+        index?: number;
+      };
+      if (label && annotationId) {
+        convertMarkToAnnotation(label, annotationId, annotationType, index);
+      }
+      break;
+    }
+
+    case 'GET_MARKS_STATUS':
+      window.parent.postMessage({
+        type: 'MARKS_STATUS',
+        payload: { enabled: marksEnabled, count: Object.keys(currentMarkedElements).length }
+      }, '*');
+      break;
+
+    case 'SET_ANNOTATION_INDEX': {
+      const { index } = message.payload as { index: number };
+      annotationIndex = index;
+      console.log('[Iframe Annotator] Annotation index set to:', index);
+      break;
+    }
+
+    case 'LOAD_ELEMENT_ANNOTATIONS': {
+      const elementAnnotations = message.payload as Array<{
+        id: string;
+        selector: string;
+        type: 'relevant' | 'answer';
+        index: number;
+      }>;
+      console.log('[Iframe Annotator] Loading element annotations:', elementAnnotations);
+      
+      for (const ann of elementAnnotations) {
+        createElementAnnotationVisual(ann.id, ann.selector, ann.type, ann.index);
+      }
+      break;
+    }
   }
 }
 
 // Initialize
 console.log('[Iframe Annotator] Script loaded, waiting for messages...');
 window.addEventListener('message', handleMessage);
+
 
 // Forward keyboard shortcuts to parent when iframe has focus
 document.addEventListener('keydown', (e) => {

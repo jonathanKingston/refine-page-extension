@@ -1,0 +1,295 @@
+/* CRITICAL: Fix the highlight layer - disable mix-blend-mode which causes visibility issues */
+/* Use maximum z-index to be above overlays like cookie consent banners */
+.r6o-span-highlight-layer {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  min-height: 100% !important;
+  height: auto !important;
+  pointer-events: none !important;
+  z-index: 2147483646 !important; /* Just below annotation elements */
+  overflow: visible !important;
+  mix-blend-mode: normal !important;
+  isolation: isolate !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  clip: auto !important;
+  clip-path: none !important;
+}
+
+/* Ensure the annotatable container has proper positioning and doesn't clip */
+/* Also set high z-index to create proper stacking context above overlays */
+.r6o-annotatable {
+  position: relative !important;
+  overflow: visible !important;
+  clip: auto !important;
+  clip-path: none !important;
+  z-index: 2147483645 !important; /* Match overlay z-index */
+  isolation: isolate !important; /* Create new stacking context */
+}
+
+/* Make annotation spans visible with maximum z-index to be above overlays */
+.r6o-span-highlight-layer .r6o-annotation,
+.r6o-annotation {
+  position: absolute !important;
+  pointer-events: auto !important;
+  overflow: visible !important;
+  z-index: 2147483647 !important; /* Maximum z-index */
+  mix-blend-mode: normal !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Custom annotation colors for relevant (cyan) */
+.r6o-annotation.annotation-relevant,
+[data-annotation].annotation-relevant {
+  background-image: none !important;
+  background-color: rgba(6, 182, 212, 0.4) !important;
+  background: rgba(6, 182, 212, 0.4) none !important;
+  border-bottom: 2px solid rgb(6, 182, 212) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  min-height: 1px !important;
+}
+
+/* Custom annotation colors for answer (pink) */
+.r6o-annotation.annotation-answer,
+[data-annotation].annotation-answer {
+  background-image: none !important;
+  background-color: rgba(236, 72, 153, 0.4) !important;
+  background: rgba(236, 72, 153, 0.4) none !important;
+  border-bottom: 2px solid rgb(236, 72, 153) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  min-height: 1px !important;
+}
+
+/* Number badge for annotations - unified style */
+.has-index {
+  overflow: visible !important;
+}
+.has-index::before {
+  content: attr(data-annotation-index) !important;
+  position: absolute !important;
+  top: -14px !important;
+  left: -8px !important;
+  background: #374151 !important;
+  color: white !important;
+  font-size: 11px !important;
+  font-weight: bold !important;
+  min-width: 20px !important;
+  height: auto !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  border-radius: 4px !important;
+  padding: 3px 6px !important;
+  z-index: 2147483647 !important;
+  font-family: system-ui, -apple-system, sans-serif !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+  pointer-events: none !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+.has-index.annotation-relevant::before {
+  background: rgb(8, 145, 178) !important;
+}
+.has-index.annotation-answer::before {
+  background: rgb(219, 39, 119) !important;
+}
+
+/* Hover effect on annotations */
+.r6o-annotation:hover,
+[data-annotation]:hover {
+  filter: brightness(0.85) !important;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.15) !important;
+  cursor: pointer !important;
+}
+
+/* Selected annotation */
+.r6o-annotation.selected,
+.r6o-annotation.pl-selected,
+[data-annotation].selected,
+[data-annotation].pl-selected {
+  outline: 3px solid #f59e0b !important;
+  outline-offset: 1px !important;
+}
+.has-index.selected::before,
+.has-index.pl-selected::before {
+  background: #f59e0b !important;
+}
+
+/* ========================================
+   Annotorious (Image Annotation) Styles
+   ======================================== */
+
+/* Annotorious layer container */
+.a9s-annotationlayer {
+  pointer-events: auto !important;
+  z-index: 100 !important;
+}
+
+/* Default annotation shape styling - neutral gray until type class is added */
+.a9s-annotation .a9s-inner {
+  fill: rgba(107, 114, 128, 0.2) !important;
+  stroke: rgb(107, 114, 128) !important;
+  stroke-width: 2px !important;
+}
+
+/* Relevant annotation (cyan) - higher specificity with !important */
+.a9s-annotationlayer .a9s-annotation.annotation-relevant .a9s-inner {
+  fill: rgba(6, 182, 212, 0.25) !important;
+  stroke: rgb(6, 182, 212) !important;
+  stroke-width: 2px !important;
+}
+
+/* Answer annotation (pink) - higher specificity with !important */
+.a9s-annotationlayer .a9s-annotation.annotation-answer .a9s-inner {
+  fill: rgba(236, 72, 153, 0.25) !important;
+  stroke: rgb(236, 72, 153) !important;
+  stroke-width: 2px !important;
+}
+
+/* Hover effect on image annotations */
+.a9s-annotation:hover .a9s-inner {
+  stroke-width: 3px !important;
+  filter: brightness(0.9) !important;
+}
+
+/* Selected image annotation */
+.a9s-annotation.selected .a9s-inner,
+.a9s-annotation.a9s-selected .a9s-inner {
+  stroke: #f59e0b !important;
+  stroke-width: 3px !important;
+}
+
+/* Drawing/creation mode */
+.a9s-annotation.a9s-drawing .a9s-inner {
+  stroke-dasharray: 5, 5 !important;
+}
+
+/* Disable image dragging to allow region selection */
+img {
+  -webkit-user-drag: none !important;
+  -khtml-user-drag: none !important;
+  -moz-user-drag: none !important;
+  -o-user-drag: none !important;
+  user-drag: none !important;
+}
+
+/* ========================================
+   Webmarker Styles
+   ======================================== */
+
+/* Highlighted mark */
+.webmarker-highlighted {
+  background-color: #f59e0b !important;
+  transform: scale(1.1) !important;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4) !important;
+}
+
+.webmarker-bounding-box-highlighted {
+  outline-color: #f59e0b !important;
+  background-color: rgba(245, 158, 11, 0.15) !important;
+}
+
+/* Make marks interactive and ensure visibility */
+.webmarker,
+.webmarker-bounding-box {
+  position: absolute !important;
+  display: block !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  z-index: 2147483645 !important; /* High z-index to be above most content */
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Hover effect on marks */
+.webmarker:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
+}
+
+.webmarker-bounding-box:hover {
+  background-color: rgba(99, 102, 241, 0.2) !important;
+}
+
+/* Named marks get a different style */
+.webmarker-named {
+  background-color: #059669 !important;
+}
+
+/* ========================================
+   Element Annotation Boxes (from marks)
+   ======================================== */
+
+.element-annotation {
+  position: absolute !important;
+  display: block !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  z-index: 2147483646 !important; /* Match text annotation z-index */
+  visibility: visible !important;
+  opacity: 1 !important;
+  transition: filter 0.2s ease, outline-width 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.element-annotation:hover {
+  filter: brightness(0.95) !important;
+}
+
+.element-annotation.element-annotation-relevant {
+  outline: 2px solid rgb(6, 182, 212) !important;
+  background-color: rgba(6, 182, 212, 0.15) !important;
+}
+
+.element-annotation.element-annotation-answer {
+  outline: 2px solid rgb(236, 72, 153) !important;
+  background-color: rgba(236, 72, 153, 0.15) !important;
+}
+
+.element-annotation.selected,
+.element-annotation:focus {
+  outline-width: 3px !important;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.3) !important;
+}
+
+/* Element annotation badges (numbered labels) - same style as text annotations */
+.element-annotation-badge {
+  position: absolute !important;
+  display: block !important;
+  z-index: 2147483647 !important; /* Maximum z-index to be above everything */
+  visibility: visible !important;
+  opacity: 1 !important;
+  min-width: 20px !important;
+  padding: 3px 6px !important;
+  font-size: 11px !important;
+  font-weight: bold !important;
+  border-radius: 4px !important;
+  font-family: system-ui, -apple-system, sans-serif !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  text-align: center !important;
+}
+
+.element-annotation-badge.element-annotation-badge-relevant {
+  background-color: rgb(8, 145, 178) !important;
+  color: white !important;
+}
+
+.element-annotation-badge.element-annotation-badge-answer {
+  background-color: rgb(219, 39, 119) !important;
+  color: white !important;
+}
+
+.element-annotation-badge {
+  transition: transform 0.15s ease !important;
+}
+
+.element-annotation-badge:hover {
+  transform: scale(1.05) !important;
+}
+
