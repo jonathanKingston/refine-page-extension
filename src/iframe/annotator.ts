@@ -6,7 +6,7 @@
 
 import { createTextAnnotator } from '@recogito/text-annotator/packages/text-annotator/dist/text-annotator.es.js';
 import { createImageAnnotator } from '@annotorious/annotorious';
-import { mark, unmark, isMarked, type MarkedElement } from 'webmarker-js';
+import { mark, unmark, type MarkedElement } from 'webmarker-js';
 import { autoUpdate, computePosition } from '@floating-ui/dom';
 import '@recogito/text-annotator/packages/text-annotator/dist/text-annotator.css';
 import '@annotorious/annotorious/annotorious.css';
@@ -36,6 +36,8 @@ let annotationIndex = 0; // Track annotation numbers
 let regionAnnotationIndex = 0; // Track region annotation numbers
 
 // Flag to suppress delete events during clear operations (e.g., switching questions)
+// Note: Currently not modified, but kept as let for potential future use
+// eslint-disable-next-line prefer-const
 let suppressDeleteEvents = false;
 
 // Webmarker state
@@ -480,7 +482,8 @@ function initializeImageAnnotators(container: HTMLElement) {
       const imageAnnotator = createImageAnnotator(img, {
         drawingEnabled: currentTool !== 'select',
         // Style function reads type from annotation bodies, not current tool
-        style: (annotation: unknown) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        style: (annotation: any) => {
           const ann = annotation as { bodies?: Array<{ purpose?: string; value?: string }> };
           // Find the tagging body that stores our type
           const typeBody = ann.bodies?.find((b) => b.purpose === 'tagging');
@@ -488,8 +491,8 @@ function initializeImageAnnotators(container: HTMLElement) {
           const colors =
             REGION_COLORS[type as keyof typeof REGION_COLORS] || REGION_COLORS.relevant;
           return {
-            fill: colors.fill,
-            stroke: colors.stroke,
+            fill: colors.fill as any,
+            stroke: colors.stroke as any,
             strokeWidth: 2,
           };
         },
@@ -556,7 +559,8 @@ function initializeImageAnnotators(container: HTMLElement) {
             bodies: [...(ann.bodies || []), typeBody],
           };
           // Update the annotation with the type body
-          imageAnnotator.updateAnnotation(updatedAnn);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          imageAnnotator.updateAnnotation(updatedAnn as any);
 
           // Apply additional styling
           applyRegionAnnotationStyle(ann.id, currentTool);
@@ -1069,7 +1073,7 @@ function enableMarks(container: HTMLElement) {
   const annotatedSelectors = getAnnotatedSelectors();
 
   // Custom styling for marks
-  let rawMarkedElements = mark({
+  const rawMarkedElements = mark({
     containerElement: container,
     selector,
     showBoundingBoxes: true,
@@ -1095,14 +1099,15 @@ function enableMarks(container: HTMLElement) {
   // Filter out already annotated elements
   const filteredMarkedElements: Record<string, MarkedElement> = {};
   for (const [label, marked] of Object.entries(rawMarkedElements)) {
-    const elementSelector = getUniqueSelector(marked.element);
+    const markedEl = marked as MarkedElement;
+    const elementSelector = getUniqueSelector(markedEl.element);
     if (annotatedSelectors.has(elementSelector)) {
       // Remove the mark visual since this element is already annotated
-      marked.markElement.remove();
-      marked.boundingBoxElement?.remove();
+      markedEl.markElement.remove();
+      markedEl.boundingBoxElement?.remove();
       console.log('[Iframe Annotator] Skipping already annotated element:', elementSelector);
     } else {
-      filteredMarkedElements[label] = marked;
+      filteredMarkedElements[label] = markedEl;
     }
   }
 
@@ -1133,7 +1138,7 @@ function enableMarks(container: HTMLElement) {
   // Add click handlers to marks for naming
   // Note: pointer-events and cursor are handled by CSS (.webmarker, .webmarker-bounding-box)
   Object.entries(currentMarkedElements).forEach(([label, markedEl]) => {
-    markedEl.markElement.addEventListener('click', (e) => {
+    markedEl.markElement.addEventListener('click', (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
       console.log('[Iframe Annotator] Mark clicked:', label);
@@ -1150,7 +1155,7 @@ function enableMarks(container: HTMLElement) {
 
     // Also add click handler to bounding box
     if (markedEl.boundingBoxElement) {
-      markedEl.boundingBoxElement.addEventListener('click', (e) => {
+      markedEl.boundingBoxElement.addEventListener('click', (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
         console.log('[Iframe Annotator] Mark bounding box clicked:', label);

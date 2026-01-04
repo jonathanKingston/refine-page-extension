@@ -277,10 +277,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'IMPORT_DATA':
         return importData(message.payload.data);
 
-      case 'OPEN_VIEWER':
+      case 'OPEN_VIEWER': {
         const viewerUrl = chrome.runtime.getURL(`viewer.html?id=${message.payload.snapshotId}`);
         await chrome.tabs.create({ url: viewerUrl });
         return { success: true };
+      }
 
       case 'CAPTURE_PAGE': {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

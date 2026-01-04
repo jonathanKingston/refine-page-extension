@@ -18,8 +18,12 @@
   "dependencies": {
     "@annotorious/annotorious": "^3.0.17",
     "@recogito/text-annotator": "github:jonathanKingston/text-annotator-js#jkt/remove-ua-parser",
+    "colord": "^2.9.3",
+    "debounce": "^3.0.0",
+    "hotkeys-js": "^4.0.0",
     "jszip": "^3.10.1",
     "mhtml2html": "^2.0.0",
+    "poll": "^3.2.2",
     "webmarker-js": "^0.7.0"
   },
   "devDependencies": {

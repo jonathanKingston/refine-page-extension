@@ -898,40 +898,6 @@ function injectAnnotationStyles(doc: Document) {
   doc.head?.appendChild(style);
 }
 
-// Load existing text annotations into the text annotator
-function loadExistingTextAnnotations() {
-  if (!textAnnotator || !currentSnapshot) return;
-
-  for (const annotation of currentSnapshot.annotations.text) {
-    try {
-      // Create W3C annotation format for the library
-      const w3cAnnotation = {
-        '@context': 'http://www.w3.org/ns/anno.jsonld',
-        type: 'Annotation',
-        id: annotation.id,
-        body: [
-          {
-            type: 'TextualBody',
-            purpose: 'tagging',
-            value: annotation.type,
-          },
-        ],
-        target: {
-          source: currentSnapshot.id,
-          selector: {
-            type: 'TextQuoteSelector',
-            exact: annotation.selectedText,
-          },
-        },
-      };
-
-      textAnnotator.addAnnotation(w3cAnnotation);
-      updateAnnotationAppearance(annotation.id, annotation.type);
-    } catch (error) {
-      console.warn('Failed to load annotation:', annotation.selectedText.substring(0, 30), error);
-    }
-  }
-}
 
 // Update the visual appearance of an annotation based on its type
 function updateAnnotationAppearance(annotationId: string, type: AnnotationType) {
@@ -1362,10 +1328,12 @@ function updateAnnotationCounts() {
 
 // Get annotations for the current question
 function getAnnotationsForCurrentQuestion(): {
-  text: typeof currentSnapshot.annotations.text;
-  region: typeof currentSnapshot.annotations.region;
+  text: TextAnnotation[];
+  region: RegionAnnotation[];
 } {
-  if (!currentSnapshot) return { text: [], region: [] };
+  if (!currentSnapshot) {
+    return { text: [], region: [] };
+  }
 
   // If no question selected, show no annotations
   if (!currentQuestionId) {
@@ -1452,11 +1420,7 @@ function renderAnnotationList() {
 
     // Get tag name for element annotations, use type indicator for others
     let tagName = '';
-    if (a.annotationType === 'element') {
-      // Extract tag from displayText which is like "[img] description"
-      const match = a.displayText.match(/^\[(\w+)\]/);
-      tagName = match ? match[1] : 'elem';
-    } else if (a.annotationType === 'region') {
+    if (a.annotationType === 'region') {
       tagName = 'region';
     } else {
       tagName = 'text';

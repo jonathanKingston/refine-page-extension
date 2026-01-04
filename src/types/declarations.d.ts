@@ -35,3 +35,44 @@ declare module '*.css' {
   const content: string;
   export default content;
 }
+
+// Declaration for @recogito/text-annotator
+declare module '@recogito/text-annotator/packages/text-annotator/dist/text-annotator.es.js' {
+  export function createTextAnnotator(
+    element: HTMLElement,
+    options?: unknown
+  ): {
+    addAnnotation: (annotation: unknown) => void;
+    removeAnnotation: (id: string) => void;
+    updateAnnotation: (annotation: unknown) => void;
+    getAnnotations: () => unknown[];
+    on: (event: string, handler: (annotation: unknown) => void) => void;
+    off: (event: string, handler: (annotation: unknown) => void) => void;
+    destroy: () => void;
+  };
+}
+
+// Declaration for webmarker-js
+declare module 'webmarker-js' {
+  export interface MarkedElement {
+    element: HTMLElement;
+    markElement: HTMLElement;
+    boundingBoxElement?: HTMLElement;
+    label: string;
+  }
+
+  export interface MarkOptions {
+    containerElement: HTMLElement;
+    selector?: string;
+    showBoundingBoxes?: boolean;
+    markStyle?: Record<string, string>;
+    boundingBoxStyle?: Record<string, string>;
+    markPlacement?: string;
+  }
+
+  export function mark(options: MarkOptions): Record<string, MarkedElement>;
+
+  export function unmark(): void;
+
+  export function isMarked(element: HTMLElement): boolean;
+}
