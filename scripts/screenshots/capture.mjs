@@ -6,13 +6,13 @@
  * screenshots of various states for store listings and website assets.
  * 
  * Usage:
- *   node tools/screenshots/capture.mjs --extension-path=./dist
- *   node tools/screenshots/capture.mjs --extension-path=./dist --scenario=all
- *   node tools/screenshots/capture.mjs --extension-path=./dist --scenario=annotation
+ *   node scripts/screenshots/capture.mjs --extension-path=./dist
+ *   node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=all
+ *   node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=chrome-store-screenshot-1-list
  */
 
 import puppeteer from 'puppeteer';
-import { mkdir, readFile, readdir, rm, writeFile } from 'fs/promises';
+import { mkdir, readFile, readdir, rm, unlink, writeFile } from 'fs/promises';
 import { existsSync, readdirSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -55,44 +55,92 @@ const CAPTURE_VIEWPORT = { width: 1600, height: 1000 };
 // Screenshot configurations for different marketing contexts
 // All captured at CAPTURE_VIEWPORT, then scaled to outputSize if specified
 const SCENARIOS = {
-  // Chrome Web Store: captured at 1440x900, scaled to 1280x800
-  'store-marquee': {
-    viewport: CAPTURE_VIEWPORT,
-    outputSize: { width: 1280, height: 800 },
-    setup: async (page, extensionId) => {
-      await loadDemoState(page, extensionId, 'pasty-demo');
-    },
-    filename: 'store-marquee-1280x800.png'
-  },
-  
-  'store-screenshot-1': {
+  // Chrome Web Store Screenshots (1280x800)
+  'chrome-store-screenshot-1-list': {
     viewport: CAPTURE_VIEWPORT,
     outputSize: { width: 1280, height: 800 },
     setup: async (page, extensionId) => {
       await loadDemoState(page, extensionId, 'snapshot-list');
     },
-    filename: 'store-screenshot-1-list.png'
+    filename: 'chrome-store-screenshot-1-list-1280x800.png'
   },
   
-  'store-screenshot-2': {
+  'chrome-store-screenshot-2-annotations': {
     viewport: CAPTURE_VIEWPORT,
     outputSize: { width: 1280, height: 800 },
     setup: async (page, extensionId) => {
       await loadDemoState(page, extensionId, 'pasty-demo');
     },
-    filename: 'store-screenshot-2-annotation.png'
+    filename: 'chrome-store-screenshot-2-annotations-1280x800.png'
+  },
+  
+  'chrome-store-screenshot-3-dark': {
+    viewport: CAPTURE_VIEWPORT,
+    outputSize: { width: 1280, height: 800 },
+    setup: async (page, extensionId) => {
+      await loadDemoState(page, extensionId, 'pasty-demo');
+      // Enable dark mode
+      await page.evaluate(() => {
+        document.documentElement.dataset.theme = 'noir';
+      });
+      await delay(500);
+    },
+    filename: 'chrome-store-screenshot-3-dark-1280x800.png'
+  },
+  
+  'chrome-store-screenshot-4-autodetect': {
+    viewport: CAPTURE_VIEWPORT,
+    outputSize: { width: 1280, height: 800 },
+    setup: async (page, extensionId) => {
+      await loadDemoState(page, extensionId, 'david-bowie-autodetect');
+    },
+    filename: 'chrome-store-screenshot-4-autodetect-1280x800.png'
   },
 
-  // Website hero images (full scale, no resize)
-  'hero-light': {
+  // Base capture for pasty-demo (used to derive multiple outputs)
+  '_base-pasty-demo': {
     viewport: CAPTURE_VIEWPORT,
     setup: async (page, extensionId) => {
       await loadDemoState(page, extensionId, 'pasty-demo');
     },
-    filename: 'hero-light.png'
+    filename: '_base-pasty-demo.png', // Internal, will be deleted
+    isBase: true
+  },
+  
+  // Chrome Web Store Promo Tiles (derived from base)
+  'chrome-store-marquee-tile': {
+    baseCapture: '_base-pasty-demo',
+    outputSize: { width: 1400, height: 560 },
+    filename: 'chrome-store-marquee-tile-1400x560.png'
+  },
+  
+  'chrome-store-small-tile': {
+    baseCapture: '_base-pasty-demo',
+    outputSize: { width: 440, height: 280 }, // Base size (Chrome Web Store requirement)
+    filename: 'chrome-store-small-tile-440x280.png'
   },
 
-  'hero-dark': {
+  // Website hero images (derived from base)
+  'homepage-hero-light': {
+    baseCapture: '_base-pasty-demo',
+    filename: 'homepage-hero-light.png'
+  },
+
+  // Feature callouts (derived from base)
+  'feature-text-highlighting': {
+    baseCapture: '_base-pasty-demo',
+    outputSize: { width: 800, height: 600 },
+    filename: 'feature-text-highlighting-800x600.png'
+  },
+
+  'feature-evaluation-panel': {
+    baseCapture: '_base-pasty-demo',
+    outputSize: { width: 800, height: 600 },
+    filename: 'feature-evaluation-panel-800x600.png'
+  },
+
+  // Unique captures (require separate setup)
+  'homepage-hero-dark': {
     viewport: CAPTURE_VIEWPORT,
     setup: async (page, extensionId) => {
       await loadDemoState(page, extensionId, 'pasty-demo');
@@ -102,11 +150,10 @@ const SCENARIOS = {
       });
       await delay(500);
     },
-    filename: 'hero-dark.png'
+    filename: 'homepage-hero-dark.png'
   },
   
-  // Auto-detect feature showcase
-  'feature-autodetect': {
+  'feature-auto-detect': {
     viewport: CAPTURE_VIEWPORT,
     outputSize: { width: 800, height: 600 },
     setup: async (page, extensionId) => {
@@ -118,26 +165,7 @@ const SCENARIOS = {
         await delay(2000); // Wait for elements to be detected
       }
     },
-    filename: 'feature-autodetect.png'
-  },
-
-  // Feature callouts: captured at 1440x900, scaled to 800x600  
-  'feature-highlighting': {
-    viewport: CAPTURE_VIEWPORT,
-    outputSize: { width: 800, height: 600 },
-    setup: async (page, extensionId) => {
-      await loadDemoState(page, extensionId, 'pasty-demo');
-    },
-    filename: 'feature-highlighting.png'
-  },
-
-  'feature-evaluation': {
-    viewport: CAPTURE_VIEWPORT,
-    outputSize: { width: 800, height: 600 },
-    setup: async (page, extensionId) => {
-      await loadDemoState(page, extensionId, 'pasty-demo');
-    },
-    filename: 'feature-evaluation.png'
+    filename: 'feature-auto-detect-800x600.png'
   },
 };
 
@@ -158,23 +186,88 @@ async function loadDemoState(page, extensionId, stateName, options = {}) {
   console.log(`  🌐 Navigating to: ${viewerUrl}`);
   await page.goto(viewerUrl, { waitUntil: 'networkidle0', timeout: 30000 });
   
-  // Check if snapshots exist in storage
-  const snapshotInfo = await page.evaluate(async () => {
+  // Wait for extension API to be available and actually functional
+  await page.waitForFunction(() => {
     try {
+      return typeof chrome !== 'undefined' && 
+             typeof chrome.storage !== 'undefined' &&
+             typeof chrome.storage.local !== 'undefined' &&
+             typeof chrome.storage.local.get === 'function';
+    } catch (e) {
+      return false;
+    }
+  }, { timeout: 15000 }).catch(() => {
+    console.warn(`  ⚠️  Extension API may not be ready`);
+  });
+  
+  // Try to access storage to ensure it's ready
+  await page.evaluate(async () => {
+    try {
+      await chrome.storage.local.get(['snapshotIndex']);
+    } catch (e) {
+      // Storage might not be ready yet
+    }
+  });
+  
+  await delay(2000);
+  
+  // Check if snapshots exist in storage - retry with delays
+  // First, trigger a storage read to force sync with background script
+  await page.evaluate(async () => {
+    try {
+      // Force a storage read to sync with background
+      await chrome.storage.local.get(null);
+    } catch (e) {
+      // Ignore errors, storage might not be ready
+    }
+  });
+  await delay(1000);
+  
+  let snapshotInfo = { count: 0, index: [] };
+  let retries = 10;
+  while (retries > 0 && snapshotInfo.count === 0) {
+    snapshotInfo = await page.evaluate(async () => {
+      try {
+        // Ensure chrome.storage is available
+        if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
+          return { count: 0, index: [], error: 'chrome.storage not available', hasStorage: false };
+        }
+        
+        // Try to get snapshotIndex
       const result = await chrome.storage.local.get(['snapshotIndex']);
-      const count = Array.isArray(result.snapshotIndex) ? result.snapshotIndex.length : 0;
+        const index = result.snapshotIndex || [];
+        const count = Array.isArray(index) ? index.length : 0;
+        
+        // If we have an index, verify at least one snapshot actually exists
+        if (count > 0) {
+          const testKey = `snapshot_${index[0]}`;
+          const testResult = await chrome.storage.local.get([testKey]);
+          if (!testResult[testKey]) {
+            // Index exists but snapshot doesn't - might still be syncing
+            return { count: 0, index: [], error: 'Snapshot data not yet synced', hasStorage: true };
+          }
+        }
+        
       return {
         count,
-        index: result.snapshotIndex || [],
-        hasStorage: typeof chrome !== 'undefined' && !!chrome.storage
+          index,
+          hasStorage: true
       };
     } catch (error) {
       return { count: 0, index: [], error: error.message, hasStorage: false };
     }
   });
+    
+    if (snapshotInfo.count === 0 && retries > 1) {
+      const errorMsg = snapshotInfo.error ? ` (${snapshotInfo.error})` : '';
+      console.log(`  ⏳ Waiting for snapshots in storage...${errorMsg} (${retries - 1} retries left)`);
+      await delay(2000);
+    }
+    retries--;
+  }
   
   if (snapshotInfo.count === 0) {
-    console.warn(`  ⚠️  No snapshots found in storage. Snapshots should have been imported before scenarios run.`);
+    console.warn(`  ⚠️  No snapshots found in storage after retries. Snapshots should have been imported before scenarios run.`);
     console.warn(`  Check the import output above for errors.`);
     await page.waitForSelector('#snapshot-nav, #page-title', { timeout: 5000 }).catch(() => {});
     return;
@@ -190,27 +283,37 @@ async function loadDemoState(page, extensionId, stateName, options = {}) {
     
     await delay(2000);
     
-    // Wait for snapshots to load in UI
-  await page.waitForFunction(() => {
+    // Wait for snapshots to load in UI - more robust check
+    // For list view, we don't need iframe; for others we do
+    const needsIframe = stateName !== 'snapshot-list';
+    
+    await page.waitForFunction((needsIframe) => {
       const iframe = document.getElementById('preview-frame');
       const title = document.getElementById('page-title');
       const nav = document.getElementById('snapshot-nav');
       
+      // Nav must have items and not be in loading state
       const navHasItems = nav && nav.children.length > 0 &&
                          !nav.textContent?.includes('No snapshots') &&
                          !nav.textContent?.includes('Loading');
       
-      const iframeLoaded = iframe && iframe.src && 
+      // Iframe must be loaded (for states that need it)
+      const iframeLoaded = !needsIframe || (iframe && iframe.src && 
                           iframe.src.includes('iframe.html') && 
-                          iframe.src !== '';
+                          iframe.src !== '');
       
+      // Title must be set and not loading
       const titleSet = title && 
                       title.textContent && 
                       title.textContent !== 'Loading...' &&
                       title.textContent.trim() !== '';
       
+      // All conditions must be met
       return navHasItems && iframeLoaded && titleSet;
-    }, { timeout: 25000, polling: 200 });
+    }, { timeout: 30000, polling: 200 }, needsIframe);
+    
+    // Additional wait to ensure everything is stable
+    await delay(1500);
     
     console.log(`  ✓ Snapshots loaded successfully`);
     await delay(500);
@@ -219,6 +322,27 @@ async function loadDemoState(page, extensionId, stateName, options = {}) {
     if (stateName === 'pasty-demo') {
       await setupPastyDemoState(page);
     }
+    
+    // Handle david-bowie-autodetect state - select David Bowie snapshot and enable auto-detect
+    if (stateName === 'david-bowie-autodetect') {
+      await setupDavidBowieAutodetect(page);
+    }
+    
+    // For snapshot-list state, ensure the list is fully rendered
+    if (stateName === 'snapshot-list') {
+      // Wait for nav items to be fully rendered and visible
+      await page.waitForFunction(() => {
+        const nav = document.getElementById('snapshot-nav');
+        const items = nav?.querySelectorAll('li');
+        return nav && items && items.length > 0 && 
+               Array.from(items).every(item => item.offsetHeight > 0);
+      }, { timeout: 10000 }).catch(() => {});
+      await delay(1000);
+      console.log(`  ✓ List view ready`);
+    }
+    
+    // Final wait to ensure everything is settled
+    await delay(500);
     
   } catch (error) {
     const state = await page.evaluate(() => {
@@ -237,6 +361,41 @@ async function loadDemoState(page, extensionId, stateName, options = {}) {
     console.warn(`    iframe: ${state.iframe.substring(0, 80)}`);
     console.warn(`    title: "${state.title}"`);
     console.warn(`    nav items: ${state.navItems}`);
+  }
+}
+
+/**
+ * Wait for iframe content to be fully loaded
+ */
+async function waitForIframeContent(page, timeout = 15000) {
+  try {
+    await page.waitForFunction(() => {
+      const iframe = document.getElementById('preview-frame');
+      if (!iframe || !iframe.contentDocument) return false;
+      
+      try {
+        const doc = iframe.contentDocument;
+        // Check if document has actual content (not just loading)
+        const hasContent = doc.body && 
+                           doc.body.children.length > 0 &&
+                           doc.body.textContent.trim().length > 50;
+        
+        // Check if title is set (not "Loading...")
+        const title = document.getElementById('page-title');
+        const titleReady = title && 
+                          title.textContent && 
+                          title.textContent !== 'Loading...' &&
+                          title.textContent.trim() !== '';
+        
+        return hasContent && titleReady;
+      } catch (e) {
+        // Cross-origin, check if iframe src is set
+        return iframe.src && iframe.src.includes('iframe.html');
+      }
+    }, { timeout, polling: 200 });
+    return true;
+  } catch (e) {
+    return false;
   }
 }
 
@@ -360,11 +519,21 @@ async function setupPastyDemoState(page) {
   
   if (pastyClicked.clicked) {
     console.log(`  ✓ Clicked Pasty in sidebar`);
+    
+    // Wait for iframe content to actually load
+    const iframeLoaded = await waitForIframeContent(page, 20000);
+    if (iframeLoaded) {
+      console.log(`  ✓ Iframe content loaded`);
+    } else {
+      console.warn(`  ⚠️  Iframe content may not have loaded fully`);
+    }
+    
+    // Additional wait for questions to render
+    await delay(1000);
   } else {
     console.warn(`  ⚠️  Could not find Pasty. Available: ${pastyClicked.titles.join(', ')}`);
+    await delay(2000);
   }
-  
-  await delay(3000); // Wait for snapshot to load and questions to render
   
   // Debug: check what questions exist
   const questionDebug = await page.evaluate(() => {
@@ -589,6 +758,64 @@ async function setupPastyDemoState(page) {
   
   await delay(500);
   console.log(`  ✓ Pasty demo state ready`);
+}
+
+/**
+ * Set up David Bowie snapshot with auto-detect enabled
+ */
+async function setupDavidBowieAutodetect(page) {
+  console.log(`  🎨 Setting up David Bowie with auto-detect...`);
+  
+  // Wait for snapshots to load
+  await page.waitForFunction(() => {
+    const nav = document.getElementById('snapshot-nav');
+    const items = nav?.querySelectorAll('li');
+    return nav && items && items.length > 0;
+  }, { timeout: 15000 }).catch(() => {});
+  
+  await delay(1000);
+  
+  // Click on the David Bowie snapshot in the sidebar
+  const bowieClicked = await page.evaluate(() => {
+    const navItems = document.querySelectorAll('#snapshot-nav li');
+    for (const item of navItems) {
+      if (item.textContent?.includes('David Bowie') || item.textContent?.includes('Bowie')) {
+        item.click();
+        return { clicked: true };
+      }
+    }
+    return { clicked: false };
+  });
+  
+  if (bowieClicked.clicked) {
+    console.log(`  ✓ Clicked David Bowie in sidebar`);
+    
+    // Wait for iframe content to actually load before enabling auto-detect
+    const iframeLoaded = await waitForIframeContent(page, 20000);
+    if (iframeLoaded) {
+      console.log(`  ✓ Iframe content loaded`);
+    } else {
+      console.warn(`  ⚠️  Iframe content may not have loaded fully`);
+    }
+    
+    // Additional wait to ensure page is stable
+    await delay(2000);
+    
+    // Click the Auto-detect button
+    const autoDetectBtn = await page.$('#auto-detect-btn');
+    if (autoDetectBtn) {
+      await autoDetectBtn.click();
+      console.log(`  ✓ Enabled Auto-detect`);
+      await delay(3000); // Wait for elements to be detected and highlighted
+    } else {
+      console.warn(`  ⚠️  Auto-detect button not found`);
+    }
+  } else {
+    console.warn(`  ⚠️  Could not find David Bowie snapshot`);
+    await delay(2000);
+  }
+  
+  console.log(`  ✓ David Bowie auto-detect state ready`);
 }
 
 /**
@@ -922,156 +1149,6 @@ async function importSnapshotsIntoStorage(page, extensionId) {
 /**
  * Capture real pages using Puppeteer and save to extension storage
  */
-async function captureExamplePages(browser, extensionId) {
-  const pagesToCapture = [
-    { url: 'https://example.com', title: 'Example Domain' },
-    { url: 'https://en.wikipedia.org/wiki/Pasty', title: 'Pasty - Wikipedia' },
-  ];
-  
-  const snapshots = [];
-  
-  for (const pageInfo of pagesToCapture) {
-    try {
-      console.log(`   Capturing: ${pageInfo.url}`);
-      const page = await browser.newPage();
-      await page.setViewport({ width: 1280, height: 800 });
-      
-      // Navigate and wait for page to load
-      await page.goto(pageInfo.url, { waitUntil: 'networkidle0', timeout: 30000 });
-      await delay(2000); // Wait for any dynamic content
-      
-      // Get page content
-      const html = await page.evaluate(() => {
-        // Make HTML inert - remove scripts, disable links, etc.
-        const doc = document.cloneNode(true);
-        const scripts = doc.querySelectorAll('script');
-        scripts.forEach(s => s.remove());
-        
-        // Disable links
-        const links = doc.querySelectorAll('a');
-        links.forEach(a => {
-          a.removeAttribute('href');
-          a.style.pointerEvents = 'none';
-          a.style.cursor = 'default';
-        });
-        
-        // Disable forms
-        const forms = doc.querySelectorAll('form');
-        forms.forEach(f => {
-          f.addEventListener = () => {};
-          f.onsubmit = () => false;
-        });
-        
-        // Inline styles
-        const styles = doc.querySelectorAll('style, link[rel="stylesheet"]');
-        styles.forEach(s => {
-          if (s.tagName === 'LINK') {
-            s.remove();
-          }
-        });
-        
-        return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-      });
-      
-      const title = await page.title();
-      const viewport = await page.viewport();
-      
-      // Generate ID
-      const id = `demo-${pageInfo.url.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${Date.now()}`;
-      
-      const snapshot = {
-        id: id,
-        title: title || pageInfo.title,
-        url: pageInfo.url,
-        html: html,
-        viewport: { width: viewport.width, height: viewport.height },
-        annotations: { text: [], region: [] },
-        questions: pageInfo.url.includes('wikipedia') ? [{
-          id: 'q1',
-          query: 'What food is being discussed?',
-          expectedAnswer: 'Pasty',
-          annotationIds: [],
-          evaluation: { correctness: 'correct', answerInPage: 'yes', pageQuality: 'good' },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }] : [],
-        status: 'pending',
-        tags: [],
-        capturedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      
-      snapshots.push(snapshot);
-      await page.close();
-      console.log(`   ✓ Captured: ${title || pageInfo.title}`);
-    } catch (error) {
-      console.warn(`   ⚠️  Failed to capture ${pageInfo.url}: ${error.message}`);
-    }
-  }
-  
-  if (snapshots.length === 0) {
-    console.warn(`   ⚠️  No snapshots captured`);
-    return;
-  }
-  
-  // Save snapshots to extension storage
-  try {
-    const page = await browser.newPage();
-    const extensionUrl = `chrome-extension://${extensionId}/demo.html`;
-    await page.goto(extensionUrl, { waitUntil: 'networkidle0', timeout: 10000 });
-    await delay(500);
-    
-    const result = await page.evaluate(async (snapshots) => {
-      try {
-        // Get current index
-        const result = await chrome.storage.local.get(['snapshotIndex']);
-        const index = result.snapshotIndex || [];
-        
-        // Add new snapshot IDs to index
-        const newIds = snapshots.map(s => s.id).filter(id => !index.includes(id));
-        const updatedIndex = [...index, ...newIds];
-        
-        // Prepare storage object
-        const storageData = {
-          snapshotIndex: updatedIndex,
-        };
-        
-        // Add each snapshot
-        for (const snapshot of snapshots) {
-          storageData[`snapshot_${snapshot.id}`] = snapshot;
-        }
-        
-        // Save all at once
-        await chrome.storage.local.set(storageData);
-        
-        // Verify
-        const verify = await chrome.storage.local.get(['snapshotIndex']);
-        
-        return { 
-          saved: snapshots.length, 
-          index: updatedIndex.length,
-          verified: verify.snapshotIndex?.length || 0
-        };
-      } catch (error) {
-        return { error: error.message, stack: error.stack };
-      }
-    }, snapshots);
-    
-    await page.close();
-    
-    if (result.error) {
-      console.warn(`   ⚠️  Failed to save snapshots: ${result.error}`);
-      if (result.stack) {
-        console.warn(`   Stack: ${result.stack}`);
-      }
-    } else {
-      console.log(`   ✓ Saved ${result.saved} snapshots to extension storage (index: ${result.index}, verified: ${result.verified})`);
-    }
-  } catch (error) {
-    console.warn(`   ⚠️  Failed to save snapshots: ${error.message}`);
-  }
-}
-
 async function captureScenario(browser, extensionId, name, config) {
   console.log(`📸 Capturing: ${name}`);
   
@@ -1129,8 +1206,17 @@ async function captureScenario(browser, extensionId, name, config) {
   try {
     await config.setup(page, extensionId);
     
+    // For Chrome Web Store screenshots (except list view and auto-detect which handle their own waits), 
+    // ensure iframe content is loaded
+    if (name.includes('chrome-store') && !name.includes('list') && !name.includes('autodetect')) {
+      const iframeReady = await waitForIframeContent(page, 15000);
+      if (!iframeReady) {
+        console.warn(`   ⚠️  Iframe may not be fully loaded, proceeding anyway`);
+      }
+    }
+    
     // Additional wait to ensure page is fully rendered
-    await delay(1000);
+    await delay(1500);
     
     // Force a repaint to ensure everything is rendered at high DPI
     await page.evaluate(() => {
@@ -1139,7 +1225,7 @@ async function captureScenario(browser, extensionId, name, config) {
       document.body.offsetHeight; // Force reflow
       document.body.style.display = '';
     });
-    await delay(200);
+    await delay(500);
     
     const outputPath = path.join(OUTPUT_DIR, config.filename);
     
@@ -1160,7 +1246,7 @@ async function captureScenario(browser, extensionId, name, config) {
       omitBackground: false, // Include background for better quality
     };
     
-    // Remove undefined clip option
+    // Add clip option if specified
     if (config.clip) {
       screenshotOptions.clip = config.clip;
     }
@@ -1170,20 +1256,23 @@ async function captureScenario(browser, extensionId, name, config) {
     
     // Resize if outputSize is specified (scale down from full capture)
     if (config.outputSize) {
-      // Calculate target dimensions at 2x DPR
-      const targetWidth = config.outputSize.width * 2;
-      const targetHeight = config.outputSize.height * 2;
+      // Chrome Web Store screenshots use actual dimensions (no 2x DPR) and exact fit
+      // Other screenshots (features) use 2x DPR for high-DPI displays and preserve content
+      const use2xDPR = !name.includes('chrome-store');
+      const isChromeStore = name.includes('chrome-store');
+      const targetWidth = use2xDPR ? config.outputSize.width * 2 : config.outputSize.width;
+      const targetHeight = use2xDPR ? config.outputSize.height * 2 : config.outputSize.height;
       
       const resizedBuffer = await sharp(screenshotBuffer)
         .resize(targetWidth, targetHeight, {
-          fit: 'cover',
-          position: 'top',
+          fit: isChromeStore ? 'cover' : 'inside', // Exact dimensions for Chrome Store, preserve content for others
         })
         .png({ quality: 100 })
         .toBuffer();
       
       await writeFile(outputPath, resizedBuffer);
-      console.log(`   📐 Scaled: ${captureWidth}×${captureHeight} → ${config.outputSize.width}×${config.outputSize.height} (at 2x DPR)`);
+      const dprNote = use2xDPR ? ' (at 2x DPR)' : '';
+      console.log(`   📐 Scaled: ${captureWidth}×${captureHeight} → ${config.outputSize.width}×${config.outputSize.height}${dprNote}`);
     } else {
       // Save full-scale screenshot
       await writeFile(outputPath, screenshotBuffer);
@@ -1296,12 +1385,35 @@ async function main() {
       if (stdout) console.log(stdout);
       if (stderr) console.warn(stderr);
       
-      // Wait a moment for files to be written
-      await delay(2000);
+      // Wait for files to be fully written (increase delay for large files)
+      await delay(3000);
       
-      // Verify snapshots were created
-      const snapshotFiles = await readdir(SNAPSHOTS_DIR);
-      const createdSnapshots = snapshotFiles.filter(f => f.endsWith('.json') && f !== 'pages.json' && f !== 'pages.json.example');
+      // Verify snapshots were created and are readable
+      let retries = 3;
+      let createdSnapshots = [];
+      while (retries > 0) {
+        try {
+          const snapshotFiles = await readdir(SNAPSHOTS_DIR);
+          createdSnapshots = snapshotFiles.filter(f => f.endsWith('.json') && f !== 'pages.json' && f !== 'pages.json.example');
+          
+          // Verify files are actually readable (not just created)
+          if (createdSnapshots.length > 0) {
+            const testFile = path.join(SNAPSHOTS_DIR, createdSnapshots[0]);
+            const testContent = await readFile(testFile, 'utf-8');
+            if (testContent && testContent.length > 100) {
+              break; // Files are readable
+            }
+          }
+        } catch (e) {
+          // Files might still be writing
+        }
+        retries--;
+        if (retries > 0) {
+          console.log(`   ⏳ Waiting for snapshot files to be written... (${retries} retries left)`);
+      await delay(2000);
+        }
+      }
+      
       console.log(`   ✓ Created ${createdSnapshots.length} snapshot files`);
       if (createdSnapshots.length === 0) {
         console.warn(`   ⚠️  No snapshots were created. Check the capture-pages output above.`);
@@ -1356,6 +1468,7 @@ async function main() {
     await defaultPage.close();
   }
   
+  let importPage = null;
   try {
     // Give extension more time to initialize service worker
     await delay(2000);
@@ -1366,7 +1479,7 @@ async function main() {
     
     // Import snapshots once before all scenarios (ephemeral profile needs this)
     console.log('📥 Importing snapshots into extension storage...');
-    const importPage = await browser.newPage();
+    importPage = await browser.newPage();
     const viewerUrl = `chrome-extension://${extensionId}/viewer.html`;
     await importPage.goto(viewerUrl, { waitUntil: 'networkidle0', timeout: 30000 });
     await delay(1000); // Wait for extension context to be ready
@@ -1378,30 +1491,179 @@ async function main() {
       console.warn('  Run: npm run capture:pages to capture pages first.');
     } else if (importResult.imported > 0) {
       console.log(`  ✅ Successfully imported ${importResult.imported} snapshots`);
+      
+      // Verify snapshots are actually in storage
+      const verifyResult = await importPage.evaluate(async () => {
+        try {
+          const result = await chrome.storage.local.get(['snapshotIndex']);
+          const index = result.snapshotIndex || [];
+          return { count: index.length, ids: index };
+        } catch (e) {
+          return { count: 0, error: e.message };
+        }
+      });
+      
+      if (verifyResult.count > 0) {
+        console.log(`  ✓ Verified ${verifyResult.count} snapshots in storage`);
+      } else {
+        console.warn(`  ⚠️  Verification failed: ${verifyResult.error || 'No snapshots found in storage'}`);
+      }
+      
+      // Additional wait to ensure storage is fully synced across all extension contexts
+      await delay(2000);
+      
+      // Reload the import page to ensure storage is persisted
+      await importPage.reload({ waitUntil: 'networkidle0' });
+      await delay(1000);
+      
+      // Verify one more time after reload
+      const finalVerify = await importPage.evaluate(async () => {
+        try {
+          const result = await chrome.storage.local.get(['snapshotIndex']);
+          return { count: (result.snapshotIndex || []).length };
+        } catch (e) {
+          return { count: 0, error: e.message };
+        }
+      });
+      
+      if (finalVerify.count > 0) {
+        console.log(`  ✓ Final verification: ${finalVerify.count} snapshots confirmed in storage`);
+      }
     }
     
-    await importPage.close();
+    // Keep import page open to maintain extension context
+    // We'll close it after all scenarios are done
     console.log('');
     
     // Determine which scenarios to run
-    const scenariosToRun = SCENARIO === 'all' 
-      ? Object.entries(SCENARIOS)
-      : [[SCENARIO, SCENARIOS[SCENARIO]]];
-    
-    if (SCENARIO !== 'all' && !SCENARIOS[SCENARIO]) {
+    let scenariosToRun;
+    if (SCENARIO === 'all') {
+      scenariosToRun = Object.entries(SCENARIOS);
+    } else if (SCENARIO.includes(',')) {
+      // Comma-separated list
+      const scenarioNames = SCENARIO.split(',').map(s => s.trim());
+      scenariosToRun = scenarioNames.map(name => {
+        if (!SCENARIOS[name]) {
+          console.error(`Unknown scenario: ${name}`);
+          process.exit(1);
+        }
+        return [name, SCENARIOS[name]];
+      });
+    } else {
+      if (!SCENARIOS[SCENARIO]) {
       console.error(`Unknown scenario: ${SCENARIO}`);
-      console.error(`Available: ${Object.keys(SCENARIOS).join(', ')}`);
+        console.error(`Available: ${Object.keys(SCENARIOS).filter(k => !k.startsWith('_')).join(', ')}`);
       process.exit(1);
+      }
+      scenariosToRun = [[SCENARIO, SCENARIOS[SCENARIO]]];
     }
     
+    // Separate base captures and derived scenarios
+    const baseCaptures = new Map();
+    const directCaptures = [];
+    const derivedScenarios = [];
+    const neededBases = new Set();
+    
     for (const [name, config] of scenariosToRun) {
+      if (config.isBase) {
+        baseCaptures.set(name, config);
+      } else if (config.baseCapture) {
+        derivedScenarios.push([name, config]);
+        neededBases.add(config.baseCapture);
+      } else {
+        directCaptures.push([name, config]);
+      }
+    }
+    
+    // Step 1: Capture all base images (both explicit and needed for derived scenarios)
+    for (const baseName of neededBases) {
+      if (!baseCaptures.has(baseName)) {
+        const baseConfig = SCENARIOS[baseName];
+        if (baseConfig) {
+          baseCaptures.set(baseName, baseConfig);
+        }
+      }
+    }
+    
+    for (const [name, config] of baseCaptures) {
       await captureScenario(browser, extensionId, name, config);
+    }
+    
+    // Step 2: Process derived scenarios from base captures
+    for (const [name, config] of derivedScenarios) {
+      const baseName = config.baseCapture;
+      const baseConfig = SCENARIOS[baseName];
+      if (!baseConfig) {
+        console.error(`   ✗ Base capture not found: ${baseName}`);
+        continue;
+      }
+      
+      const basePath = path.join(OUTPUT_DIR, baseConfig.filename);
+      if (!existsSync(basePath)) {
+        console.error(`   ✗ Base image not found: ${basePath}`);
+        continue;
+      }
+      
+      console.log(`📸 Processing: ${name} (from ${baseName})`);
+      
+      // Load base image
+      const baseImage = sharp(basePath);
+      const metadata = await baseImage.metadata();
+      
+      let outputBuffer;
+      if (config.outputSize) {
+        // Chrome Web Store screenshots use actual dimensions (no 2x DPR) and exact fit
+        // Other screenshots (features) use 2x DPR for high-DPI displays and preserve content
+        const use2xDPR = !name.includes('chrome-store');
+        const isChromeStore = name.includes('chrome-store');
+        const targetWidth = use2xDPR ? config.outputSize.width * 2 : config.outputSize.width;
+        const targetHeight = use2xDPR ? config.outputSize.height * 2 : config.outputSize.height;
+        outputBuffer = await baseImage
+          .resize(targetWidth, targetHeight, {
+            fit: isChromeStore ? 'cover' : 'inside', // Exact dimensions for Chrome Store, preserve content for others
+          })
+          .png({ quality: 100 })
+          .toBuffer();
+        const dprNote = use2xDPR ? ' (at 2x DPR)' : '';
+        console.log(`   📐 Scaled: ${metadata.width}×${metadata.height} → ${config.outputSize.width}×${config.outputSize.height}${dprNote}`);
+      } else {
+        // Use base image as-is
+        outputBuffer = await baseImage.png({ quality: 100 }).toBuffer();
+      }
+      
+      const outputPath = path.join(OUTPUT_DIR, config.filename);
+      await writeFile(outputPath, outputBuffer);
+      console.log(`   ✓ Saved: ${config.filename}`);
+    }
+    
+    // Step 3: Capture direct scenarios (unique setups)
+    for (const [name, config] of directCaptures) {
+      await captureScenario(browser, extensionId, name, config);
+      // Small delay between scenarios to let Chrome stabilize
+      await delay(1000);
+    }
+    
+    // Step 4: Clean up base files
+    for (const [name, config] of baseCaptures) {
+      const basePath = path.join(OUTPUT_DIR, config.filename);
+      if (existsSync(basePath)) {
+        await unlink(basePath);
+        console.log(`   🗑️  Cleaned up: ${config.filename}`);
+      }
     }
     
     console.log('');
     console.log('✅ Screenshot capture complete');
     
   } finally {
+    // Close import page if it's still open
+    if (importPage) {
+      try {
+        await importPage.close();
+      } catch (e) {
+        // Ignore errors when closing
+      }
+    }
     await browser.close();
   }
 }

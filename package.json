@@ -18,8 +18,9 @@
     "capture:pages": "node scripts/screenshots/capture-pages.mjs",
     "screenshots": "node scripts/screenshots/capture.mjs --extension-path=./dist",
     "screenshots:all": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=all",
-    "screenshots:store": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=store-marquee,store-screenshot-1,store-screenshot-2",
-    "screenshots:hero": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=hero-light,hero-dark"
+    "screenshots:store": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=chrome-store-screenshot-1-list,chrome-store-screenshot-2-annotations,chrome-store-marquee-tile,chrome-store-small-tile",
+    "screenshots:homepage": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=homepage-hero-light,homepage-hero-dark",
+    "screenshots:features": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=feature-text-highlighting,feature-evaluation-panel,feature-auto-detect"
   },
   "dependencies": {
     "@annotorious/annotorious": "^3.0.17",
