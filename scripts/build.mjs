@@ -11,6 +11,7 @@ const distDir = join(rootDir, 'dist');
 const require = createRequire(import.meta.url);
 
 const isWatch = process.argv.includes('--watch');
+const isDev = process.argv.includes('--dev');
 
 // Clean dist directory
 if (existsSync(distDir)) {
@@ -214,6 +215,17 @@ function copyStaticFiles() {
     'snapshot.html', 'snapshot.js',
     'iframe.html', 'iframe-annotator.js', 'annotator.css'
   ];
+  
+  // Add demo.html to web_accessible_resources in dev builds
+  if (isDev) {
+    manifest.web_accessible_resources[0].resources.push('demo.html');
+    
+    // Add broader permissions for automation - activeTab only works with user invocation
+    // In dev mode we need to query any tab and access pages programmatically
+    manifest.permissions = [...manifest.permissions, 'tabs'];
+    manifest.host_permissions = ['<all_urls>'];
+    console.log('🔓 Added dev permissions: tabs + <all_urls>');
+  }
 
   writeFileSync(join(distDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
@@ -239,6 +251,18 @@ function copyStaticFiles() {
   const offscreenHtml = readFileSync(join(srcDir, 'offscreen/offscreen.html'), 'utf-8')
     .replace('src="offscreen.js"', 'src="offscreen.js"');
   writeFileSync(join(distDir, 'offscreen.html'), offscreenHtml);
+
+  // Copy demo.html for dev builds (screenshot automation)
+  // demo.html is just a redirect to viewer.html which uses the actual extension codebase
+  if (isDev) {
+    const demoHtmlPath = join(srcDir, 'demo/demo.html');
+    if (existsSync(demoHtmlPath)) {
+      copyFileSync(demoHtmlPath, join(distDir, 'demo.html'));
+      console.log('📦 Included demo.html for screenshot automation');
+    } else {
+      console.warn('⚠️  Warning: demo.html not found at expected path');
+    }
+  }
 
   // Copy CSS files
   if (existsSync(join(srcDir, 'popup/popup.css'))) {

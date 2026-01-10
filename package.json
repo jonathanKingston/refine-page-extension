@@ -7,13 +7,20 @@
   "scripts": {
     "dev": "node scripts/build.mjs --watch",
     "build": "node scripts/build.mjs",
+    "build:dev": "node scripts/build.mjs --dev",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,html}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,html}\"",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "capture:pages": "node scripts/screenshots/capture-pages.mjs",
+    "screenshots": "node scripts/screenshots/capture.mjs --extension-path=./dist",
+    "screenshots:all": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=all",
+    "screenshots:store": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=chrome-store-screenshot-1-list,chrome-store-screenshot-2-annotations,chrome-store-marquee-tile,chrome-store-small-tile",
+    "screenshots:homepage": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=homepage-hero-light,homepage-hero-dark",
+    "screenshots:features": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=feature-text-highlighting,feature-evaluation-panel,feature-auto-detect"
   },
   "dependencies": {
     "@annotorious/annotorious": "^3.0.17",
@@ -37,6 +44,8 @@
     "eslint": "^8.57.0",
     "jsdom": "^23.0.0",
     "prettier": "^3.2.0",
+    "puppeteer": "^22.0.0",
+    "sharp": "^0.34.5",
     "typescript": "^5.3.0",
     "vitest": "^1.2.0"
   }

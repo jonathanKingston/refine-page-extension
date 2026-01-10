@@ -1,0 +1,4 @@
+# This directory contains captured MHTML files
+# Add .mhtml and .json files here, but keep them out of git by default
+# Uncomment the files you want to track in .gitignore
+
