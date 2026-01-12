@@ -1426,6 +1426,59 @@ function removeElementAnnotationVisual(annotationId: string) {
   }
 }
 
+// Show click animation at specific coordinates
+function showClickAnimation(x: number, y: number) {
+  // Remove any existing click animation
+  const existing = document.querySelector('.replay-click-animation');
+  if (existing) {
+    existing.remove();
+  }
+
+  // Coordinates are stored as clientX/clientY (viewport-relative)
+  // Use position: fixed to match viewport-relative positioning
+  // This ensures the animation appears at the correct position regardless of scroll
+  const feedback = document.createElement('div');
+  feedback.className = 'replay-click-animation';
+  feedback.style.cssText = `
+    position: fixed;
+    left: ${x}px;
+    top: ${y}px;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #3b82f6;
+    border-radius: 50%;
+    background: rgba(59, 130, 246, 0.2);
+    pointer-events: none;
+    z-index: 10001;
+    transform: translate(-50%, -50%);
+    animation: click-pulse 0.6s ease-out forwards;
+  `;
+
+  // Add ripple effect
+  const ripple = document.createElement('div');
+  ripple.style.cssText = `
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    border: 2px solid #3b82f6;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: click-ripple 0.6s ease-out forwards;
+  `;
+  feedback.appendChild(ripple);
+
+  document.body.appendChild(feedback);
+
+  // Remove after animation
+  setTimeout(() => {
+    if (feedback.parentNode) {
+      feedback.remove();
+    }
+  }, 600);
+}
+
 // Handle messages from parent
 async function handleMessage(event: MessageEvent) {
   const message = event.data as AnnotatorMessage;
@@ -1446,57 +1499,57 @@ async function handleMessage(event: MessageEvent) {
         container.innerHTML = html;
         console.log('[Iframe Annotator] HTML content loaded');
 
-        // Force layout recalculation to ensure body/html expands to fit content
-        // This fixes the issue where the page appears white at the bottom until scrolled
-        const forceLayoutRecalculation = () => {
-          // Force a reflow by reading layout properties
-          void container.offsetHeight;
-          void document.body.offsetHeight;
-          void document.documentElement.offsetHeight;
-          // Trigger a scroll event to force layout recalculation
-          window.scrollTo(0, 0);
-        };
+          // Force layout recalculation to ensure body/html expands to fit content
+          // This fixes the issue where the page appears white at the bottom until scrolled
+          const forceLayoutRecalculation = () => {
+            // Force a reflow by reading layout properties
+            void container.offsetHeight;
+            void document.body.offsetHeight;
+            void document.documentElement.offsetHeight;
+            // Trigger a scroll event to force layout recalculation
+            window.scrollTo(0, 0);
+          };
 
-        // Wait for images to load, then force layout recalculation
-        const images = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
-        if (images.length > 0) {
-          // Create promises for all image loads
-          const imageLoadPromises = images.map((img) => {
-            if (img.complete) {
-              return Promise.resolve();
-            }
-            return new Promise<void>((resolve) => {
-              img.addEventListener('load', () => resolve(), { once: true });
-              img.addEventListener('error', () => resolve(), { once: true });
+          // Wait for images to load, then force layout recalculation
+          const images = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
+          if (images.length > 0) {
+            // Create promises for all image loads
+            const imageLoadPromises = images.map((img) => {
+              if (img.complete) {
+                return Promise.resolve();
+              }
+              return new Promise<void>((resolve) => {
+                img.addEventListener('load', () => resolve(), { once: true });
+                img.addEventListener('error', () => resolve(), { once: true });
+              });
             });
-          });
 
-          // Wait for all images, then recalculate layout
-          Promise.all(imageLoadPromises).then(() => {
+            // Wait for all images, then recalculate layout
+            Promise.all(imageLoadPromises).then(() => {
+              requestAnimationFrame(() => {
+                forceLayoutRecalculation();
+              });
+            });
+          } else {
+            // No images, just force layout recalculation on next frame
             requestAnimationFrame(() => {
               forceLayoutRecalculation();
             });
-          });
-        } else {
-          // No images, just force layout recalculation on next frame
-          requestAnimationFrame(() => {
-            forceLayoutRecalculation();
-          });
+          }
+
+          // Initialize annotator on the loaded content (await to ensure CSS is loaded)
+          await initializeAnnotator(container);
+
+          // Initialize image annotators after a brief delay to allow images to load
+          // Send ANNOTATOR_READY only after both text and image annotators are ready
+          setTimeout(() => {
+            initializeImageAnnotators(container);
+            // Signal ready after all annotators are initialized
+            window.parent.postMessage({ type: 'ANNOTATOR_READY' }, '*');
+          }, 100);
         }
-
-        // Initialize annotator on the loaded content (await to ensure CSS is loaded)
-        await initializeAnnotator(container);
-
-        // Initialize image annotators after a brief delay to allow images to load
-        // Send ANNOTATOR_READY only after both text and image annotators are ready
-        setTimeout(() => {
-          initializeImageAnnotators(container);
-          // Signal ready after all annotators are initialized
-          window.parent.postMessage({ type: 'ANNOTATOR_READY' }, '*');
-        }, 100);
       }
       break;
-    }
 
     case 'SET_TOOL':
       currentTool = message.payload as 'select' | 'relevant' | 'answer';
@@ -1788,6 +1841,188 @@ async function handleMessage(event: MessageEvent) {
       const { label } = message.payload as { label: string };
       if (label) {
         removeMark(label);
+      }
+      break;
+    }
+
+    case 'HIGHLIGHT_INTERACTION': {
+      const { selector, xpath, boundingBox, actionType, coordinates } = message.payload as {
+        selector: string;
+        xpath: string;
+        boundingBox: { x: number; y: number; width: number; height: number };
+        actionType: string;
+        coordinates?: { x: number; y: number };
+      };
+      
+      // Remove previous interaction highlight
+      const prevHighlight = document.querySelector('.interaction-highlight');
+      if (prevHighlight) {
+        prevHighlight.remove();
+      }
+
+      // Try to find element by selector first, then xpath
+      let element: Element | null = null;
+      try {
+        element = document.querySelector(selector);
+      } catch (e) {
+        console.warn('[Iframe Annotator] Invalid selector:', selector);
+      }
+
+      if (!element) {
+        // Try XPath
+        try {
+          const result = document.evaluate(
+            xpath,
+            document,
+            null,
+            XPathResult.FIRST_ORDERED_NODE_TYPE,
+            null
+          );
+          element = result.singleNodeValue as Element;
+        } catch (e) {
+          console.warn('[Iframe Annotator] Invalid XPath:', xpath);
+        }
+      }
+
+      if (element) {
+        // Create highlight overlay
+        const highlight = document.createElement('div');
+        highlight.className = 'interaction-highlight';
+        highlight.style.cssText = `
+          position: absolute;
+          border: 3px solid #3b82f6;
+          background: rgba(59, 130, 246, 0.1);
+          pointer-events: none;
+          z-index: 10000;
+          border-radius: 4px;
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+          animation: pulse-highlight 2s ease-in-out infinite;
+        `;
+
+        // Position highlight
+        const rect = element.getBoundingClientRect();
+        highlight.style.left = `${rect.left + window.scrollX}px`;
+        highlight.style.top = `${rect.top + window.scrollY}px`;
+        highlight.style.width = `${rect.width}px`;
+        highlight.style.height = `${rect.height}px`;
+
+        document.body.appendChild(highlight);
+
+        // Scroll element into view
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Show click animation if coordinates are provided (for click actions)
+        // Calculate click position relative to element, then apply to current element position
+        if (actionType === 'click' && coordinates) {
+          // Wait for scroll to complete before showing animation
+          setTimeout(() => {
+            // Calculate offset from element's top-left corner at recording time
+            // boundingBox is the element's getBoundingClientRect() at recording time
+            const offsetX = coordinates.x - boundingBox.x;
+            const offsetY = coordinates.y - boundingBox.y;
+            
+            // Get element's current position
+            const currentRect = element.getBoundingClientRect();
+            
+            // Calculate click position in current viewport
+            const clickX = currentRect.x + offsetX;
+            const clickY = currentRect.y + offsetY;
+            
+            showClickAnimation(clickX, clickY);
+          }, 500); // Wait for scroll animation
+        }
+
+        // Add action type label
+        const label = document.createElement('div');
+        label.className = 'interaction-label';
+        label.textContent = actionType.toUpperCase();
+        label.style.cssText = `
+          position: absolute;
+          top: -24px;
+          left: 0;
+          background: #3b82f6;
+          color: white;
+          padding: 2px 8px;
+          border-radius: 4px;
+          font-size: 11px;
+          font-weight: 600;
+          white-space: nowrap;
+          pointer-events: none;
+        `;
+        highlight.appendChild(label);
+
+        // Remove highlight after 5 seconds (or when new one is added)
+        setTimeout(() => {
+          if (highlight.parentNode) {
+            highlight.remove();
+          }
+        }, 5000);
+      } else {
+        // Fallback: use bounding box
+        const highlight = document.createElement('div');
+        highlight.className = 'interaction-highlight';
+        highlight.style.cssText = `
+          position: absolute;
+          border: 3px solid #3b82f6;
+          background: rgba(59, 130, 246, 0.1);
+          pointer-events: none;
+          z-index: 10000;
+          border-radius: 4px;
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+          animation: pulse-highlight 2s ease-in-out infinite;
+          left: ${boundingBox.x + window.scrollX}px;
+          top: ${boundingBox.y + window.scrollY}px;
+          width: ${boundingBox.width}px;
+          height: ${boundingBox.height}px;
+        `;
+        document.body.appendChild(highlight);
+
+        // Show click animation if coordinates are provided (for click actions)
+        // Use coordinates directly since we don't have the element
+        if (actionType === 'click' && coordinates) {
+          showClickAnimation(coordinates.x, coordinates.y);
+        }
+
+        setTimeout(() => {
+          if (highlight.parentNode) {
+            highlight.remove();
+          }
+        }, 5000);
+      }
+
+      // Add CSS animation if not already added
+      if (!document.getElementById('interaction-highlight-styles')) {
+        const style = document.createElement('style');
+        style.id = 'interaction-highlight-styles';
+        style.textContent = `
+          @keyframes pulse-highlight {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+          }
+          @keyframes click-pulse {
+            0% {
+              transform: translate(-50%, -50%) scale(0.8);
+              opacity: 1;
+            }
+            100% {
+              transform: translate(-50%, -50%) scale(1.5);
+              opacity: 0;
+            }
+          }
+          @keyframes click-ripple {
+            0% {
+              width: 0;
+              height: 0;
+              opacity: 1;
+            }
+            100% {
+              width: 60px;
+              height: 60px;
+              opacity: 0;
+            }
+          }
+        `;
+        document.head.appendChild(style);
       }
       break;
     }

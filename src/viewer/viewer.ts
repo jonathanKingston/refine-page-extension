@@ -13,6 +13,8 @@ import type {
   AnswerInPage,
   PageQuality,
   ElementMark,
+  Trace,
+  InteractionRecord,
 } from '@/types';
 
 // Import annotation library types (actual annotators are now in iframe)
@@ -50,6 +52,14 @@ let currentTool: 'select' | AnnotationType = 'select';
 let zoomLevel = 100;
 let allSnapshots: SnapshotSummary[] = [];
 let focusMode = false;
+
+// Trace viewing state
+let currentTrace: Trace | null = null;
+let currentInteractionIndex: number = -1;
+let traceMode = false;
+let showingPreAction = true; // Toggle between pre and post action snapshots
+let viewingInitialSnapshot = false; // True when viewing initial snapshot
+let viewingFinalSnapshot = false; // True when viewing final snapshot
 
 // Webmarker state
 let marksEnabled = false;
@@ -101,6 +111,12 @@ async function getSnapshotFromStorage(id: string): Promise<Snapshot | null> {
   return result[key] || null;
 }
 
+async function getTraceFromStorage(id: string): Promise<Trace | null> {
+  const key = `trace_${id}`;
+  const result = await chrome.storage.local.get(key);
+  return result[key] || null;
+}
+
 async function getAllSnapshotsFromStorage(): Promise<Snapshot[]> {
   const index = await getSnapshotIndex();
   const keys = index.map((id) => `snapshot_${id}`);
@@ -128,6 +144,329 @@ async function getAllSnapshotSummaries(): Promise<SnapshotSummary[]> {
 // Get URL parameters
 function getUrlParams(): URLSearchParams {
   return new URLSearchParams(window.location.search);
+}
+
+// Load trace and enter trace viewing mode
+async function loadTrace(traceId: string) {
+  try {
+    const trace = await getTraceFromStorage(traceId);
+    if (!trace) {
+      console.error('Trace not found:', traceId);
+      return;
+    }
+
+    currentTrace = trace;
+    traceMode = true;
+    currentInteractionIndex = -1;
+    viewingInitialSnapshot = false;
+    viewingFinalSnapshot = false;
+
+    // Show trace UI
+    showTraceUI();
+    
+    // Load initial snapshot if available, otherwise load first interaction
+    if (trace.initialSnapshotId) {
+      await loadInitialSnapshot();
+    } else if (trace.interactions.length > 0) {
+      await loadInteraction(0, true);
+    }
+  } catch (error) {
+    console.error('Failed to load trace:', error);
+  }
+}
+
+// Load initial snapshot
+async function loadInitialSnapshot() {
+  if (!currentTrace || !currentTrace.initialSnapshotId) {
+    return;
+  }
+
+  viewingInitialSnapshot = true;
+  viewingFinalSnapshot = false;
+  currentInteractionIndex = -1;
+  
+  await loadSnapshot(currentTrace.initialSnapshotId);
+  updateTimelineUI();
+}
+
+// Load final snapshot
+async function loadFinalSnapshot() {
+  if (!currentTrace || !currentTrace.finalSnapshotId) {
+    return;
+  }
+
+  viewingInitialSnapshot = false;
+  viewingFinalSnapshot = true;
+  currentInteractionIndex = -1;
+  
+  await loadSnapshot(currentTrace.finalSnapshotId);
+  updateTimelineUI();
+}
+
+// Load a specific interaction from the trace
+async function loadInteraction(index: number, usePreAction: boolean = true) {
+  if (!currentTrace || index < 0 || index >= currentTrace.interactions.length) {
+    return;
+  }
+
+  viewingInitialSnapshot = false;
+  viewingFinalSnapshot = false;
+  currentInteractionIndex = index;
+  showingPreAction = usePreAction;
+  const interaction = currentTrace.interactions[index];
+
+  // Load the appropriate snapshot (pre or post action)
+  const snapshotId = usePreAction ? interaction.preSnapshotId : interaction.postSnapshotId;
+  
+  // Use the normal loadSnapshot function to ensure proper initialization
+  // This ensures all UI is properly set up (questions, annotations, etc.)
+  // and annotation tools work correctly
+  await loadSnapshot(snapshotId);
+  
+  // Highlight the interaction target element after a short delay
+  // to ensure iframe is loaded and ready
+  setTimeout(() => {
+    highlightInteractionTarget(interaction);
+  }, 500);
+
+  // Update timeline UI
+  updateTimelineUI();
+}
+
+// Toggle between pre and post action snapshots
+function toggleSnapshotView() {
+  if (!currentTrace || currentInteractionIndex < 0 || viewingInitialSnapshot || viewingFinalSnapshot) return;
+  showingPreAction = !showingPreAction;
+  loadInteraction(currentInteractionIndex, showingPreAction);
+}
+
+// Highlight the interaction target element in the iframe
+function highlightInteractionTarget(interaction: InteractionRecord) {
+  // Don't highlight for initial/final snapshots
+  if (viewingInitialSnapshot || viewingFinalSnapshot) return;
+  
+  const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+  if (!iframe) return;
+
+  sendToIframe(iframe, 'HIGHLIGHT_INTERACTION', {
+    selector: interaction.action.target.selector,
+    xpath: interaction.action.target.xpath,
+    boundingBox: interaction.action.target.boundingBox,
+    actionType: interaction.action.type,
+    coordinates: interaction.action.coordinates, // Pass click coordinates for animation
+  });
+}
+
+// Show trace UI elements
+function showTraceUI() {
+  // Show timeline panel
+  const timelinePanel = document.getElementById('trace-timeline-panel');
+  if (timelinePanel) {
+    timelinePanel.classList.remove('hidden');
+  }
+
+  // Hide normal snapshot navigation container (but keep it in DOM for switching back)
+  const snapshotNavContainer = document.querySelector('.snapshot-nav-container');
+  if (snapshotNavContainer) {
+    (snapshotNavContainer as HTMLElement).style.display = 'none';
+  }
+  
+  // Ensure annotation tools are visible and functional
+  // (They should already be set up, but make sure they're enabled)
+  const toolBtns = document.querySelectorAll('.tool-btn[data-tool]');
+  toolBtns.forEach((btn) => {
+    (btn as HTMLElement).style.display = '';
+  });
+
+  // Update header
+  const pageTitle = document.getElementById('page-title');
+  if (pageTitle && currentTrace) {
+    pageTitle.textContent = `Trace: ${currentTrace.id.substring(0, 8)}...`;
+  }
+}
+
+// Update timeline UI
+async function updateTimelineUI() {
+  if (!currentTrace) return;
+
+  const timelineEl = document.getElementById('trace-timeline');
+  if (!timelineEl) return;
+
+  const items: string[] = [];
+
+  // Load initial snapshot data if needed
+  let initialSnapshot: Snapshot | null = null;
+  if (currentTrace.initialSnapshotId) {
+    initialSnapshot = await getSnapshotFromStorage(currentTrace.initialSnapshotId);
+  }
+
+  // Add initial snapshot item
+  if (currentTrace.initialSnapshotId) {
+    const isActive = viewingInitialSnapshot;
+    const time = initialSnapshot ? new Date(initialSnapshot.capturedAt).toLocaleTimeString() : '';
+    const title = initialSnapshot ? initialSnapshot.title : 'Initial Page';
+    
+    items.push(`
+      <div class="timeline-item ${isActive ? 'active' : ''}" data-type="initial">
+        <div class="timeline-marker"></div>
+        <div class="timeline-content">
+          <div class="timeline-action">Initial</div>
+          <div class="timeline-time">${time}</div>
+          <div class="timeline-target">${escapeHtml(title.substring(0, 30))}${title.length > 30 ? '...' : ''}</div>
+        </div>
+      </div>
+    `);
+  }
+
+  // Add interaction items
+  items.push(...currentTrace.interactions.map((interaction, idx) => {
+    const isActive = idx === currentInteractionIndex && !viewingInitialSnapshot && !viewingFinalSnapshot;
+    const actionType = interaction.action.type;
+    const actionLabel = actionType.charAt(0).toUpperCase() + actionType.slice(1);
+    const time = new Date(interaction.timestamp).toLocaleTimeString();
+    
+    return `
+      <div class="timeline-item ${isActive ? 'active' : ''}" data-type="interaction" data-index="${idx}">
+        <div class="timeline-marker"></div>
+        <div class="timeline-content">
+          <div class="timeline-action">${actionLabel}</div>
+          <div class="timeline-time">${time}</div>
+          ${interaction.action.target.text ? `<div class="timeline-target">${escapeHtml(interaction.action.target.text.substring(0, 30))}${interaction.action.target.text.length > 30 ? '...' : ''}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }));
+
+  // Load final snapshot data if needed
+  let finalSnapshot: Snapshot | null = null;
+  if (currentTrace.finalSnapshotId) {
+    finalSnapshot = await getSnapshotFromStorage(currentTrace.finalSnapshotId);
+  }
+
+  // Add final snapshot item
+  if (currentTrace.finalSnapshotId) {
+    const isActive = viewingFinalSnapshot;
+    const time = finalSnapshot ? new Date(finalSnapshot.capturedAt).toLocaleTimeString() : '';
+    const title = finalSnapshot ? finalSnapshot.title : 'Final Page';
+    
+    items.push(`
+      <div class="timeline-item ${isActive ? 'active' : ''}" data-type="final">
+        <div class="timeline-marker"></div>
+        <div class="timeline-content">
+          <div class="timeline-action">Final</div>
+          <div class="timeline-time">${time}</div>
+          <div class="timeline-target">${escapeHtml(title.substring(0, 30))}${title.length > 30 ? '...' : ''}</div>
+        </div>
+      </div>
+    `);
+  }
+
+  timelineEl.innerHTML = items.join('');
+
+  // Add click handlers
+  timelineEl.querySelectorAll('.timeline-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      const type = (item as HTMLElement).dataset.type;
+      if (type === 'initial') {
+        loadInitialSnapshot();
+      } else if (type === 'final') {
+        loadFinalSnapshot();
+      } else if (type === 'interaction') {
+        const index = parseInt((item as HTMLElement).dataset.index || '0');
+        loadInteraction(index, showingPreAction);
+      }
+    });
+  });
+
+  // Update position indicator
+  const positionEl = document.getElementById('trace-position');
+  if (positionEl && currentTrace) {
+    const totalItems = (currentTrace.initialSnapshotId ? 1 : 0) + 
+                       currentTrace.interactions.length + 
+                       (currentTrace.finalSnapshotId ? 1 : 0);
+    let currentPosition: number;
+    if (viewingInitialSnapshot) {
+      currentPosition = 1;
+    } else if (viewingFinalSnapshot) {
+      currentPosition = totalItems;
+    } else {
+      currentPosition = (currentTrace.initialSnapshotId ? 1 : 0) + currentInteractionIndex + 1;
+    }
+    positionEl.textContent = `${currentPosition} / ${totalItems}`;
+  }
+  
+  // Update pre/post button states and visibility
+  const preBtn = document.getElementById('trace-pre-btn');
+  const postBtn = document.getElementById('trace-post-btn');
+  const toggleContainer = document.querySelector('.trace-snapshot-toggle');
+  
+  if (viewingInitialSnapshot || viewingFinalSnapshot) {
+    // Hide pre/post buttons for initial/final snapshots
+    if (toggleContainer) {
+      (toggleContainer as HTMLElement).style.display = 'none';
+    }
+  } else {
+    // Show pre/post buttons for interactions
+    if (toggleContainer) {
+      (toggleContainer as HTMLElement).style.display = '';
+    }
+    if (preBtn) {
+      preBtn.classList.toggle('active', showingPreAction);
+    }
+    if (postBtn) {
+      postBtn.classList.toggle('active', !showingPreAction);
+    }
+  }
+}
+
+// Navigate to next/previous item in timeline
+function navigateInteraction(direction: 'prev' | 'next') {
+  if (!currentTrace) return;
+  
+  // Handle navigation from initial snapshot
+  if (viewingInitialSnapshot) {
+    if (direction === 'next') {
+      if (currentTrace.interactions.length > 0) {
+        loadInteraction(0, showingPreAction);
+      } else if (currentTrace.finalSnapshotId) {
+        loadFinalSnapshot();
+      }
+    }
+    return;
+  }
+  
+  // Handle navigation from final snapshot
+  if (viewingFinalSnapshot) {
+    if (direction === 'prev') {
+      if (currentTrace.interactions.length > 0) {
+        loadInteraction(currentTrace.interactions.length - 1, showingPreAction);
+      } else if (currentTrace.initialSnapshotId) {
+        loadInitialSnapshot();
+      }
+    }
+    return;
+  }
+  
+  // Handle navigation from interactions
+  if (direction === 'next') {
+    // Check if we should go to final snapshot
+    if (currentInteractionIndex === currentTrace.interactions.length - 1) {
+      if (currentTrace.finalSnapshotId) {
+        loadFinalSnapshot();
+      }
+    } else {
+      loadInteraction(currentInteractionIndex + 1, showingPreAction);
+    }
+  } else {
+    // Check if we should go to initial snapshot
+    if (currentInteractionIndex === 0) {
+      if (currentTrace.initialSnapshotId) {
+        loadInitialSnapshot();
+      }
+    } else {
+      loadInteraction(currentInteractionIndex - 1, showingPreAction);
+    }
+  }
 }
 
 // Load snapshot into preview (direct storage access - no message size limits)
@@ -2001,6 +2340,19 @@ function setupKeyboardShortcuts() {
       setTool('select');
     }
 
+    // Trace navigation shortcuts (when in trace mode)
+    if (traceMode && currentTrace) {
+      if (e.key === 'ArrowRight' || e.key === 'j') {
+        e.preventDefault();
+        navigateInteraction('next');
+        return;
+      } else if (e.key === 'ArrowLeft' || e.key === 'k') {
+        e.preventDefault();
+        navigateInteraction('prev');
+        return;
+      }
+    }
+
     // Evaluation shortcuts
     if (currentQuestionId) {
       if (e.key === 'c') {
@@ -2067,6 +2419,7 @@ function applyZoom() {
 document.addEventListener('DOMContentLoaded', async () => {
   const params = getUrlParams();
   const snapshotId = params.get('id');
+  const traceId = params.get('traceId');
 
   setupKeyboardShortcuts();
 
@@ -2111,12 +2464,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  await loadAllSnapshots();
+  // Check if we're loading a trace (after setting up UI handlers)
+  if (traceId) {
+    await loadTrace(traceId);
+  } else {
+    // Normal snapshot loading
+    await loadAllSnapshots();
 
-  if (snapshotId) {
-    await loadSnapshot(snapshotId);
-  } else if (allSnapshots.length > 0) {
-    await loadSnapshot(allSnapshots[0].id);
+    if (snapshotId) {
+      await loadSnapshot(snapshotId);
+    } else if (allSnapshots.length > 0) {
+      await loadSnapshot(allSnapshots[0].id);
+    }
   }
 
   // Tool buttons
@@ -2187,6 +2546,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   document
     .getElementById('next-question')
     ?.addEventListener('click', () => navigateQuestion('next'));
+
+  // Trace navigation
+  document
+    .getElementById('trace-prev-btn')
+    ?.addEventListener('click', () => navigateInteraction('prev'));
+  document
+    .getElementById('trace-next-btn')
+    ?.addEventListener('click', () => navigateInteraction('next'));
+  
+  // Pre/Post snapshot toggle
+  document
+    .getElementById('trace-pre-btn')
+    ?.addEventListener('click', () => {
+      if (!showingPreAction) {
+        loadInteraction(currentInteractionIndex, true);
+      }
+    });
+  document
+    .getElementById('trace-post-btn')
+    ?.addEventListener('click', () => {
+      if (showingPreAction) {
+        loadInteraction(currentInteractionIndex, false);
+      }
+    });
 
   // Approve/Decline/Skip buttons
   document.getElementById('approve-btn')?.addEventListener('click', () => {

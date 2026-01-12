@@ -175,6 +175,80 @@ export interface ZipExportData {
   snapshots: ZipIndexSnapshot[];
 }
 
+// Record Mode types
+export interface CaptureConfig {
+  // Navigation
+  navigation: boolean; // page loads, history changes
+  
+  // Primary interactions
+  clicks: boolean; // mouse clicks on interactive elements
+  formSubmissions: boolean; // form submit events
+  
+  // Input (debounced)
+  textInput: boolean; // typing in fields (capture on blur/submit)
+  selections: boolean; // dropdown, checkbox, radio changes
+  
+  // Optional/advanced
+  scrollThreshold?: number | null; // capture after N px scroll (null = disabled)
+  hoverDuration?: number | null; // capture hovers longer than N ms (null = disabled)
+}
+
+export interface InteractionTarget {
+  selector: string; // CSS selector
+  xpath: string; // XPath
+  text?: string; // innerText (truncated)
+  attributes: Record<string, string>;
+  boundingBox: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
+export interface InteractionRecord {
+  id: string;
+  timestamp: number;
+  
+  // What happened
+  action: {
+    type: 'click' | 'type' | 'select' | 'submit' | 'navigate' | 'scroll';
+    target: InteractionTarget;
+    value?: string; // For type/select actions
+    coordinates?: { x: number; y: number }; // Click position
+  };
+  
+  // Context
+  url: string;
+  title: string;
+  viewportSize: { width: number; height: number };
+  
+  // Snapshot references
+  preSnapshotId: string;
+  postSnapshotId: string;
+  
+  // Optional: user-provided labels (added later in annotation UI)
+  labels?: {
+    intent?: string; // "Add item to cart"
+    success?: boolean; // Did action achieve intent?
+    notes?: string;
+  };
+}
+
+export interface Trace {
+  id: string;
+  name?: string;
+  startedAt: string;
+  stoppedAt?: string;
+  config: CaptureConfig;
+  interactions: InteractionRecord[];
+  // Snapshot IDs for first and last pages
+  initialSnapshotId?: string;
+  finalSnapshotId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Messages between extension components
 export type MessageType =
   | 'CAPTURE_PAGE'
@@ -183,7 +257,15 @@ export type MessageType =
   | 'OPEN_VIEWER'
   | 'GET_SNAPSHOTS'
   | 'DELETE_SNAPSHOT'
-  | 'UPDATE_SNAPSHOT';
+  | 'UPDATE_SNAPSHOT'
+  | 'START_RECORDING'
+  | 'STOP_RECORDING'
+  | 'GET_RECORDING_STATE'
+  | 'RECORD_INTERACTION'
+  | 'GET_TRACES'
+  | 'GET_TRACE'
+  | 'DELETE_TRACE'
+  | 'EXPORT_TRACE';
 
 export interface ExtensionMessage {
   type: MessageType;

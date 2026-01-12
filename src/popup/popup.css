@@ -381,6 +381,77 @@ body {
   color: #fca5a5;
 }
 
+/* Recording Section */
+.recording-section {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--color-border);
+}
+
+.recording-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.recording-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-subtle);
+  transition: background 0.3s ease;
+}
+
+.recording-indicator.active {
+  background: #ef4444;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.recording-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-danger {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+}
+
+.recording-info {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.recording-info div {
+  margin-bottom: 4px;
+}
+
+.recording-info span {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
 /* Footer */
 .popup-footer {
   display: flex;
