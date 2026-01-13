@@ -4,11 +4,11 @@
  * Also integrates webmarker for auto-detecting interactive elements
  */
 
-import { createTextAnnotator } from '@recogito/text-annotator/packages/text-annotator/dist/text-annotator.es.js';
+import { createTextAnnotator } from '@recogito/text-annotator';
 import { createImageAnnotator } from '@annotorious/annotorious';
 import { mark, unmark, type MarkedElement } from 'webmarker-js';
 import { autoUpdate, computePosition } from '@floating-ui/dom';
-import '@recogito/text-annotator/packages/text-annotator/dist/text-annotator.css';
+import '@recogito/text-annotator/text-annotator.css';
 import '@annotorious/annotorious/annotorious.css';
 
 // Annotorious CSS class names (hardcoded by the library, not configurable)
