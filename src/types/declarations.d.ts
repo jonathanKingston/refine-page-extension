@@ -37,7 +37,7 @@ declare module '*.css' {
 }
 
 // Declaration for @recogito/text-annotator
-declare module '@recogito/text-annotator/packages/text-annotator/dist/text-annotator.es.js' {
+declare module '@recogito/text-annotator' {
   export function createTextAnnotator(
     element: HTMLElement,
     options?: unknown
@@ -46,6 +46,9 @@ declare module '@recogito/text-annotator/packages/text-annotator/dist/text-annot
     removeAnnotation: (id: string) => void;
     updateAnnotation: (annotation: unknown) => void;
     getAnnotations: () => unknown[];
+    setAnnotations: (annotations: unknown[]) => void;
+    setAnnotatingEnabled: (enabled: boolean) => void;
+    setAnnotatingMode: (mode: string) => void;
     on: (event: string, handler: (annotation: unknown) => void) => void;
     off: (event: string, handler: (annotation: unknown) => void) => void;
     destroy: () => void;
