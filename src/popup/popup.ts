@@ -364,7 +364,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function updateRecordingUI() {
   try {
     const state = await sendMessage<RecordingState>('GET_RECORDING_STATE');
-    
+
     const indicator = document.getElementById('recording-indicator');
     const recordingText = document.getElementById('recording-text');
     const startBtn = document.getElementById('start-recording-btn');
@@ -385,7 +385,7 @@ async function updateRecordingUI() {
       if (stopBtn) stopBtn.style.display = 'block';
       if (recordingInfo) recordingInfo.style.display = 'block';
       if (traceIdEl) traceIdEl.textContent = state.currentTraceId.substring(0, 8) + '...';
-      
+
       // Get interaction count
       const trace = await sendMessage<Trace>('GET_TRACE', { id: state.currentTraceId });
       if (interactionCountEl && trace) {
@@ -416,13 +416,13 @@ function setupRecordingHandlers() {
   startBtn?.addEventListener('click', async () => {
     try {
       showStatus('Starting recording...', 'loading');
-      
+
       // Check if recording is already active (recovery from stuck state)
       const currentState = await sendMessage<RecordingState>('GET_RECORDING_STATE');
       if (currentState.isRecording) {
         const recover = confirm(
           'Recording appears to be active. This might be a stuck state.\n\n' +
-          'Click OK to force stop and restart, or Cancel to keep current recording.'
+            'Click OK to force stop and restart, or Cancel to keep current recording.'
         );
         if (recover) {
           try {
@@ -437,19 +437,19 @@ function setupRecordingHandlers() {
           return;
         }
       }
-      
+
       const result = await sendMessage<{ traceId: string }>('START_RECORDING');
       showStatus('Recording started!', 'success');
       await updateRecordingUI();
-      
+
       // Poll for updates
       let interval: ReturnType<typeof setInterval> | null = null;
       let checkStop: ReturnType<typeof setInterval> | null = null;
-      
+
       interval = setInterval(async () => {
         await updateRecordingUI();
       }, 2000);
-      
+
       // Clear interval when recording stops
       checkStop = setInterval(async () => {
         const state = await sendMessage<RecordingState>('GET_RECORDING_STATE');
@@ -471,9 +471,11 @@ function setupRecordingHandlers() {
       const result = await sendMessage<{ traceId: string }>('STOP_RECORDING');
       showStatus('Recording stopped!', 'success');
       await updateRecordingUI();
-      
+
       // Offer to view or export trace
-      const choice = confirm('Recording stopped. Would you like to view the trace in the labeller?\n\nClick OK to view, Cancel to skip.');
+      const choice = confirm(
+        'Recording stopped. Would you like to view the trace in the labeller?\n\nClick OK to view, Cancel to skip.'
+      );
       if (choice) {
         await openTraceInViewer(result.traceId);
       }
@@ -487,7 +489,7 @@ function setupRecordingHandlers() {
 async function exportTrace(traceId: string) {
   try {
     showStatus('Exporting trace...', 'loading');
-    
+
     const trace = await sendMessage<Trace>('GET_TRACE', { id: traceId });
     if (!trace) {
       throw new Error('Trace not found');
@@ -495,6 +497,16 @@ async function exportTrace(traceId: string) {
 
     // Get all snapshots referenced in the trace
     const snapshotIds = new Set<string>();
+
+    // Include initial and final snapshots
+    if (trace.initialSnapshotId) {
+      snapshotIds.add(trace.initialSnapshotId);
+    }
+    if (trace.finalSnapshotId) {
+      snapshotIds.add(trace.finalSnapshotId);
+    }
+
+    // Include pre/post snapshots from interactions
     for (const interaction of trace.interactions) {
       snapshotIds.add(interaction.preSnapshotId);
       snapshotIds.add(interaction.postSnapshotId);
@@ -510,35 +522,33 @@ async function exportTrace(traceId: string) {
 
     // Create ZIP file
     const zip = new JSZip();
-    
+
     // Add trace metadata
     zip.file('trace.json', JSON.stringify(trace, null, 2));
-    
+
     // Add interactions as JSONL
-    const interactionsJsonl = trace.interactions
-      .map((i) => JSON.stringify(i))
-      .join('\n');
+    const interactionsJsonl = trace.interactions.map((i) => JSON.stringify(i)).join('\n');
     zip.file('interactions.jsonl', interactionsJsonl);
-    
+
     // Add snapshots - include both HTML and full JSON data
     const snapshotsFolder = zip.folder('snapshots');
     const snapshotsDataFolder = zip.folder('snapshots-data');
-    
+
     // Create a manifest mapping snapshot IDs to their files
     const snapshotManifest: Record<string, { htmlFile: string; dataFile: string }> = {};
-    
+
     for (const snapshot of snapshots) {
       // HTML for viewing
       const htmlFile = `snapshots/${snapshot.id}.html`;
       snapshotsFolder?.file(`${snapshot.id}.html`, snapshot.html);
-      
+
       // Full snapshot data (with annotations, questions, etc.)
       const dataFile = `snapshots-data/${snapshot.id}.json`;
       snapshotsDataFolder?.file(`${snapshot.id}.json`, JSON.stringify(snapshot, null, 2));
-      
+
       snapshotManifest[snapshot.id] = { htmlFile, dataFile };
     }
-    
+
     // Add manifest file for easy import
     zip.file('snapshots-manifest.json', JSON.stringify(snapshotManifest, null, 2));
 

@@ -163,7 +163,7 @@ async function loadTrace(traceId: string) {
 
     // Show trace UI
     showTraceUI();
-    
+
     // Load initial snapshot if available, otherwise load first interaction
     if (trace.initialSnapshotId) {
       await loadInitialSnapshot();
@@ -184,7 +184,7 @@ async function loadInitialSnapshot() {
   viewingInitialSnapshot = true;
   viewingFinalSnapshot = false;
   currentInteractionIndex = -1;
-  
+
   await loadSnapshot(currentTrace.initialSnapshotId);
   updateTimelineUI();
 }
@@ -198,7 +198,7 @@ async function loadFinalSnapshot() {
   viewingInitialSnapshot = false;
   viewingFinalSnapshot = true;
   currentInteractionIndex = -1;
-  
+
   await loadSnapshot(currentTrace.finalSnapshotId);
   updateTimelineUI();
 }
@@ -217,12 +217,12 @@ async function loadInteraction(index: number, usePreAction: boolean = true) {
 
   // Load the appropriate snapshot (pre or post action)
   const snapshotId = usePreAction ? interaction.preSnapshotId : interaction.postSnapshotId;
-  
+
   // Use the normal loadSnapshot function to ensure proper initialization
   // This ensures all UI is properly set up (questions, annotations, etc.)
   // and annotation tools work correctly
   await loadSnapshot(snapshotId);
-  
+
   // Highlight the interaction target element after a short delay
   // to ensure iframe is loaded and ready
   setTimeout(() => {
@@ -235,7 +235,13 @@ async function loadInteraction(index: number, usePreAction: boolean = true) {
 
 // Toggle between pre and post action snapshots
 function toggleSnapshotView() {
-  if (!currentTrace || currentInteractionIndex < 0 || viewingInitialSnapshot || viewingFinalSnapshot) return;
+  if (
+    !currentTrace ||
+    currentInteractionIndex < 0 ||
+    viewingInitialSnapshot ||
+    viewingFinalSnapshot
+  )
+    return;
   showingPreAction = !showingPreAction;
   loadInteraction(currentInteractionIndex, showingPreAction);
 }
@@ -244,7 +250,7 @@ function toggleSnapshotView() {
 function highlightInteractionTarget(interaction: InteractionRecord) {
   // Don't highlight for initial/final snapshots
   if (viewingInitialSnapshot || viewingFinalSnapshot) return;
-  
+
   const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
   if (!iframe) return;
 
@@ -270,7 +276,7 @@ function showTraceUI() {
   if (snapshotNavContainer) {
     (snapshotNavContainer as HTMLElement).style.display = 'none';
   }
-  
+
   // Ensure annotation tools are visible and functional
   // (They should already be set up, but make sure they're enabled)
   const toolBtns = document.querySelectorAll('.tool-btn[data-tool]');
@@ -305,7 +311,7 @@ async function updateTimelineUI() {
     const isActive = viewingInitialSnapshot;
     const time = initialSnapshot ? new Date(initialSnapshot.capturedAt).toLocaleTimeString() : '';
     const title = initialSnapshot ? initialSnapshot.title : 'Initial Page';
-    
+
     items.push(`
       <div class="timeline-item ${isActive ? 'active' : ''}" data-type="initial">
         <div class="timeline-marker"></div>
@@ -319,13 +325,15 @@ async function updateTimelineUI() {
   }
 
   // Add interaction items
-  items.push(...currentTrace.interactions.map((interaction, idx) => {
-    const isActive = idx === currentInteractionIndex && !viewingInitialSnapshot && !viewingFinalSnapshot;
-    const actionType = interaction.action.type;
-    const actionLabel = actionType.charAt(0).toUpperCase() + actionType.slice(1);
-    const time = new Date(interaction.timestamp).toLocaleTimeString();
-    
-    return `
+  items.push(
+    ...currentTrace.interactions.map((interaction, idx) => {
+      const isActive =
+        idx === currentInteractionIndex && !viewingInitialSnapshot && !viewingFinalSnapshot;
+      const actionType = interaction.action.type;
+      const actionLabel = actionType.charAt(0).toUpperCase() + actionType.slice(1);
+      const time = new Date(interaction.timestamp).toLocaleTimeString();
+
+      return `
       <div class="timeline-item ${isActive ? 'active' : ''}" data-type="interaction" data-index="${idx}">
         <div class="timeline-marker"></div>
         <div class="timeline-content">
@@ -335,7 +343,8 @@ async function updateTimelineUI() {
         </div>
       </div>
     `;
-  }));
+    })
+  );
 
   // Load final snapshot data if needed
   let finalSnapshot: Snapshot | null = null;
@@ -348,7 +357,7 @@ async function updateTimelineUI() {
     const isActive = viewingFinalSnapshot;
     const time = finalSnapshot ? new Date(finalSnapshot.capturedAt).toLocaleTimeString() : '';
     const title = finalSnapshot ? finalSnapshot.title : 'Final Page';
-    
+
     items.push(`
       <div class="timeline-item ${isActive ? 'active' : ''}" data-type="final">
         <div class="timeline-marker"></div>
@@ -381,9 +390,10 @@ async function updateTimelineUI() {
   // Update position indicator
   const positionEl = document.getElementById('trace-position');
   if (positionEl && currentTrace) {
-    const totalItems = (currentTrace.initialSnapshotId ? 1 : 0) + 
-                       currentTrace.interactions.length + 
-                       (currentTrace.finalSnapshotId ? 1 : 0);
+    const totalItems =
+      (currentTrace.initialSnapshotId ? 1 : 0) +
+      currentTrace.interactions.length +
+      (currentTrace.finalSnapshotId ? 1 : 0);
     let currentPosition: number;
     if (viewingInitialSnapshot) {
       currentPosition = 1;
@@ -394,12 +404,12 @@ async function updateTimelineUI() {
     }
     positionEl.textContent = `${currentPosition} / ${totalItems}`;
   }
-  
+
   // Update pre/post button states and visibility
   const preBtn = document.getElementById('trace-pre-btn');
   const postBtn = document.getElementById('trace-post-btn');
   const toggleContainer = document.querySelector('.trace-snapshot-toggle');
-  
+
   if (viewingInitialSnapshot || viewingFinalSnapshot) {
     // Hide pre/post buttons for initial/final snapshots
     if (toggleContainer) {
@@ -422,7 +432,7 @@ async function updateTimelineUI() {
 // Navigate to next/previous item in timeline
 function navigateInteraction(direction: 'prev' | 'next') {
   if (!currentTrace) return;
-  
+
   // Handle navigation from initial snapshot
   if (viewingInitialSnapshot) {
     if (direction === 'next') {
@@ -434,7 +444,7 @@ function navigateInteraction(direction: 'prev' | 'next') {
     }
     return;
   }
-  
+
   // Handle navigation from final snapshot
   if (viewingFinalSnapshot) {
     if (direction === 'prev') {
@@ -446,7 +456,7 @@ function navigateInteraction(direction: 'prev' | 'next') {
     }
     return;
   }
-  
+
   // Handle navigation from interactions
   if (direction === 'next') {
     // Check if we should go to final snapshot
@@ -2554,22 +2564,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   document
     .getElementById('trace-next-btn')
     ?.addEventListener('click', () => navigateInteraction('next'));
-  
+
   // Pre/Post snapshot toggle
-  document
-    .getElementById('trace-pre-btn')
-    ?.addEventListener('click', () => {
-      if (!showingPreAction) {
-        loadInteraction(currentInteractionIndex, true);
-      }
-    });
-  document
-    .getElementById('trace-post-btn')
-    ?.addEventListener('click', () => {
-      if (showingPreAction) {
-        loadInteraction(currentInteractionIndex, false);
-      }
-    });
+  document.getElementById('trace-pre-btn')?.addEventListener('click', () => {
+    if (!showingPreAction) {
+      loadInteraction(currentInteractionIndex, true);
+    }
+  });
+  document.getElementById('trace-post-btn')?.addEventListener('click', () => {
+    if (showingPreAction) {
+      loadInteraction(currentInteractionIndex, false);
+    }
+  });
 
   // Approve/Decline/Skip buttons
   document.getElementById('approve-btn')?.addEventListener('click', () => {

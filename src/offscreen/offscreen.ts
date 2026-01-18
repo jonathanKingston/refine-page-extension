@@ -31,18 +31,18 @@ function cleanResourceUrls(doc: Document): void {
     NodeFilter.SHOW_ELEMENT,
     null
   );
-  
+
   let node: Node | null;
   while ((node = walker.nextNode())) {
     const el = node as Element;
     const tagName = el.tagName.toLowerCase();
-    
+
     // Clean inline style attributes
     const styleAttr = el.getAttribute('style');
     if (styleAttr) {
       el.setAttribute('style', cleanCssUrls(styleAttr));
     }
-    
+
     // Clean <link> stylesheets that aren't data URLs
     if (tagName === 'link' && el.getAttribute('rel') === 'stylesheet') {
       const href = el.getAttribute('href');
@@ -50,7 +50,7 @@ function cleanResourceUrls(doc: Document): void {
         el.remove();
       }
     }
-    
+
     // Clean img src that aren't data URLs
     if (tagName === 'img') {
       const src = el.getAttribute('src');
@@ -100,29 +100,29 @@ function makeInert(html: string, baseUrl?: string): string {
     'onfocus',
     'onblur',
   ];
-  
+
   // Use a single walker to process all elements efficiently
   const walker = doc.createTreeWalker(
     doc.body || doc.documentElement,
     NodeFilter.SHOW_ELEMENT,
     null
   );
-  
+
   const elementsToProcess: Element[] = [];
   let node: Node | null;
   while ((node = walker.nextNode())) {
     elementsToProcess.push(node as Element);
   }
-  
+
   // Process all elements in batch
   for (const el of elementsToProcess) {
     const tagName = el.tagName.toLowerCase();
-    
+
     // Remove event handler attributes
     for (const attr of eventAttrs) {
       el.removeAttribute(attr);
     }
-    
+
     // Handle specific element types
     if (tagName === 'a') {
       const href = el.getAttribute('href');

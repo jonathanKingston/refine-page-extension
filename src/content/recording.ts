@@ -10,14 +10,28 @@ function generateId(): string {
   return `interaction_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 }
 
+// Get className as string (handles SVG elements where className is SVGAnimatedString)
+function getClassNameString(element: Element): string {
+  const className = element.className;
+  if (typeof className === 'string') {
+    return className;
+  }
+  // SVG elements have className as SVGAnimatedString
+  if (className && typeof (className as SVGAnimatedString).baseVal === 'string') {
+    return (className as SVGAnimatedString).baseVal;
+  }
+  return '';
+}
+
 // Get CSS selector for an element
 function getSelector(element: Element): string {
   if (element.id) {
     return `#${element.id}`;
   }
-  
-  if (element.className) {
-    const classes = element.className
+
+  const classNameStr = getClassNameString(element);
+  if (classNameStr) {
+    const classes = classNameStr
       .split(' ')
       .filter((c) => c.length > 0)
       .map((c) => `.${c.replace(/[^a-zA-Z0-9_-]/g, '\\$&')}`)
@@ -30,11 +44,11 @@ function getSelector(element: Element): string {
       }
     }
   }
-  
+
   // Fallback to path-based selector
   const path: string[] = [];
   let current: Element | null = element;
-  
+
   while (current && current !== document.body) {
     let selector = current.tagName.toLowerCase();
     if (current.id) {
@@ -42,8 +56,9 @@ function getSelector(element: Element): string {
       path.unshift(selector);
       break;
     }
-    if (current.className) {
-      const classes = current.className
+    const currentClassNameStr = getClassNameString(current);
+    if (currentClassNameStr) {
+      const classes = currentClassNameStr
         .split(' ')
         .filter((c) => c.length > 0)
         .slice(0, 2)
@@ -53,7 +68,7 @@ function getSelector(element: Element): string {
         selector += classes;
       }
     }
-    
+
     const parent: Element | null = current.parentElement;
     if (parent) {
       const siblings = Array.from(parent.children).filter(
@@ -64,11 +79,11 @@ function getSelector(element: Element): string {
         selector += `:nth-of-type(${index})`;
       }
     }
-    
+
     path.unshift(selector);
     current = parent;
   }
-  
+
   return path.join(' > ');
 }
 
@@ -77,24 +92,24 @@ function getXPath(element: Element): string {
   if (element.id) {
     return `//*[@id="${element.id}"]`;
   }
-  
+
   const path: string[] = [];
   let current: Element | null = element;
-  
+
   while (current && current !== document.body) {
     let index = 1;
     const siblings = Array.from(current.parentElement?.children || []).filter(
       (el) => el.tagName === current!.tagName
     );
-    
+
     if (siblings.length > 1) {
       index = siblings.indexOf(current) + 1;
     }
-    
+
     path.unshift(`${current.tagName.toLowerCase()}[${index}]`);
     current = current.parentElement;
   }
-  
+
   return '/' + path.join('/');
 }
 
@@ -115,7 +130,7 @@ function getAttributes(element: Element): Record<string, string> {
 function getInteractionTarget(element: Element): InteractionRecord['action']['target'] {
   const rect = element.getBoundingClientRect();
   const text = element.textContent?.trim();
-  
+
   return {
     selector: getSelector(element),
     xpath: getXPath(element),
@@ -134,28 +149,28 @@ function getInteractionTarget(element: Element): InteractionRecord['action']['ta
 function isInteractive(element: Element): boolean {
   const tagName = element.tagName.toLowerCase();
   const interactiveTags = ['a', 'button', 'input', 'select', 'textarea', 'label'];
-  
+
   if (interactiveTags.includes(tagName)) {
     return true;
   }
-  
+
   // Check for role attributes
   const role = element.getAttribute('role');
   if (role && ['button', 'link', 'menuitem', 'tab', 'option'].includes(role)) {
     return true;
   }
-  
+
   // Check for event handlers or click handlers
   if (element.hasAttribute('onclick') || element.hasAttribute('data-action')) {
     return true;
   }
-  
+
   // Check for tabindex (focusable)
   const tabIndex = element.getAttribute('tabindex');
   if (tabIndex !== null && parseInt(tabIndex) >= 0) {
     return true;
   }
-  
+
   return false;
 }
 
@@ -173,7 +188,7 @@ async function initRecording(retryCount = 0) {
   if (isRecording && eventListenersSetup) {
     return;
   }
-  
+
   try {
     // Request recording state from background
     const response = await chrome.runtime.sendMessage({ type: 'GET_RECORDING_STATE' });
@@ -182,7 +197,7 @@ async function initRecording(retryCount = 0) {
       config = response.config || getDefaultConfig();
       setupEventListeners();
       console.log('[Recording] Initialized on', window.location.href);
-      
+
       // Stop any polling if we successfully initialized
       if (initializationCheckInterval) {
         clearInterval(initializationCheckInterval);
@@ -220,36 +235,36 @@ function setupEventListeners() {
     console.log('[Recording] Event listeners already set up, skipping');
     return;
   }
-  
+
   // Click events
   if (config?.clicks) {
     document.addEventListener('click', handleClick, true);
   }
-  
+
   // Form submission
   if (config?.formSubmissions) {
     document.addEventListener('submit', handleFormSubmit, true);
   }
-  
+
   // Text input (debounced)
   if (config?.textInput) {
     document.addEventListener('input', handleTextInput, true);
     document.addEventListener('blur', handleInputBlur, true);
   }
-  
+
   // Selection changes (dropdowns, checkboxes, radios)
   if (config?.selections) {
     document.addEventListener('change', handleSelectionChange, true);
   }
-  
+
   // Navigation (popstate for SPA navigation)
   // Always capture navigations for timeline context, regardless of config
   window.addEventListener('popstate', handleNavigation);
   window.addEventListener('hashchange', handleNavigation);
-  
+
   // Full page navigation (beforeunload)
   window.addEventListener('beforeunload', handleBeforeUnload);
-  
+
   eventListenersSetup = true;
   console.log('[Recording] Event listeners set up');
 }
@@ -257,7 +272,7 @@ function setupEventListeners() {
 // Remove event listeners
 function removeEventListeners() {
   if (!eventListenersSetup) return;
-  
+
   document.removeEventListener('click', handleClick, true);
   document.removeEventListener('submit', handleFormSubmit, true);
   document.removeEventListener('input', handleTextInput, true);
@@ -266,7 +281,7 @@ function removeEventListeners() {
   window.removeEventListener('popstate', handleNavigation);
   window.removeEventListener('hashchange', handleNavigation);
   window.removeEventListener('beforeunload', handleBeforeUnload);
-  
+
   eventListenersSetup = false;
   console.log('[Recording] Event listeners removed');
 }
@@ -355,7 +370,7 @@ function showClickFeedback(element: Element, coordinates: { x: number; y: number
   const originalOutline = (element as HTMLElement).style.outline;
   (element as HTMLElement).style.outline = '3px solid #3b82f6';
   (element as HTMLElement).style.outlineOffset = '2px';
-  
+
   setTimeout(() => {
     (element as HTMLElement).style.outline = originalOutline;
     (element as HTMLElement).style.outlineOffset = '';
@@ -365,29 +380,30 @@ function showClickFeedback(element: Element, coordinates: { x: number; y: number
 // Handle click events
 async function handleClick(event: MouseEvent) {
   if (!isRecording || !config?.clicks) return;
-  
+
   const target = event.target as Element;
   if (!target) return;
-  
+
   // Only capture clicks on interactive elements or elements that might trigger changes
   if (!isInteractive(target)) {
     // Check if it's a clickable container (has click handler)
-    const hasClickHandler = target.hasAttribute('onclick') || 
-                           target.getAttribute('role') === 'button' ||
-                           window.getComputedStyle(target).cursor === 'pointer';
+    const hasClickHandler =
+      target.hasAttribute('onclick') ||
+      target.getAttribute('role') === 'button' ||
+      window.getComputedStyle(target).cursor === 'pointer';
     if (!hasClickHandler) {
       return;
     }
   }
-  
+
   // Don't capture password field clicks
   if (target instanceof HTMLInputElement && target.type === 'password') {
     return;
   }
-  
+
   // Show visual feedback
   showClickFeedback(target, { x: event.clientX, y: event.clientY });
-  
+
   const interaction: Omit<InteractionRecord, 'preSnapshotId' | 'postSnapshotId'> = {
     id: generateId(),
     timestamp: Date.now(),
@@ -403,7 +419,7 @@ async function handleClick(event: MouseEvent) {
       height: window.innerHeight,
     },
   };
-  
+
   // Send to background for snapshot capture
   try {
     await chrome.runtime.sendMessage({
@@ -423,10 +439,10 @@ async function handleClick(event: MouseEvent) {
 // Handle form submission
 async function handleFormSubmit(event: SubmitEvent) {
   if (!isRecording || !config?.formSubmissions) return;
-  
+
   const target = event.target as HTMLFormElement;
   if (!target) return;
-  
+
   const interaction: Omit<InteractionRecord, 'preSnapshotId' | 'postSnapshotId'> = {
     id: generateId(),
     timestamp: Date.now(),
@@ -441,7 +457,7 @@ async function handleFormSubmit(event: SubmitEvent) {
       height: window.innerHeight,
     },
   };
-  
+
   try {
     await chrome.runtime.sendMessage({
       type: 'RECORD_INTERACTION',
@@ -460,17 +476,17 @@ async function handleFormSubmit(event: SubmitEvent) {
 // Handle text input (debounced)
 function handleTextInput(event: Event) {
   if (!isRecording || !config?.textInput) return;
-  
+
   const target = event.target as HTMLInputElement | HTMLTextAreaElement;
-  if (!target || (target.type === 'password')) return;
-  
+  if (!target || target.type === 'password') return;
+
   lastInputElement = target;
-  
+
   // Clear existing timer
   if (textInputDebounceTimer) {
     clearTimeout(textInputDebounceTimer);
   }
-  
+
   // Set new timer (will capture on blur or after delay)
   textInputDebounceTimer = window.setTimeout(() => {
     captureTextInput(target);
@@ -480,15 +496,15 @@ function handleTextInput(event: Event) {
 // Handle input blur (capture immediately)
 async function handleInputBlur(event: FocusEvent) {
   if (!isRecording || !config?.textInput) return;
-  
+
   const target = event.target as HTMLInputElement | HTMLTextAreaElement;
   if (!target || target !== lastInputElement) return;
-  
+
   if (textInputDebounceTimer) {
     clearTimeout(textInputDebounceTimer);
     textInputDebounceTimer = null;
   }
-  
+
   await captureTextInput(target);
   lastInputElement = null;
 }
@@ -510,7 +526,7 @@ async function captureTextInput(target: HTMLInputElement | HTMLTextAreaElement) 
       height: window.innerHeight,
     },
   };
-  
+
   try {
     await chrome.runtime.sendMessage({
       type: 'RECORD_INTERACTION',
@@ -529,19 +545,20 @@ async function captureTextInput(target: HTMLInputElement | HTMLTextAreaElement) 
 // Handle selection changes
 async function handleSelectionChange(event: Event) {
   if (!isRecording || !config?.selections) return;
-  
+
   const target = event.target as HTMLSelectElement | HTMLInputElement;
   if (!target) return;
-  
+
   const interaction: Omit<InteractionRecord, 'preSnapshotId' | 'postSnapshotId'> = {
     id: generateId(),
     timestamp: Date.now(),
     action: {
       type: 'select',
       target: getInteractionTarget(target),
-      value: target instanceof HTMLSelectElement 
-        ? target.options[target.selectedIndex]?.value || ''
-        : target.value,
+      value:
+        target instanceof HTMLSelectElement
+          ? target.options[target.selectedIndex]?.value || ''
+          : target.value,
     },
     url: window.location.href,
     title: document.title,
@@ -550,7 +567,7 @@ async function handleSelectionChange(event: Event) {
       height: window.innerHeight,
     },
   };
-  
+
   try {
     await chrome.runtime.sendMessage({
       type: 'RECORD_INTERACTION',
@@ -570,7 +587,7 @@ async function handleSelectionChange(event: Event) {
 // Always capture navigations for timeline context, regardless of config
 async function handleNavigation() {
   if (!isRecording) return;
-  
+
   // Wait a bit for page to settle
   setTimeout(async () => {
     const interaction: Omit<InteractionRecord, 'preSnapshotId' | 'postSnapshotId'> = {
@@ -597,7 +614,7 @@ async function handleNavigation() {
         height: window.innerHeight,
       },
     };
-    
+
     try {
       await chrome.runtime.sendMessage({
         type: 'RECORD_INTERACTION',
@@ -617,15 +634,17 @@ async function handleNavigation() {
 // Handle full page navigation (beforeunload - for links that navigate away)
 function handleBeforeUnload() {
   if (!isRecording) return;
-  
+
   // Notify background that this page is navigating away
   // The background script will handle re-injecting on the new page
-  chrome.runtime.sendMessage({
-    type: 'PAGE_NAVIGATING',
-    payload: { url: window.location.href },
-  }).catch(() => {
-    // Ignore errors - page might be unloading
-  });
+  chrome.runtime
+    .sendMessage({
+      type: 'PAGE_NAVIGATING',
+      payload: { url: window.location.href },
+    })
+    .catch(() => {
+      // Ignore errors - page might be unloading
+    });
 }
 
 // Listen for messages from background
@@ -653,7 +672,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   } else if (message.type === 'GET_RECORDING_STATE') {
     sendResponse({ isRecording, config });
   }
-  
+
   return true; // Keep channel open for async response
 });
 
@@ -662,7 +681,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 function startInitialization() {
   // Initial check
   initRecording();
-  
+
   // Also check periodically in case background hasn't sent message yet
   // This handles cross-origin navigation where the script loads before background sends message
   if (!initializationCheckInterval) {
@@ -677,7 +696,7 @@ function startInitialization() {
         }
       }
     }, 1000);
-    
+
     // Stop checking after 10 seconds to avoid infinite polling
     setTimeout(() => {
       if (initializationCheckInterval) {

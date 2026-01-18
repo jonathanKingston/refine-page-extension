@@ -179,15 +179,15 @@ export interface ZipExportData {
 export interface CaptureConfig {
   // Navigation
   navigation: boolean; // page loads, history changes
-  
+
   // Primary interactions
   clicks: boolean; // mouse clicks on interactive elements
   formSubmissions: boolean; // form submit events
-  
+
   // Input (debounced)
   textInput: boolean; // typing in fields (capture on blur/submit)
   selections: boolean; // dropdown, checkbox, radio changes
-  
+
   // Optional/advanced
   scrollThreshold?: number | null; // capture after N px scroll (null = disabled)
   hoverDuration?: number | null; // capture hovers longer than N ms (null = disabled)
@@ -209,7 +209,7 @@ export interface InteractionTarget {
 export interface InteractionRecord {
   id: string;
   timestamp: number;
-  
+
   // What happened
   action: {
     type: 'click' | 'type' | 'select' | 'submit' | 'navigate' | 'scroll';
@@ -217,16 +217,16 @@ export interface InteractionRecord {
     value?: string; // For type/select actions
     coordinates?: { x: number; y: number }; // Click position
   };
-  
+
   // Context
   url: string;
   title: string;
   viewportSize: { width: number; height: number };
-  
+
   // Snapshot references
   preSnapshotId: string;
   postSnapshotId: string;
-  
+
   // Optional: user-provided labels (added later in annotation UI)
   labels?: {
     intent?: string; // "Add item to cart"

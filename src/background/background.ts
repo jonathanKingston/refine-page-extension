@@ -59,7 +59,9 @@ async function injectAndMessage<T>(
       return response as T;
     } catch {
       if (retry === maxRetries - 1) {
-        throw new Error(`Content script '${scriptFile}' not responding after ${maxRetries} retries`);
+        throw new Error(
+          `Content script '${scriptFile}' not responding after ${maxRetries} retries`
+        );
       }
       await new Promise((r) => setTimeout(r, 20 * Math.pow(2, retry)));
     }
@@ -143,21 +145,26 @@ async function capturePageAsMhtml(
   // Capture the page as MHTML (with retry for flaky Chromium behavior)
   let mhtmlBlob: Blob | undefined;
   let lastError: Error | undefined;
-  
+
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       mhtmlBlob = await chrome.pageCapture.saveAsMHTML({ tabId });
       if (mhtmlBlob) break;
     } catch (mhtmlError) {
       lastError = mhtmlError as Error;
-      console.warn(`refine.page: pageCapture.saveAsMHTML attempt ${attempt + 1} failed:`, mhtmlError);
+      console.warn(
+        `refine.page: pageCapture.saveAsMHTML attempt ${attempt + 1} failed:`,
+        mhtmlError
+      );
       // Brief yield before retry
-      await new Promise(r => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 50));
     }
   }
-  
+
   if (!mhtmlBlob) {
-    throw new Error(`MHTML capture failed after 3 attempts: ${lastError?.message || 'no blob returned'}`);
+    throw new Error(
+      `MHTML capture failed after 3 attempts: ${lastError?.message || 'no blob returned'}`
+    );
   }
 
   console.log('refine.page: MHTML captured, size:', (mhtmlBlob.size / 1024).toFixed(1), 'KB');
@@ -194,17 +201,17 @@ async function capturePageAsMhtml(
 // Storage operations using chrome.storage.local
 async function saveSnapshot(snapshot: Snapshot): Promise<void> {
   const key = `snapshot_${snapshot.id}`;
-  
+
   // Batch storage operations: get index and save both snapshot and index in one operation
   const indexResult = await chrome.storage.local.get(['snapshotIndex', key]);
   const index: string[] = indexResult.snapshotIndex || [];
   const updates: Record<string, unknown> = { [key]: snapshot };
-  
+
   if (!index.includes(snapshot.id)) {
     index.push(snapshot.id);
     updates.snapshotIndex = index;
   }
-  
+
   // Save snapshot and index in a single operation
   await chrome.storage.local.set(updates);
 }
@@ -396,9 +403,7 @@ async function getAllTraces(): Promise<Trace[]> {
     }
   }
 
-  return traces.sort(
-    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-  );
+  return traces.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 }
 
 async function deleteTrace(id: string): Promise<void> {
@@ -450,7 +455,12 @@ async function startRecording(config?: CaptureConfig): Promise<{ traceId: string
   // Inject recording script and notify all tabs to start recording
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
-    if (tab.id && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+    if (
+      tab.id &&
+      tab.url &&
+      !tab.url.startsWith('chrome://') &&
+      !tab.url.startsWith('chrome-extension://')
+    ) {
       try {
         // Try to inject recording script if not already loaded
         try {
@@ -462,7 +472,7 @@ async function startRecording(config?: CaptureConfig): Promise<{ traceId: string
         } catch {
           // Script might already be loaded, continue
         }
-        
+
         await chrome.tabs.sendMessage(tab.id, {
           type: 'START_RECORDING',
           payload: { config: config || defaultConfig },
@@ -483,26 +493,28 @@ async function startRecording(config?: CaptureConfig): Promise<{ traceId: string
     try {
       console.log('[Recording] Looking for active tab for initial snapshot...');
       const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-      console.log('[Recording] Found tabs in lastFocusedWindow:', tabs.map(t => t.url?.substring(0, 50)));
-      
-      let activeTab = tabs.find(t => 
-        t.url && 
-        !t.url.startsWith('chrome://') && 
-        !t.url.startsWith('chrome-extension://')
+      console.log(
+        '[Recording] Found tabs in lastFocusedWindow:',
+        tabs.map((t) => t.url?.substring(0, 50))
       );
-      
+
+      let activeTab = tabs.find(
+        (t) => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://')
+      );
+
       // If no capturable tab in focused window, try all windows
       if (!activeTab) {
         console.log('[Recording] No capturable tab in focused window, trying all windows...');
         const allTabs = await chrome.tabs.query({ active: true });
-        console.log('[Recording] Found all active tabs:', allTabs.map(t => t.url?.substring(0, 50)));
-        activeTab = allTabs.find(t => 
-          t.url && 
-          !t.url.startsWith('chrome://') && 
-          !t.url.startsWith('chrome-extension://')
+        console.log(
+          '[Recording] Found all active tabs:',
+          allTabs.map((t) => t.url?.substring(0, 50))
+        );
+        activeTab = allTabs.find(
+          (t) => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://')
         );
       }
-      
+
       if (activeTab?.id && activeTab?.url) {
         console.log('[Recording] Capturing initial snapshot from:', activeTab.url);
         await captureInitialSnapshot(activeTab.id, traceId);
@@ -514,7 +526,7 @@ async function startRecording(config?: CaptureConfig): Promise<{ traceId: string
       console.warn('[Recording] Could not capture initial snapshot:', error);
     }
   })();
-  
+
   // Don't await the capture - let it run in background
   // The trace will be updated when the capture completes
   captureInitialPromise.catch(() => {}); // Suppress unhandled rejection
@@ -563,7 +575,7 @@ async function handleTabUpdate(
 ) {
   // Only handle when page is fully loaded
   if (changeInfo.status !== 'complete') return;
-  
+
   // Skip chrome:// and extension pages
   if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
     return;
@@ -581,7 +593,7 @@ async function handleTabUpdate(
 async function initializeRecordingOnTab(tabId: number, config: CaptureConfig) {
   let retries = 0;
   const maxRetries = 10;
-  
+
   const tryInitialize = async () => {
     try {
       // Try to send message to content script
@@ -620,7 +632,7 @@ async function initializeRecordingOnTab(tabId: number, config: CaptureConfig) {
       }
     }
   };
-  
+
   // Start initialization attempt after a short delay to let content script load
   setTimeout(tryInitialize, 300);
 }
@@ -634,11 +646,9 @@ async function captureInitialSnapshot(tabId: number, traceId: string): Promise<v
     }
 
     // Get page metadata (inject content script if needed)
-    const response = await injectAndMessage<{ payload: { url: string; title: string; viewport: { width: number; height: number } } }>(
-      tabId,
-      'content.js',
-      { type: 'GET_PAGE_METADATA' }
-    );
+    const response = await injectAndMessage<{
+      payload: { url: string; title: string; viewport: { width: number; height: number } };
+    }>(tabId, 'content.js', { type: 'GET_PAGE_METADATA' });
     const metadata = response.payload;
 
     // Capture the page
@@ -690,26 +700,28 @@ async function stopRecording(): Promise<{ traceId: string }> {
   try {
     console.log('[Recording] Looking for active tab for final snapshot...');
     const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    console.log('[Recording] Found tabs in lastFocusedWindow:', tabs.map(t => t.url?.substring(0, 50)));
-    
-    let activeTab = tabs.find(t => 
-      t.url && 
-      !t.url.startsWith('chrome://') && 
-      !t.url.startsWith('chrome-extension://')
+    console.log(
+      '[Recording] Found tabs in lastFocusedWindow:',
+      tabs.map((t) => t.url?.substring(0, 50))
     );
-    
+
+    let activeTab = tabs.find(
+      (t) => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://')
+    );
+
     // If no capturable tab in focused window, try all windows
     if (!activeTab) {
       console.log('[Recording] No capturable tab in focused window, trying all windows...');
       const allTabs = await chrome.tabs.query({ active: true });
-      console.log('[Recording] Found all active tabs:', allTabs.map(t => t.url?.substring(0, 50)));
-      activeTab = allTabs.find(t => 
-        t.url && 
-        !t.url.startsWith('chrome://') && 
-        !t.url.startsWith('chrome-extension://')
+      console.log(
+        '[Recording] Found all active tabs:',
+        allTabs.map((t) => t.url?.substring(0, 50))
+      );
+      activeTab = allTabs.find(
+        (t) => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://')
       );
     }
-    
+
     if (activeTab?.id && activeTab?.url) {
       console.log('[Recording] Capturing final snapshot from:', activeTab.url);
       await captureFinalSnapshot(activeTab.id, traceId);
@@ -755,11 +767,9 @@ async function captureFinalSnapshot(tabId: number, traceId: string): Promise<voi
     }
 
     // Get page metadata (inject content script if needed)
-    const response = await injectAndMessage<{ payload: { url: string; title: string; viewport: { width: number; height: number } } }>(
-      tabId,
-      'content.js',
-      { type: 'GET_PAGE_METADATA' }
-    );
+    const response = await injectAndMessage<{
+      payload: { url: string; title: string; viewport: { width: number; height: number } };
+    }>(tabId, 'content.js', { type: 'GET_PAGE_METADATA' });
     const metadata = response.payload;
 
     // Capture the page
@@ -820,7 +830,11 @@ async function recordInteraction(
     let tab: chrome.tabs.Tab;
     try {
       tab = await chrome.tabs.get(tabId);
-      if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+      if (
+        !tab.url ||
+        tab.url.startsWith('chrome://') ||
+        tab.url.startsWith('chrome-extension://')
+      ) {
         console.warn('[Recording] Cannot capture from system page:', tab.url);
         return;
       }
@@ -832,11 +846,9 @@ async function recordInteraction(
     // Get page metadata (inject content script if needed)
     let metadata: { url: string; title: string; viewport: { width: number; height: number } };
     try {
-      const response = await injectAndMessage<{ payload: { url: string; title: string; viewport: { width: number; height: number } } }>(
-        tabId,
-        'content.js',
-        { type: 'GET_PAGE_METADATA' }
-      );
+      const response = await injectAndMessage<{
+        payload: { url: string; title: string; viewport: { width: number; height: number } };
+      }>(tabId, 'content.js', { type: 'GET_PAGE_METADATA' });
       if (!response || !response.payload) {
         throw new Error('No metadata response');
       }
@@ -846,12 +858,15 @@ async function recordInteraction(
       return;
     }
 
-    console.log(`[Recording] Capturing interaction ${interaction.id} (${interaction.action.type}) on tab ${tabId}`, {
-      url: tab.url,
-      windowId: tab.windowId,
-      active: tab.active,
-      status: tab.status
-    });
+    console.log(
+      `[Recording] Capturing interaction ${interaction.id} (${interaction.action.type}) on tab ${tabId}`,
+      {
+        url: tab.url,
+        windowId: tab.windowId,
+        active: tab.active,
+        status: tab.status,
+      }
+    );
 
     // Capture pre-action snapshot
     let preSnapshot: Snapshot;
@@ -878,7 +893,7 @@ async function recordInteraction(
     }
 
     // Note: We previously waited 500ms here "for DOM to settle" but this is unnecessary
-    // since the MHTML capture happens atomically. The pre-snapshot is taken BEFORE the 
+    // since the MHTML capture happens atomically. The pre-snapshot is taken BEFORE the
     // interaction, and post-snapshot is requested AFTER (the content script already waited
     // for the interaction to complete before sending RECORD_INTERACTION).
 
@@ -921,7 +936,7 @@ async function recordInteraction(
 
     console.log(
       `[Recording] Successfully recorded interaction ${completeInteraction.id} (${completeInteraction.action.type}), ` +
-      `snapshots: ${preSnapshot.id} → ${postSnapshot.id}`
+        `snapshots: ${preSnapshot.id} → ${postSnapshot.id}`
     );
   } catch (error) {
     console.error('[Recording] Failed to record interaction:', error, interaction);
@@ -981,57 +996,57 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Query for the active tab, excluding extension pages
         // The popup is technically in currentWindow, so we need to find the actual webpage tab
         const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-        
+
         // Filter out extension and browser internal pages
-        const capturableTabs = tabs.filter(t => 
-          t.url && 
-          !t.url.startsWith('chrome://') &&
-          !t.url.startsWith('chrome-extension://') &&
-          !t.url.startsWith('edge://') &&
-          !t.url.startsWith('about:') &&
-          !t.url.startsWith('devtools://')
-        );
-        
-        // If no capturable tab in focused window, try all windows
-        let tab = capturableTabs[0];
-        if (!tab) {
-          const allTabs = await chrome.tabs.query({ active: true });
-          const allCapturableTabs = allTabs.filter(t => 
-            t.url && 
+        const capturableTabs = tabs.filter(
+          (t) =>
+            t.url &&
             !t.url.startsWith('chrome://') &&
             !t.url.startsWith('chrome-extension://') &&
             !t.url.startsWith('edge://') &&
             !t.url.startsWith('about:') &&
             !t.url.startsWith('devtools://')
+        );
+
+        // If no capturable tab in focused window, try all windows
+        let tab = capturableTabs[0];
+        if (!tab) {
+          const allTabs = await chrome.tabs.query({ active: true });
+          const allCapturableTabs = allTabs.filter(
+            (t) =>
+              t.url &&
+              !t.url.startsWith('chrome://') &&
+              !t.url.startsWith('chrome-extension://') &&
+              !t.url.startsWith('edge://') &&
+              !t.url.startsWith('about:') &&
+              !t.url.startsWith('devtools://')
           );
           tab = allCapturableTabs[0];
         }
-        
+
         if (!tab?.id || !tab?.url) {
           throw new Error('No capturable tab found - open a webpage first');
         }
-        
-        console.log('refine.page: CAPTURE_PAGE - selected tab:', { 
-          id: tab.id, 
-          url: tab.url, 
+
+        console.log('refine.page: CAPTURE_PAGE - selected tab:', {
+          id: tab.id,
+          url: tab.url,
           windowId: tab.windowId,
           active: tab.active,
-          status: tab.status 
+          status: tab.status,
         });
-        
+
         const url = tab.url;
 
         try {
           console.log('refine.page: CAPTURE_PAGE step 1 - getting metadata for tab', tab.id);
-          
+
           // Get page metadata (inject content script if needed)
           let metadata: { url: string; title: string; viewport: { width: number; height: number } };
           try {
-            const metadataResponse = await injectAndMessage<{ payload: { url: string; title: string; viewport: { width: number; height: number } } }>(
-              tab.id,
-              'content.js',
-              { type: 'GET_PAGE_METADATA' }
-            );
+            const metadataResponse = await injectAndMessage<{
+              payload: { url: string; title: string; viewport: { width: number; height: number } };
+            }>(tab.id, 'content.js', { type: 'GET_PAGE_METADATA' });
             metadata = metadataResponse.payload;
             console.log('refine.page: CAPTURE_PAGE step 1 complete - got metadata');
           } catch (metaError) {
@@ -1039,7 +1054,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
 
           console.log('refine.page: CAPTURE_PAGE step 2 - capturing MHTML');
-          
+
           // Ensure tab is active and focused (workaround for Chromium pageCapture issues)
           try {
             await chrome.tabs.update(tab.id, { active: true });
@@ -1050,7 +1065,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           } catch {
             // Non-fatal - tab might already be active
           }
-          
+
           // Capture the page as MHTML and convert to HTML (via offscreen document)
           let html: string;
           try {
@@ -1089,10 +1104,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           console.error('refine.page: Capture error:', err);
           return {
             type: 'CAPTURE_ERROR',
-            payload: { 
+            payload: {
               error: err.message || 'Unknown error',
               stack: err.stack,
-              name: err.name 
+              name: err.name,
             },
           };
         }

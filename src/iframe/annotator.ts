@@ -1487,17 +1487,18 @@ async function handleMessage(event: MessageEvent) {
   console.log('[Iframe Annotator] Received message:', message.type);
 
   switch (message.type) {
-    case 'LOAD_HTML': {
-      // Load HTML content into the page
-      const { html } = message.payload as { html: string };
-      const container = document.getElementById('content-container');
-      if (container && html) {
-        // Reset annotation index for new content
-        annotationIndex = 0;
+    case 'LOAD_HTML':
+      {
+        // Load HTML content into the page
+        const { html } = message.payload as { html: string };
+        const container = document.getElementById('content-container');
+        if (container && html) {
+          // Reset annotation index for new content
+          annotationIndex = 0;
 
-        // Insert the HTML content
-        container.innerHTML = html;
-        console.log('[Iframe Annotator] HTML content loaded');
+          // Insert the HTML content
+          container.innerHTML = html;
+          console.log('[Iframe Annotator] HTML content loaded');
 
           // Force layout recalculation to ensure body/html expands to fit content
           // This fixes the issue where the page appears white at the bottom until scrolled
@@ -1853,7 +1854,7 @@ async function handleMessage(event: MessageEvent) {
         actionType: string;
         coordinates?: { x: number; y: number };
       };
-      
+
       // Remove previous interaction highlight
       const prevHighlight = document.querySelector('.interaction-highlight');
       if (prevHighlight) {
@@ -1920,14 +1921,14 @@ async function handleMessage(event: MessageEvent) {
             // boundingBox is the element's getBoundingClientRect() at recording time
             const offsetX = coordinates.x - boundingBox.x;
             const offsetY = coordinates.y - boundingBox.y;
-            
+
             // Get element's current position
             const currentRect = element.getBoundingClientRect();
-            
+
             // Calculate click position in current viewport
             const clickX = currentRect.x + offsetX;
             const clickY = currentRect.y + offsetY;
-            
+
             showClickAnimation(clickX, clickY);
           }, 500); // Wait for scroll animation
         }
