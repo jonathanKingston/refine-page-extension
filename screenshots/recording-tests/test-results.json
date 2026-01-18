@@ -1,14 +1,14 @@
 {
   "passed": [
-    "Regular capture works: 1 snapshot(s) created",
     "Recording indicator shows active state",
     "Click interaction recorded",
     "Recording stop completed",
     "Found 1 trace(s) in storage",
-    "Found 5 snapshot(s) in storage",
+    "Found 4 snapshot(s) in storage",
     "Latest trace has 1 interaction(s)"
   ],
   "failed": [
+    "Regular capture failed: no new snapshots created",
     "Trace missing initial snapshot",
     "Trace missing final snapshot"
   ],
@@ -16,62 +16,62 @@
     {
       "name": "00-after-regular-capture",
       "description": "Popup after regular capture",
-      "filename": "1768746612568-00-after-regular-capture.png",
-      "timestamp": "2026-01-18T14:30:12.696Z"
+      "filename": "00-after-regular-capture.png",
+      "timestamp": "2026-01-18T15:14:50.498Z"
     },
     {
       "name": "01-popup-ready",
       "description": "Popup loaded and ready",
-      "filename": "1768746612707-01-popup-ready.png",
-      "timestamp": "2026-01-18T14:30:12.761Z"
+      "filename": "01-popup-ready.png",
+      "timestamp": "2026-01-18T15:14:50.560Z"
     },
     {
       "name": "02-recording-started",
       "description": "Recording has started",
-      "filename": "1768746612898-02-recording-started.png",
-      "timestamp": "2026-01-18T14:30:12.979Z"
+      "filename": "02-recording-started.png",
+      "timestamp": "2026-01-18T15:14:50.827Z"
     },
     {
       "name": "03-test-page-before",
       "description": "Test page before interactions",
-      "filename": "1768746618699-03-test-page-before.png",
-      "timestamp": "2026-01-18T14:30:18.779Z"
+      "filename": "03-test-page-before.png",
+      "timestamp": "2026-01-18T15:14:56.608Z"
     },
     {
       "name": "04-after-click",
       "description": "Test page after click interaction",
-      "filename": "1768746621796-04-after-click.png",
-      "timestamp": "2026-01-18T14:30:21.877Z"
+      "filename": "04-after-click.png",
+      "timestamp": "2026-01-18T15:14:59.703Z"
     },
     {
       "name": "05-before-stop",
       "description": "Popup before stopping recording",
-      "filename": "1768746622507-05-before-stop.png",
-      "timestamp": "2026-01-18T14:30:22.595Z"
+      "filename": "05-before-stop.png",
+      "timestamp": "2026-01-18T15:15:00.431Z"
     },
     {
       "name": "06-recording-stopped",
       "description": "Recording has stopped",
-      "filename": "1768746622630-06-recording-stopped.png",
-      "timestamp": "2026-01-18T14:30:22.731Z"
+      "filename": "06-recording-stopped.png",
+      "timestamp": "2026-01-18T15:15:00.645Z"
     },
     {
       "name": "07-viewer-with-data",
       "description": "Viewer page showing recorded data",
-      "filename": "1768746623458-07-viewer-with-data.png",
-      "timestamp": "2026-01-18T14:30:23.515Z"
+      "filename": "07-viewer-with-data.png",
+      "timestamp": "2026-01-18T15:15:01.493Z"
     }
   ],
   "timings": {
-    "startRecording": 136.61554199999955,
-    "stopRecording": 35.34029200000077,
+    "startRecording": 172.0988339999967,
+    "stopRecording": 99.98020800000813,
     "interactions": [
       {
         "type": "click",
-        "duration": 3017.2130839999954
+        "duration": 3024.3788769999956
       }
     ],
-    "totalTestTime": 50853.811732
+    "totalTestTime": 73201.785033
   },
   "errors": []
 }

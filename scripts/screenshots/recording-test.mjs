@@ -96,7 +96,8 @@ function verbose(message, ...args) {
  * Take a screenshot and save it
  */
 async function takeScreenshot(page, name, description) {
-  const filename = `${Date.now()}-${name}.png`;
+  // Use stable names for regression testing (no timestamps)
+  const filename = `${name}.png`;
   const filepath = path.join(OUTPUT_DIR, filename);
   
   await page.screenshot({
