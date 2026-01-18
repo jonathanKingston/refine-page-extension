@@ -249,6 +249,12 @@ export interface Trace {
   updatedAt: string;
 }
 
+// Recording state for tracking active recordings
+export interface RecordingState {
+  isRecording: boolean;
+  currentTraceId?: string;
+}
+
 // Messages between extension components
 export type MessageType =
   | 'CAPTURE_PAGE'

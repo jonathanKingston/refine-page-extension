@@ -52,7 +52,7 @@ async function sendMessage<T>(type: string, payload?: unknown): Promise<T> {
 }
 
 // Show status message
-function showStatus(message: string, type: 'success' | 'error' | 'loading') {
+function showStatus(message: string, type: 'success' | 'error' | 'loading' | 'info') {
   const statusEl = document.getElementById('status');
   const textEl = statusEl?.querySelector('.status-text');
   if (!statusEl || !textEl) return;
