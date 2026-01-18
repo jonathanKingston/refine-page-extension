@@ -219,3 +219,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 console.log('refine.page: Offscreen document loaded');
+
+// Signal to background script that we're ready
+chrome.runtime.sendMessage({ type: 'OFFSCREEN_READY' }).catch(() => {
+  // Background might not be listening yet, which is fine
+});

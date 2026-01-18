@@ -427,7 +427,7 @@ function setupRecordingHandlers() {
         if (recover) {
           try {
             await sendMessage('STOP_RECORDING');
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // No delay needed - stopRecording is synchronous once it completes
           } catch {
             // Ignore errors when force stopping
           }

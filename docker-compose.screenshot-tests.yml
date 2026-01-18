@@ -1,0 +1,25 @@
+# Docker Compose for running screenshot tests
+# Usage: 
+#   docker-compose -f docker-compose.screenshot-tests.yml up --build
+#   docker-compose -f docker-compose.screenshot-tests.yml run --rm screenshot-tests npm run screenshots
+#   docker-compose -f docker-compose.screenshot-tests.yml run --rm screenshot-tests npm run test:recording
+
+services:
+  screenshot-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.screenshot-tests
+    # Share screenshots and snapshots with host for inspection
+    volumes:
+      - ./screenshots:/app/screenshots
+      - ./snapshots:/app/snapshots
+    # Increase shared memory for Chromium
+    shm_size: '2gb'
+    environment:
+      - DOCKER=1
+      - DISPLAY=:99
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+    # Allow running with Chromium sandbox disabled in container
+    security_opt:
+      - seccomp:unconfined
