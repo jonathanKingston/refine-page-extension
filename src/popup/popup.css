@@ -168,8 +168,21 @@ body {
   border-radius: var(--radius-lg);
   font-size: 13px;
   font-weight: 500;
+  line-height: 1;
   cursor: pointer;
   transition: all 0.15s ease;
+}
+
+.btn-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-label {
+  display: inline;
+  white-space: nowrap;
 }
 
 .btn:hover {
@@ -213,6 +226,8 @@ body {
 .icon {
   width: 16px;
   height: 16px;
+  flex-shrink: 0;
+  display: block;
 }
 
 /* Status Messages */

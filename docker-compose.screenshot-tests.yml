@@ -13,6 +13,9 @@ services:
     volumes:
       - ./screenshots:/app/screenshots
       - ./snapshots:/app/snapshots
+      # Use the locally built extension output when running tests,
+      # so UI/CSS tweaks in this repo are reflected without rebuilding the image.
+      - ./dist:/app/dist
     # Increase shared memory for Chromium
     shm_size: '2gb'
     environment:
