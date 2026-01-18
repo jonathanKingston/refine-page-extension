@@ -77,6 +77,35 @@
         </button>
       </div>
 
+      <div class="recording-section" id="recording-section">
+        <div class="recording-status" id="recording-status">
+          <span class="recording-indicator" id="recording-indicator"></span>
+          <span id="recording-text">Not Recording</span>
+        </div>
+        <div class="recording-buttons">
+          <button id="start-recording-btn" class="btn btn-primary">
+            <span class="btn-content">
+              <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="12" r="8" />
+              </svg>
+              <span class="btn-label">Start Recording</span>
+            </span>
+          </button>
+          <button id="stop-recording-btn" class="btn btn-danger" style="display: none">
+            <span class="btn-content">
+              <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="5" y="6" width="14" height="14" rx="2" />
+              </svg>
+              <span class="btn-label">Stop Recording</span>
+            </span>
+          </button>
+        </div>
+        <div id="recording-info" class="recording-info" style="display: none">
+          <div>Trace: <span id="trace-id">-</span></div>
+          <div>Interactions: <span id="interaction-count">0</span></div>
+        </div>
+      </div>
+
       <div id="status" class="status hidden">
         <span class="status-icon"></span>
         <span class="status-text"></span>

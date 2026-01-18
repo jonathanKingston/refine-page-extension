@@ -1,0 +1,99 @@
+# Dockerfile for running screenshot tests with headed Chrome/Chromium in a virtual display
+# This allows running Puppeteer with a real browser UI in CI/CD or VMs without a display
+# Supports both AMD64 and ARM64 architectures
+
+FROM node:20-bookworm
+
+# Install dependencies for Chromium and Xvfb
+RUN apt-get update && apt-get install -y \
+    # Xvfb for virtual display
+    xvfb \
+    # x11-utils for xdpyinfo (to check Xvfb readiness)
+    x11-utils \
+    # Chromium browser (works on both amd64 and arm64)
+    chromium \
+    # Chromium dependencies
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libatspi2.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxkbcommon0 \
+    libxrandr2 \
+    xdg-utils \
+    # Fonts for proper rendering
+    fonts-noto-color-emoji \
+    fonts-freefont-ttf \
+    fonts-ipafont-gothic \
+    fonts-wqy-zenhei \
+    fonts-thai-tlwg \
+    fonts-kacst \
+    fonts-symbola \
+    # Clean up
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies (skip Chromium download since we use system Chromium)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+RUN npm ci
+
+# Copy the rest of the application
+COPY . .
+
+# Clean dist folder to ensure fresh build
+RUN rm -rf dist/
+
+# Build the extension with dev permissions (host_permissions for automation)
+RUN npm run build:dev
+
+# Validate the build has correct permissions
+RUN grep -q '"host_permissions"' dist/manifest.json || (echo "ERROR: host_permissions missing from build!" && exit 1)
+RUN echo "✅ Extension built with host_permissions"
+
+# Create output directories
+RUN mkdir -p screenshots/recording-tests snapshots
+
+# Set environment variables for Puppeteer to use system Chromium
+ENV DISPLAY=:99
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+# Create entrypoint script for running with Xvfb
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+# Start Xvfb with a large virtual display (3200x2000 for high-DPI capture)\n\
+Xvfb :99 -screen 0 3200x2000x24 -ac &\n\
+XVFB_PID=$!\n\
+\n\
+# Wait for Xvfb to be ready (poll for X server)\n\
+for i in $(seq 1 50); do\n\
+  if xdpyinfo -display :99 >/dev/null 2>&1; then\n\
+    echo "✅ Xvfb ready"\n\
+    break\n\
+  fi\n\
+  if [ $i -eq 50 ]; then\n\
+    echo "❌ Xvfb failed to start"\n\
+    exit 1\n\
+  fi\n\
+done\n\
+\n\
+# Run the command\n\
+exec "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["npm", "run", "test:recording"]

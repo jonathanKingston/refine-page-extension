@@ -136,16 +136,60 @@
 
           <!-- Pages Tab Content -->
           <div class="tab-content" id="pages-tab">
-            <div class="filter-tabs">
-              <button class="filter-tab active" data-filter="all">all</button>
-              <button class="filter-tab" data-filter="pending">pending</button>
-              <button class="filter-tab" data-filter="approved">done</button>
+            <!-- Trace Timeline Panel (hidden by default) -->
+            <div class="trace-timeline-panel hidden" id="trace-timeline-panel">
+              <div class="trace-header">
+                <div class="trace-header-row">
+                  <span class="trace-title">Trace Timeline</span>
+                  <span class="trace-position" id="trace-position">0 / 0</span>
+                </div>
+                <div class="trace-controls">
+                  <button class="trace-nav-btn" id="trace-prev-btn" title="Previous interaction">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                  </button>
+                  <button class="trace-nav-btn" id="trace-next-btn" title="Next interaction">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                  </button>
+                  <div class="trace-snapshot-toggle">
+                    <button
+                      class="trace-snapshot-btn"
+                      id="trace-pre-btn"
+                      title="Show pre-action snapshot"
+                    >
+                      Pre
+                    </button>
+                    <button
+                      class="trace-snapshot-btn"
+                      id="trace-post-btn"
+                      title="Show post-action snapshot"
+                    >
+                      Post
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="trace-timeline" id="trace-timeline">
+                <!-- Populated dynamically -->
+              </div>
             </div>
-            <ul class="snapshot-nav" id="snapshot-nav">
-              <!-- Populated dynamically -->
-            </ul>
-            <div class="sidebar-footer" id="snapshot-stats-footer">
-              <span id="review-progress">0 of 0 reviewed</span>
+
+            <!-- Normal Snapshot Navigation (shown by default) -->
+            <div class="snapshot-nav-container">
+              <div class="filter-tabs">
+                <button class="filter-tab active" data-filter="all">all</button>
+                <button class="filter-tab" data-filter="pending">pending</button>
+                <button class="filter-tab" data-filter="approved">done</button>
+              </div>
+              <ul class="snapshot-nav" id="snapshot-nav">
+                <!-- Populated dynamically -->
+              </ul>
+              <div class="sidebar-footer" id="snapshot-stats-footer">
+                <span id="review-progress">0 of 0 reviewed</span>
+              </div>
             </div>
           </div>
 

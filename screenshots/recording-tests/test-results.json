@@ -1,0 +1,77 @@
+{
+  "passed": [
+    "Recording indicator shows active state",
+    "Click interaction recorded",
+    "Recording stop completed",
+    "Found 1 trace(s) in storage",
+    "Found 2 snapshot(s) in storage",
+    "Latest trace has 1 interaction(s)"
+  ],
+  "failed": [
+    "Regular capture failed: no new snapshots created",
+    "Trace missing initial snapshot",
+    "Trace missing final snapshot"
+  ],
+  "screenshots": [
+    {
+      "name": "00-after-regular-capture",
+      "description": "Popup after regular capture",
+      "filename": "00-after-regular-capture.png",
+      "timestamp": "2026-01-18T17:40:04.351Z"
+    },
+    {
+      "name": "01-popup-ready",
+      "description": "Popup loaded and ready",
+      "filename": "01-popup-ready.png",
+      "timestamp": "2026-01-18T17:40:04.447Z"
+    },
+    {
+      "name": "02-recording-started",
+      "description": "Recording has started",
+      "filename": "02-recording-started.png",
+      "timestamp": "2026-01-18T17:40:04.720Z"
+    },
+    {
+      "name": "03-test-page-before",
+      "description": "Test page before interactions",
+      "filename": "03-test-page-before.png",
+      "timestamp": "2026-01-18T17:40:10.505Z"
+    },
+    {
+      "name": "04-after-click",
+      "description": "Test page after click interaction",
+      "filename": "04-after-click.png",
+      "timestamp": "2026-01-18T17:40:13.571Z"
+    },
+    {
+      "name": "05-before-stop",
+      "description": "Popup before stopping recording",
+      "filename": "05-before-stop.png",
+      "timestamp": "2026-01-18T17:40:14.248Z"
+    },
+    {
+      "name": "06-recording-stopped",
+      "description": "Recording has stopped",
+      "filename": "06-recording-stopped.png",
+      "timestamp": "2026-01-18T17:40:14.361Z"
+    },
+    {
+      "name": "07-viewer-with-data",
+      "description": "Viewer page showing recorded data",
+      "filename": "07-viewer-with-data.png",
+      "timestamp": "2026-01-18T17:40:15.205Z"
+    }
+  ],
+  "timings": {
+    "startRecording": 170.50245800000266,
+    "stopRecording": 40.28208299999824,
+    "interactions": [
+      {
+        "type": "click",
+        "duration": 3016.110084999993
+      }
+    ],
+    "totalTestTime": 81748.843454
+  },
+  "errors": []
+}

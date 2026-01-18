@@ -16,40 +16,54 @@ function cleanCssUrls(css: string): string {
 // Clean all stylesheets and inline styles in the document
 function cleanResourceUrls(doc: Document): void {
   // Clean <style> elements
-  doc.querySelectorAll('style').forEach((style) => {
+  const styleElements = doc.querySelectorAll('style');
+  for (let i = 0; i < styleElements.length; i++) {
+    const style = styleElements[i];
     if (style.textContent) {
       style.textContent = cleanCssUrls(style.textContent);
     }
-  });
+  }
 
-  // Clean inline style attributes
-  doc.querySelectorAll('[style]').forEach((el) => {
-    const style = el.getAttribute('style');
-    if (style) {
-      el.setAttribute('style', cleanCssUrls(style));
-    }
-  });
+  // Clean inline style attributes and other elements in a single pass
+  // Use a walker to process all elements efficiently
+  const walker = doc.createTreeWalker(
+    doc.body || doc.documentElement,
+    NodeFilter.SHOW_ELEMENT,
+    null
+  );
 
-  // Clean <link> stylesheets that aren't data URLs (they won't work anyway)
-  doc.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
-    const href = link.getAttribute('href');
-    if (href && !href.startsWith('data:')) {
-      link.remove();
-    }
-  });
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const el = node as Element;
+    const tagName = el.tagName.toLowerCase();
 
-  // Clean img src that aren't data URLs
-  doc.querySelectorAll('img[src]').forEach((img) => {
-    const src = img.getAttribute('src');
-    if (src && !src.startsWith('data:') && !src.startsWith('blob:')) {
-      // Keep the element but use a transparent placeholder
-      img.setAttribute('data-original-src', src);
-      img.setAttribute(
-        'src',
-        'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
-      );
+    // Clean inline style attributes
+    const styleAttr = el.getAttribute('style');
+    if (styleAttr) {
+      el.setAttribute('style', cleanCssUrls(styleAttr));
     }
-  });
+
+    // Clean <link> stylesheets that aren't data URLs
+    if (tagName === 'link' && el.getAttribute('rel') === 'stylesheet') {
+      const href = el.getAttribute('href');
+      if (href && !href.startsWith('data:')) {
+        el.remove();
+      }
+    }
+
+    // Clean img src that aren't data URLs
+    if (tagName === 'img') {
+      const src = el.getAttribute('src');
+      if (src && !src.startsWith('data:') && !src.startsWith('blob:')) {
+        // Keep the element but use a transparent placeholder
+        el.setAttribute('data-original-src', src);
+        el.setAttribute(
+          'src',
+          'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+        );
+      }
+    }
+  }
 }
 
 // Make HTML inert - disable all interactive elements
@@ -70,30 +84,11 @@ function makeInert(html: string, baseUrl?: string): string {
   // Clean up non-inlined resource URLs first
   cleanResourceUrls(doc);
 
-  // Remove all scripts
-  doc.querySelectorAll('script').forEach((el) => el.remove());
-  doc.querySelectorAll('noscript').forEach((el) => el.remove());
+  // Remove all scripts and noscripts in one pass
+  const scriptsAndNoscripts = doc.querySelectorAll('script, noscript');
+  scriptsAndNoscripts.forEach((el) => el.remove());
 
-  // Disable all links
-  doc.querySelectorAll('a[href]').forEach((link) => {
-    const href = link.getAttribute('href');
-    if (href) {
-      link.setAttribute('data-original-href', href);
-      link.removeAttribute('href');
-    }
-  });
-
-  // Disable forms
-  doc.querySelectorAll('form').forEach((form) => {
-    form.removeAttribute('action');
-  });
-
-  // Disable interactive elements
-  doc.querySelectorAll('button, input, select, textarea').forEach((el) => {
-    el.setAttribute('disabled', 'disabled');
-  });
-
-  // Remove event handler attributes
+  // Process all interactive elements in a single traversal
   const eventAttrs = [
     'onclick',
     'onmouseover',
@@ -105,9 +100,42 @@ function makeInert(html: string, baseUrl?: string): string {
     'onfocus',
     'onblur',
   ];
-  doc.querySelectorAll('*').forEach((el) => {
-    eventAttrs.forEach((attr) => el.removeAttribute(attr));
-  });
+
+  // Use a single walker to process all elements efficiently
+  const walker = doc.createTreeWalker(
+    doc.body || doc.documentElement,
+    NodeFilter.SHOW_ELEMENT,
+    null
+  );
+
+  const elementsToProcess: Element[] = [];
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    elementsToProcess.push(node as Element);
+  }
+
+  // Process all elements in batch
+  for (const el of elementsToProcess) {
+    const tagName = el.tagName.toLowerCase();
+
+    // Remove event handler attributes
+    for (const attr of eventAttrs) {
+      el.removeAttribute(attr);
+    }
+
+    // Handle specific element types
+    if (tagName === 'a') {
+      const href = el.getAttribute('href');
+      if (href) {
+        el.setAttribute('data-original-href', href);
+        el.removeAttribute('href');
+      }
+    } else if (tagName === 'form') {
+      el.removeAttribute('action');
+    } else if (['button', 'input', 'select', 'textarea'].includes(tagName)) {
+      el.setAttribute('disabled', 'disabled');
+    }
+  }
 
   // Add meta tag to identify as refine.page snapshot
   const meta = doc.createElement('meta');
@@ -191,3 +219,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 console.log('refine.page: Offscreen document loaded');
+
+// Signal to background script that we're ready
+chrome.runtime.sendMessage({ type: 'OFFSCREEN_READY' }).catch(() => {
+  // Background might not be listening yet, which is fine
+});
