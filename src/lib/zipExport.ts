@@ -1,6 +1,12 @@
 import JSZip from 'jszip';
 
-import type { ExportData, ExportedSnapshot, Snapshot, ZipExportData, ZipIndexSnapshot } from '@/types';
+import type {
+  ExportData,
+  ExportedSnapshot,
+  Snapshot,
+  ZipExportData,
+  ZipIndexSnapshot,
+} from '@/types';
 
 export type ZipExportOutputType = 'blob' | 'uint8array';
 
@@ -25,10 +31,7 @@ export interface CreateZipExportOptions {
   outputType?: ZipExportOutputType;
 }
 
-export function toZipIndexSnapshot(
-  snapshot: Snapshot,
-  viewerUrlBase?: string
-): ZipIndexSnapshot {
+export function toZipIndexSnapshot(snapshot: Snapshot, viewerUrlBase?: string): ZipIndexSnapshot {
   const { html: _html, ...metadata } = snapshot;
   return {
     ...metadata,

@@ -23,7 +23,9 @@ import '@annotorious/annotorious/annotorious.css';
 
 function hasChromeStorage(): boolean {
   // Note: `window.chrome` exists on many pages; we require the extension storage API.
-  return typeof chrome !== 'undefined' && !!chrome?.storage?.local && !!chrome?.runtime?.sendMessage;
+  return (
+    typeof chrome !== 'undefined' && !!chrome?.storage?.local && !!chrome?.runtime?.sendMessage
+  );
 }
 
 // In standalone (non-extension) mode, snapshots are kept in memory after loading a ZIP.
