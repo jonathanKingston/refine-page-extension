@@ -273,7 +273,11 @@ function sendToIframe(iframe: HTMLIFrameElement, type: string, payload?: unknown
 }
 
 // Set up message handler for iframe communication
-function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: string, expectedOrigin: string) {
+function setupIframeMessageHandler(
+  iframe: HTMLIFrameElement,
+  htmlContent: string,
+  expectedOrigin: string
+) {
   console.log('Setting up iframe message handler');
 
   // Reset state

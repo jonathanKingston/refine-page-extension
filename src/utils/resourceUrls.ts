@@ -56,7 +56,10 @@ export function getConfiguredResourceBaseUrl(): string | null {
     // ignore
   }
 
-  if (typeof globalThis !== 'undefined' && typeof globalThis.__REFINE_RESOURCE_BASE_URL__ === 'string') {
+  if (
+    typeof globalThis !== 'undefined' &&
+    typeof globalThis.__REFINE_RESOURCE_BASE_URL__ === 'string'
+  ) {
     return normalizeBaseUrl(globalThis.__REFINE_RESOURCE_BASE_URL__);
   }
 
@@ -78,7 +81,10 @@ export function getOriginFromUrl(url: string): string {
  * - extension runtime URL if available
  * - relative URL from current location
  */
-export function resolveResourceUrl(resourcePath: string, opts?: { baseUrl?: string | null }): string {
+export function resolveResourceUrl(
+  resourcePath: string,
+  opts?: { baseUrl?: string | null }
+): string {
   const providedBase = opts?.baseUrl ? normalizeBaseUrl(opts.baseUrl) : null;
   const configuredBase = getConfiguredResourceBaseUrl();
   const base = providedBase ?? configuredBase;
