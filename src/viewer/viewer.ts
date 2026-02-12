@@ -19,6 +19,8 @@ import type {
 import '@recogito/text-annotator/text-annotator.css';
 import '@annotorious/annotorious/annotorious.css';
 
+import { getOriginFromUrl, resolveAnnotatorIframeUrl } from '@/utils/resourceUrls';
+
 // Strip CSP meta tags from HTML to allow our annotation scripts to run
 function stripCspFromHtml(html: string): string {
   // Remove Content-Security-Policy meta tags
@@ -208,10 +210,11 @@ function updateUI() {
     const htmlWithoutCsp = stripCspFromHtml(currentSnapshot.html);
 
     // Use our iframe.html page which has the annotator script
-    const iframeUrl = chrome.runtime.getURL('iframe.html');
+    const iframeUrl = resolveAnnotatorIframeUrl();
+    const iframeOrigin = getOriginFromUrl(iframeUrl);
 
     // Set up message handling before loading iframe
-    setupIframeMessageHandler(iframe, htmlWithoutCsp);
+    setupIframeMessageHandler(iframe, htmlWithoutCsp, iframeOrigin);
 
     // Load the iframe page
     iframe.src = iframeUrl;
@@ -255,6 +258,7 @@ function updateUI() {
 let iframeAnnotatorReady = false;
 let pendingIframeMessages: Array<{ type: string; payload?: unknown }> = [];
 let currentMessageHandler: ((event: MessageEvent) => void) | null = null;
+let currentIframeTargetOrigin: string = '*';
 
 // Send message to iframe annotator
 function sendToIframe(iframe: HTMLIFrameElement, type: string, payload?: unknown) {
@@ -262,19 +266,20 @@ function sendToIframe(iframe: HTMLIFrameElement, type: string, payload?: unknown
 
   const message = { type, payload };
   if (iframeAnnotatorReady) {
-    iframe.contentWindow.postMessage(message, '*');
+    iframe.contentWindow.postMessage(message, currentIframeTargetOrigin);
   } else {
     pendingIframeMessages.push(message);
   }
 }
 
 // Set up message handler for iframe communication
-function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: string) {
+function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: string, expectedOrigin: string) {
   console.log('Setting up iframe message handler');
 
   // Reset state
   iframeAnnotatorReady = false;
   pendingIframeMessages = [];
+  currentIframeTargetOrigin = expectedOrigin;
 
   // Remove previous handler if exists
   if (currentMessageHandler) {
@@ -285,6 +290,8 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
   const messageHandler = (event: MessageEvent) => {
     // Only accept messages from our iframe
     if (event.source !== iframe.contentWindow) return;
+    // And only from the expected origin (supports loading annotator from 3p)
+    if (expectedOrigin !== '*' && event.origin !== expectedOrigin) return;
 
     const message = event.data;
     if (!message?.type) return;
@@ -300,7 +307,7 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
             type: 'LOAD_HTML',
             payload: { html: htmlContent },
           },
-          '*'
+          expectedOrigin
         );
         break;
 
@@ -309,7 +316,7 @@ function setupIframeMessageHandler(iframe: HTMLIFrameElement, htmlContent: strin
         console.log('Annotator ready');
         // Send any pending messages
         pendingIframeMessages.forEach((msg) => {
-          iframe.contentWindow?.postMessage(msg, '*');
+          iframe.contentWindow?.postMessage(msg, expectedOrigin);
         });
         pendingIframeMessages = [];
         // Send current tool state
