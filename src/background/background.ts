@@ -21,6 +21,24 @@ function generateTraceId(): string {
   return `trace_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 }
 
+// Serialize trace modifications to prevent concurrent read-modify-write races.
+// Without this, fire-and-forget calls to recordInteraction / captureInitialSnapshot /
+// captureFinalSnapshot can read stale trace data and silently overwrite each other's changes.
+const traceWriteLocks = new Map<string, Promise<void>>();
+
+function withTraceLock<T>(traceId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = traceWriteLocks.get(traceId) ?? Promise.resolve();
+  const next = prev.then(fn, fn);
+  traceWriteLocks.set(
+    traceId,
+    next.then(
+      () => {},
+      () => {}
+    )
+  );
+  return next;
+}
+
 /**
  * Inject a content script and send a message, with automatic retry.
  * This replaces arbitrary delays with actual response checking.
@@ -668,14 +686,16 @@ async function captureInitialSnapshot(tabId: number, traceId: string): Promise<v
     };
     await saveSnapshot(snapshot);
 
-    // Update trace with initial snapshot ID
-    const trace = await getTrace(traceId);
-    if (trace) {
-      trace.initialSnapshotId = snapshot.id;
-      trace.updatedAt = new Date().toISOString();
-      await saveTrace(trace);
-      console.log('[Recording] Captured initial snapshot:', snapshot.id);
-    }
+    // Update trace with initial snapshot ID (serialized to prevent race conditions)
+    await withTraceLock(traceId, async () => {
+      const trace = await getTrace(traceId);
+      if (trace) {
+        trace.initialSnapshotId = snapshot.id;
+        trace.updatedAt = new Date().toISOString();
+        await saveTrace(trace);
+        console.log('[Recording] Captured initial snapshot:', snapshot.id);
+      }
+    });
   } catch (error) {
     console.error('[Recording] Failed to capture initial snapshot:', error);
   }
@@ -789,14 +809,16 @@ async function captureFinalSnapshot(tabId: number, traceId: string): Promise<voi
     };
     await saveSnapshot(snapshot);
 
-    // Update trace with final snapshot ID
-    const trace = await getTrace(traceId);
-    if (trace) {
-      trace.finalSnapshotId = snapshot.id;
-      trace.updatedAt = new Date().toISOString();
-      await saveTrace(trace);
-      console.log('[Recording] Captured final snapshot:', snapshot.id);
-    }
+    // Update trace with final snapshot ID (serialized to prevent race conditions)
+    await withTraceLock(traceId, async () => {
+      const trace = await getTrace(traceId);
+      if (trace) {
+        trace.finalSnapshotId = snapshot.id;
+        trace.updatedAt = new Date().toISOString();
+        await saveTrace(trace);
+        console.log('[Recording] Captured final snapshot:', snapshot.id);
+      }
+    });
   } catch (error) {
     console.error('[Recording] Failed to capture final snapshot:', error);
   }
@@ -813,9 +835,12 @@ async function recordInteraction(
     return;
   }
 
-  const trace = await getTrace(state.currentTraceId);
-  if (!trace) {
-    console.error('[Recording] Trace not found:', state.currentTraceId);
+  const traceId = state.currentTraceId;
+
+  // Quick validation (no lock needed — just a read)
+  const traceCheck = await getTrace(traceId);
+  if (!traceCheck) {
+    console.error('[Recording] Trace not found:', traceId);
     return;
   }
 
@@ -892,11 +917,6 @@ async function recordInteraction(
       return;
     }
 
-    // Note: We previously waited 500ms here "for DOM to settle" but this is unnecessary
-    // since the MHTML capture happens atomically. The pre-snapshot is taken BEFORE the
-    // interaction, and post-snapshot is requested AFTER (the content script already waited
-    // for the interaction to complete before sending RECORD_INTERACTION).
-
     // Capture post-action snapshot
     let postSnapshot: Snapshot;
     try {
@@ -929,10 +949,17 @@ async function recordInteraction(
       postSnapshotId: postSnapshot.id,
     };
 
-    // Add to trace
-    trace.interactions.push(completeInteraction);
-    trace.updatedAt = new Date().toISOString();
-    await saveTrace(trace);
+    // Add to trace (serialized to prevent concurrent read-modify-write races)
+    await withTraceLock(traceId, async () => {
+      const trace = await getTrace(traceId);
+      if (!trace) {
+        console.error('[Recording] Trace disappeared:', traceId);
+        return;
+      }
+      trace.interactions.push(completeInteraction);
+      trace.updatedAt = new Date().toISOString();
+      await saveTrace(trace);
+    });
 
     console.log(
       `[Recording] Successfully recorded interaction ${completeInteraction.id} (${completeInteraction.action.type}), ` +
