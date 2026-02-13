@@ -147,10 +147,10 @@ describe('iframe annotator', () => {
     expect(true).toBe(true);
   });
 
-  it('should forward keyboard events to parent as KEY_PRESSED', async () => {
+  it('should forward keyboard events to parent as IFRAME_KEYDOWN', async () => {
     await import('./annotator');
 
-    // Simulate keydown on the document (not on an input)
+    // Simulate keydown on the window (capture-phase listener)
     const keyEvent = new KeyboardEvent('keydown', {
       key: 'r',
       code: 'KeyR',
@@ -160,12 +160,12 @@ describe('iframe annotator', () => {
       shiftKey: false,
       bubbles: true,
     });
-    document.dispatchEvent(keyEvent);
+    window.dispatchEvent(keyEvent);
 
     expect(parentPostMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'KEY_PRESSED',
-        payload: { key: 'r' },
+        type: 'IFRAME_KEYDOWN',
+        payload: expect.objectContaining({ key: 'r', code: 'KeyR' }),
       }),
       '*'
     );
@@ -188,26 +188,29 @@ describe('iframe annotator', () => {
     // Should NOT have forwarded the key (only IFRAME_LOADED should be posted)
     const keyPresses = parentPostMessage.mock.calls.filter(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (call: any[]) => call[0]?.type === 'KEY_PRESSED'
+      (call: any[]) => call[0]?.type === 'IFRAME_KEYDOWN'
     );
     expect(keyPresses.length).toBe(0);
   });
 
-  it('should not forward modifier key combinations', async () => {
+  it('should forward modifier key combinations (parent handles them)', async () => {
     await import('./annotator');
 
     const keyEvent = new KeyboardEvent('keydown', {
-      key: 'r',
+      key: 's',
       ctrlKey: true,
       bubbles: true,
     });
     window.dispatchEvent(keyEvent);
 
-    const keyPresses = parentPostMessage.mock.calls.filter(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (call: any[]) => call[0]?.type === 'KEY_PRESSED'
+    // PR #3 forwards ALL keydowns including modifiers (parent decides what to do)
+    expect(parentPostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'IFRAME_KEYDOWN',
+        payload: expect.objectContaining({ key: 's', ctrlKey: true }),
+      }),
+      '*'
     );
-    expect(keyPresses.length).toBe(0);
   });
 
   it('should handle TOGGLE_MARKS message', async () => {
