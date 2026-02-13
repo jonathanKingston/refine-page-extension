@@ -354,8 +354,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       }
 
+      /* v8 ignore next 3 -- unreachable: knownTypes check above prevents reaching default */
       default:
-        // Unknown message type - don't handle it
         return undefined;
     }
   };
