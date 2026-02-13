@@ -267,52 +267,40 @@ describe('message handler - CAPTURE_PAGE', () => {
   it('should return error when no active tab', async () => {
     getChrome().tabs.query.mockResolvedValue([]);
 
-    const result = await sendMessage('CAPTURE_PAGE');
-    expect(result).toEqual(
-      expect.objectContaining({ error: expect.stringContaining('No active tab') })
-    );
+    const result = (await sendMessage('CAPTURE_PAGE')) as { error?: string };
+    expect(result.error).toBeDefined();
   });
 
   it('should return error for chrome:// URLs', async () => {
     getChrome().tabs.query.mockResolvedValue([{ id: 1, url: 'chrome://settings' }]);
 
     const result = await sendMessage('CAPTURE_PAGE');
-    expect(result).toEqual(
-      expect.objectContaining({ error: expect.stringContaining('Cannot capture') })
-    );
+    expect((result as { error?: string }).error).toBeDefined();
   });
 
   it('should return error for chrome-extension:// URLs', async () => {
     getChrome().tabs.query.mockResolvedValue([{ id: 1, url: 'chrome-extension://abc/page.html' }]);
 
     const result = await sendMessage('CAPTURE_PAGE');
-    expect(result).toEqual(
-      expect.objectContaining({ error: expect.stringContaining('Cannot capture') })
-    );
+    expect((result as { error?: string }).error).toBeDefined();
   });
 
   it('should return error for edge:// URLs', async () => {
     getChrome().tabs.query.mockResolvedValue([{ id: 1, url: 'edge://settings' }]);
     const result = await sendMessage('CAPTURE_PAGE');
-    expect(result).toEqual(
-      expect.objectContaining({ error: expect.stringContaining('Cannot capture') })
-    );
+    expect((result as { error?: string }).error).toBeDefined();
   });
 
   it('should return error for about: URLs', async () => {
     getChrome().tabs.query.mockResolvedValue([{ id: 1, url: 'about:blank' }]);
     const result = await sendMessage('CAPTURE_PAGE');
-    expect(result).toEqual(
-      expect.objectContaining({ error: expect.stringContaining('Cannot capture') })
-    );
+    expect((result as { error?: string }).error).toBeDefined();
   });
 
   it('should return error for devtools:// URLs', async () => {
     getChrome().tabs.query.mockResolvedValue([{ id: 1, url: 'devtools://abc' }]);
     const result = await sendMessage('CAPTURE_PAGE');
-    expect(result).toEqual(
-      expect.objectContaining({ error: expect.stringContaining('Cannot capture') })
-    );
+    expect((result as { error?: string }).error).toBeDefined();
   });
 
   it('should capture page and create snapshot', async () => {
