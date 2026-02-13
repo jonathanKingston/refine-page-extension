@@ -35,21 +35,24 @@ export function createMockChrome(): any {
     }),
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const messageListeners: Array<(...args: any[]) => any> = [];
+
+  const onMessage = {
+    addListener: vi.fn((...args: any[]) => {
+      onMessage._listeners.push(args[0]);
+    }),
+    removeListener: vi.fn((...args: any[]) => {
+      const idx = onMessage._listeners.indexOf(args[0]);
+      if (idx >= 0) onMessage._listeners.splice(idx, 1);
+    }),
+    _listeners: messageListeners,
+  };
 
   return {
     runtime: {
       sendMessage: vi.fn(),
-      onMessage: {
-        addListener: vi.fn((listener: (...args: any[]) => any) => {
-          messageListeners.push(listener);
-        }),
-        removeListener: vi.fn((listener: (...args: any[]) => any) => {
-          const idx = messageListeners.indexOf(listener);
-          if (idx >= 0) messageListeners.splice(idx, 1);
-        }),
-        _listeners: messageListeners,
-      },
+      onMessage,
       getURL: vi.fn((path: string) => `chrome-extension://test-id/${path}`),
       getContexts: vi.fn(async () => []),
       id: 'test-extension-id',
