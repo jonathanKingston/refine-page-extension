@@ -69,7 +69,10 @@ describe('offscreen module', () => {
     const sendResponse = vi.fn();
     const listener = getLastListener();
     const result = listener(
-      { type: 'CONVERT_MHTML', payload: { mhtmlText: 'test-mhtml', baseUrl: 'https://example.com' } },
+      {
+        type: 'CONVERT_MHTML',
+        payload: { mhtmlText: 'test-mhtml', baseUrl: 'https://example.com' },
+      },
       {},
       sendResponse
     );
@@ -92,11 +95,7 @@ describe('offscreen module', () => {
 
     const sendResponse = vi.fn();
     const listener = getLastListener();
-    listener(
-      { type: 'CONVERT_MHTML', payload: { mhtmlText: 'bad-mhtml' } },
-      {},
-      sendResponse
-    );
+    listener({ type: 'CONVERT_MHTML', payload: { mhtmlText: 'bad-mhtml' } }, {}, sendResponse);
 
     expect(sendResponse).toHaveBeenCalledWith({
       type: 'CONVERT_MHTML_ERROR',
@@ -113,11 +112,7 @@ describe('offscreen module', () => {
 
     const sendResponse = vi.fn();
     const listener = getLastListener();
-    listener(
-      { type: 'CONVERT_MHTML', payload: { mhtmlText: 'empty' } },
-      {},
-      sendResponse
-    );
+    listener({ type: 'CONVERT_MHTML', payload: { mhtmlText: 'empty' } }, {}, sendResponse);
 
     expect(sendResponse).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -146,11 +141,7 @@ describe('offscreen module', () => {
     const listener = getLastListener();
     const sendResponse = vi.fn();
 
-    listener(
-      { type: 'CONVERT_MHTML', payload: { mhtmlText: 'test' } },
-      {},
-      sendResponse
-    );
+    listener({ type: 'CONVERT_MHTML', payload: { mhtmlText: 'test' } }, {}, sendResponse);
 
     expect(sendResponse).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -181,11 +172,7 @@ describe('offscreen module', () => {
 
     const sendResponse = vi.fn();
     const listener = getLastListener();
-    listener(
-      { type: 'CONVERT_MHTML', payload: { mhtmlText: 'test' } },
-      {},
-      sendResponse
-    );
+    listener({ type: 'CONVERT_MHTML', payload: { mhtmlText: 'test' } }, {}, sendResponse);
 
     const response = sendResponse.mock.calls[0][0];
     expect(response.payload.title).toBe('Untitled');
@@ -199,7 +186,9 @@ describe('offscreen module', () => {
     const defaultConvert = vi.fn();
     vi.doMock('mhtml2html', () => ({
       default: { convert: defaultConvert },
-      convert: vi.fn(() => { throw new Error('should not use named'); }),
+      convert: vi.fn(() => {
+        throw new Error('should not use named');
+      }),
     }));
 
     const { installMockChrome } = await import('../test/chrome-mock');
@@ -216,11 +205,7 @@ describe('offscreen module', () => {
     const listener = getLastListener();
     const sendResponse = vi.fn();
 
-    listener(
-      { type: 'CONVERT_MHTML', payload: { mhtmlText: 'test' } },
-      {},
-      sendResponse
-    );
+    listener({ type: 'CONVERT_MHTML', payload: { mhtmlText: 'test' } }, {}, sendResponse);
 
     expect(defaultConvert).toHaveBeenCalled();
     expect(sendResponse).toHaveBeenCalledWith(
