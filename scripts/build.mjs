@@ -23,6 +23,7 @@ mkdirSync(distDir, { recursive: true });
 const entryPoints = {
   'background': join(srcDir, 'background/background.ts'),
   'content': join(srcDir, 'content/capture.ts'),
+  'recording': join(srcDir, 'content/recording.ts'),
   'popup': join(srcDir, 'popup/popup.ts'),
   'viewer': join(srcDir, 'viewer/viewer.ts'),
   'snapshot': join(srcDir, 'snapshot/snapshot.ts'),
@@ -159,6 +160,14 @@ async function buildScripts() {
     ...commonOptions,
     entryPoints: [entryPoints.content],
     outfile: join(distDir, 'content.js'),
+    format: 'iife',
+  });
+
+  // Recording content script
+  await esbuild.build({
+    ...commonOptions,
+    entryPoints: [entryPoints.recording],
+    outfile: join(distDir, 'recording.js'),
     format: 'iife',
   });
 
@@ -315,6 +324,12 @@ async function watch() {
       ...commonOptions,
       entryPoints: [entryPoints.content],
       outfile: join(distDir, 'content.js'),
+      format: 'iife',
+    }),
+    esbuild.context({
+      ...commonOptions,
+      entryPoints: [entryPoints.recording],
+      outfile: join(distDir, 'recording.js'),
       format: 'iife',
     }),
     esbuild.context({

@@ -23,6 +23,15 @@ import sharp from 'sharp';
 const execAsync = promisify(exec);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Docker environment detection
+const isDocker = process.env.DOCKER === '1' || existsSync('/.dockerenv');
+const PUPPETEER_EXECUTABLE_PATH = isDocker ? '/usr/bin/chromium' : undefined;
+
+if (isDocker) {
+  console.log('🐳 Running in Docker environment - configuring for Xvfb');
+  console.log(`🔧 Using Chrome at: ${PUPPETEER_EXECUTABLE_PATH}`);
+}
 // Output to screenshots directory at project root
 const OUTPUT_DIR = path.join(__dirname, '../../screenshots');
 const SNAPSHOTS_DIR = path.join(__dirname, '../../snapshots');
@@ -1441,6 +1450,7 @@ async function main() {
   // Launch browser with extension
   const browser = await puppeteer.launch({
     headless: false, // Extensions require headed mode
+    executablePath: PUPPETEER_EXECUTABLE_PATH,
     args: [
       `--disable-extensions-except=${absoluteExtPath}`,
       `--load-extension=${absoluteExtPath}`,
@@ -1453,36 +1463,63 @@ async function main() {
       '--disable-font-subpixel-positioning', // Better text rendering
       '--disable-lcd-text', // Disable LCD text rendering for consistency
       '--enable-font-antialiasing', // Enable font antialiasing
+      // Docker/Chromium specific args
+      ...(isDocker ? [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+      ] : []),
     ],
     defaultViewport: null, // Use full browser window size
     ignoreDefaultArgs: ['--enable-automation'], // Remove automation flags
   });
   
-  // Wait longer for browser and extension to fully initialize
-  await delay(3000);
-  
-  // Get the default page and close it - we'll create new pages for each scenario
-  const pages = await browser.pages();
-  if (pages.length > 0) {
-    const defaultPage = pages[0];
-    await defaultPage.close();
+  // Wait for browser and extension to fully initialize
+  // In Docker, poll for service worker instead of arbitrary delay
+  let extensionId;
+  for (let i = 0; i < 30; i++) {
+    const targets = await browser.targets();
+    const extensionTarget = targets.find(
+      target => target.type() === 'service_worker' && target.url().startsWith('chrome-extension://')
+    );
+    if (extensionTarget) {
+      extensionId = new URL(extensionTarget.url()).hostname;
+      console.log(`  ✓ Found extension ID: ${extensionId}`);
+      break;
+    }
+    await new Promise(r => setTimeout(r, 200));
   }
   
+  if (!extensionId) {
+    throw new Error('Failed to find extension service worker after 6 seconds');
+  }
+  
+  console.log(`   Extension ID: ${extensionId}`);
+  console.log('');
+  
   let importPage = null;
+  let defaultPage = null;
+  
+  // Get the default page - don't close it yet (keeps browser alive in Docker)
+  const pages = await browser.pages();
+  if (pages.length > 0) {
+    defaultPage = pages[0];
+  }
+  
   try {
-    // Give extension more time to initialize service worker
-    await delay(2000);
-    
-    const extensionId = await getExtensionId(browser, absoluteExtPath);
-    console.log(`   Extension ID: ${extensionId}`);
-    console.log('');
-    
     // Import snapshots once before all scenarios (ephemeral profile needs this)
     console.log('📥 Importing snapshots into extension storage...');
     importPage = await browser.newPage();
+    
+    // Now we can safely close the default page
+    if (defaultPage) {
+      await defaultPage.close();
+      defaultPage = null;
+    }
+    
     const viewerUrl = `chrome-extension://${extensionId}/viewer.html`;
     await importPage.goto(viewerUrl, { waitUntil: 'networkidle0', timeout: 30000 });
-    await delay(1000); // Wait for extension context to be ready
     
     const importResult = await importSnapshotsIntoStorage(importPage, extensionId);
     

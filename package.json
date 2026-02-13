@@ -20,7 +20,15 @@
     "screenshots:all": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=all",
     "screenshots:store": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=chrome-store-screenshot-1-list,chrome-store-screenshot-2-annotations,chrome-store-marquee-tile,chrome-store-small-tile",
     "screenshots:homepage": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=homepage-hero-light,homepage-hero-dark",
-    "screenshots:features": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=feature-text-highlighting,feature-evaluation-panel,feature-auto-detect"
+    "screenshots:features": "node scripts/screenshots/capture.mjs --extension-path=./dist --scenario=feature-text-highlighting,feature-evaluation-panel,feature-auto-detect",
+    "test:recording": "node scripts/screenshots/recording-test.mjs --extension-path=./dist",
+    "test:recording:verbose": "node scripts/screenshots/recording-test.mjs --extension-path=./dist --verbose",
+    "docker:build": "docker compose -f docker-compose.screenshot-tests.yml build",
+    "docker:test:recording": "docker compose -f docker-compose.screenshot-tests.yml run --rm screenshot-tests npm run test:recording",
+    "docker:screenshots": "docker compose -f docker-compose.screenshot-tests.yml run --rm screenshot-tests npm run screenshots",
+    "docker:screenshots:all": "docker compose -f docker-compose.screenshot-tests.yml run --rm screenshot-tests npm run screenshots:all",
+    "docker:screenshots:store": "docker compose -f docker-compose.screenshot-tests.yml run --rm screenshot-tests npm run screenshots:store",
+    "docker:capture:pages": "docker compose -f docker-compose.screenshot-tests.yml run --rm screenshot-tests npm run capture:pages"
   },
   "dependencies": {
     "@annotorious/annotorious": "^3.0.17",

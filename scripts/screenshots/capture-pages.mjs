@@ -23,6 +23,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '../..');
 const SNAPSHOTS_DIR = join(PROJECT_ROOT, 'snapshots');
 
+// Docker environment detection
+const isDocker = process.env.DOCKER === '1' || existsSync('/.dockerenv');
+const PUPPETEER_EXECUTABLE_PATH = isDocker ? '/usr/bin/chromium' : undefined;
+
+if (isDocker) {
+  console.log('🐳 Running in Docker environment - configuring for Xvfb');
+  console.log(`🔧 Using Chrome at: ${PUPPETEER_EXECUTABLE_PATH}`);
+}
+
 // Parse CLI arguments
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -300,6 +309,7 @@ async function main() {
   
   const browser = await puppeteer.launch({
     headless: headless ? 'new' : false,
+    executablePath: PUPPETEER_EXECUTABLE_PATH,
     defaultViewport: null, // Use window size instead of fixed viewport
     args: [
       `--disable-extensions-except=${extensionPath}`,
@@ -309,6 +319,13 @@ async function main() {
       '--start-maximized',
       '--window-size=1920,1080',
       '--force-device-scale-factor=2',
+      // Docker/Chromium specific args
+      ...(isDocker ? [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+      ] : []),
     ]
   });
   

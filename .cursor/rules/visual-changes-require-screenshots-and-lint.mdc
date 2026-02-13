@@ -1,0 +1,21 @@
+---
+description: "Visual changes require screenshots + format + lint + type check"
+globs:
+  - "src/**/*"
+  - "scripts/**/*"
+  - "screenshots/**/*"
+---
+
+## Rule: Visual changes must run screenshots + format + lint + type check
+
+If you make **any visual/UI change** (CSS, layout, colors, spacing, typography, HTML structure, or any behavior that changes what the extension renders), you MUST do all of the following before you finish:
+
+- **Run the screenshot tool**: `npm run screenshots` (or a more specific scenario script like `npm run screenshots:homepage`, but default to `npm run screenshots` when unsure).
+- **Run format**: `npm run format` to ensure code style consistency.
+- **Run lint and fix issues**: `npm run lint` and fix all reported problems (do not leave new lint violations behind).
+- **Run TypeScript type check**: `npx tsc --noEmit` to ensure there are no type errors.
+
+Fail fast:
+
+- If screenshots fail, format fails, lint fails, or type check fails, **stop** and fix them. Do not claim completion until all pass.
+
