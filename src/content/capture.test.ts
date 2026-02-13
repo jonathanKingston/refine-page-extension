@@ -47,11 +47,7 @@ describe('content/capture', () => {
     const sendResponse = vi.fn();
 
     // The listener returns true for async response
-    const result = listener(
-      { type: 'GET_PAGE_METADATA' },
-      {},
-      sendResponse
-    );
+    const result = listener({ type: 'GET_PAGE_METADATA' }, {}, sendResponse);
 
     expect(result).toBe(true);
     expect(sendResponse).toHaveBeenCalledWith({
@@ -73,11 +69,7 @@ describe('content/capture', () => {
     const listener = getListeners()[getListeners().length - 1];
     const sendResponse = vi.fn();
 
-    const result = listener(
-      { type: 'OTHER_MESSAGE' },
-      {},
-      sendResponse
-    );
+    const result = listener({ type: 'OTHER_MESSAGE' }, {}, sendResponse);
 
     expect(result).toBeUndefined();
     expect(sendResponse).not.toHaveBeenCalled();

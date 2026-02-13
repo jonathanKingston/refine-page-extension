@@ -28,11 +28,7 @@ function getInstallListeners() {
 }
 
 /** Helper: send a message to the background listener and wait for async response */
-async function sendMessage(
-  type: string,
-  payload?: unknown,
-  sender?: unknown
-): Promise<unknown> {
+async function sendMessage(type: string, payload?: unknown, sender?: unknown): Promise<unknown> {
   const listener = getLastMessageListener();
   return new Promise((resolve) => {
     listener({ type, payload }, sender || {}, resolve);
@@ -114,7 +110,7 @@ describe('message handler - CRUD operations', () => {
     await sendMessage('SAVE_SNAPSHOT', { snapshot: snap1 });
     await sendMessage('SAVE_SNAPSHOT', { snapshot: snap2 });
 
-    const summaries = await sendMessage('GET_ALL_SNAPSHOTS') as Array<{
+    const summaries = (await sendMessage('GET_ALL_SNAPSHOTS')) as Array<{
       id: string;
       title: string;
       annotationCount: { text: number; region: number };
@@ -129,10 +125,10 @@ describe('message handler - CRUD operations', () => {
     const snapshot = makeTestSnapshot();
     await sendMessage('SAVE_SNAPSHOT', { snapshot });
 
-    const updated = await sendMessage('UPDATE_SNAPSHOT', {
+    const updated = (await sendMessage('UPDATE_SNAPSHOT', {
       id: 'snap_1',
       updates: { title: 'Updated Title', status: 'approved' },
-    }) as Snapshot;
+    })) as Snapshot;
 
     expect(updated.title).toBe('Updated Title');
     expect(updated.status).toBe('approved');
@@ -181,7 +177,7 @@ describe('message handler - export/import', () => {
     await sendMessage('SAVE_SNAPSHOT', { snapshot: snap });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const exported = await sendMessage('EXPORT_DATA') as any;
+    const exported = (await sendMessage('EXPORT_DATA')) as any;
     expect(exported.version).toBe('1.0.0');
     expect(exported.snapshots).toHaveLength(1);
     expect(exported.snapshots[0].viewerUrl).toContain('snap_1');
@@ -195,7 +191,7 @@ describe('message handler - export/import', () => {
       snapshots: [makeTestSnapshot({ id: 'import_1' }), makeTestSnapshot({ id: 'import_2' })],
     };
 
-    const result = await sendMessage('IMPORT_DATA', { data }) as {
+    const result = (await sendMessage('IMPORT_DATA', { data })) as {
       imported: number;
       skipped: number;
     };
@@ -212,7 +208,7 @@ describe('message handler - export/import', () => {
       snapshots: [makeTestSnapshot({ id: 'existing' }), makeTestSnapshot({ id: 'new_one' })],
     };
 
-    const result = await sendMessage('IMPORT_DATA', { data }) as {
+    const result = (await sendMessage('IMPORT_DATA', { data })) as {
       imported: number;
       skipped: number;
     };
@@ -342,7 +338,7 @@ describe('message handler - CAPTURE_PAGE', () => {
     // Mock hasOffscreenDocument
     getChrome().runtime.getContexts.mockResolvedValue([{ contextType: 'OFFSCREEN_DOCUMENT' }]);
 
-    const result = await sendMessage('CAPTURE_PAGE') as {
+    const result = (await sendMessage('CAPTURE_PAGE')) as {
       type: string;
       payload: { snapshotId: string };
     };
@@ -380,7 +376,7 @@ describe('message handler - CAPTURE_PAGE', () => {
     });
     getChrome().runtime.getContexts.mockResolvedValue([{ contextType: 'OFFSCREEN_DOCUMENT' }]);
 
-    const result = await sendMessage('CAPTURE_PAGE') as { type: string };
+    const result = (await sendMessage('CAPTURE_PAGE')) as { type: string };
     expect(result.type).toBe('CAPTURE_COMPLETE');
     expect(getChrome().scripting.executeScript).toHaveBeenCalled();
   });
@@ -398,7 +394,7 @@ describe('message handler - CAPTURE_PAGE', () => {
     // pageCapture fails
     getChrome().pageCapture.saveAsMHTML.mockResolvedValue(null);
 
-    const result = await sendMessage('CAPTURE_PAGE') as {
+    const result = (await sendMessage('CAPTURE_PAGE')) as {
       type: string;
       payload: { error: string };
     };
@@ -436,7 +432,9 @@ describe('offscreen document management', () => {
     // Make createDocument take time to simulate race condition
     let resolveCreate: () => void;
     getChrome().offscreen.createDocument.mockReturnValue(
-      new Promise<void>((resolve) => { resolveCreate = resolve; })
+      new Promise<void>((resolve) => {
+        resolveCreate = resolve;
+      })
     );
     getChrome().runtime.getContexts.mockResolvedValue([]);
     getChrome().tabs.query.mockResolvedValue([{ id: 42, url: 'https://example.com' }]);
@@ -503,7 +501,7 @@ describe('MHTML conversion error handling', () => {
       payload: { error: 'Conversion failed' },
     });
 
-    const result = await sendMessage('CAPTURE_PAGE') as {
+    const result = (await sendMessage('CAPTURE_PAGE')) as {
       type: string;
       payload: { error: string };
     };
@@ -523,7 +521,7 @@ describe('MHTML conversion error handling', () => {
     // No response from offscreen
     getChrome().runtime.sendMessage.mockResolvedValue(null);
 
-    const result = await sendMessage('CAPTURE_PAGE') as {
+    const result = (await sendMessage('CAPTURE_PAGE')) as {
       type: string;
       payload: { error: string };
     };

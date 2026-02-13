@@ -194,11 +194,17 @@ describe('snapshot viewer', () => {
     });
 
     const testSnapshot = {
-      id: 'snap_1', url: 'https://example.com', title: 'Test',
-      html: '<html></html>', viewport: { width: 800, height: 600 },
-      annotations: { text: [], region: [] }, questions: [],
-      status: 'pending', capturedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(), tags: [],
+      id: 'snap_1',
+      url: 'https://example.com',
+      title: 'Test',
+      html: '<html></html>',
+      viewport: { width: 800, height: 600 },
+      annotations: { text: [], region: [] },
+      questions: [],
+      status: 'pending',
+      capturedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      tags: [],
     };
 
     getChrome().runtime.sendMessage.mockImplementation(
@@ -255,11 +261,17 @@ describe('snapshot viewer', () => {
     });
 
     const testSnapshot = {
-      id: 'snap_1', url: 'https://example.com', title: '',
-      html: '<html></html>', viewport: { width: 800, height: 600 },
-      annotations: { text: [], region: [] }, questions: [],
-      status: 'pending', capturedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(), tags: [],
+      id: 'snap_1',
+      url: 'https://example.com',
+      title: '',
+      html: '<html></html>',
+      viewport: { width: 800, height: 600 },
+      annotations: { text: [], region: [] },
+      questions: [],
+      status: 'pending',
+      capturedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      tags: [],
     };
 
     getChrome().runtime.sendMessage.mockImplementation(

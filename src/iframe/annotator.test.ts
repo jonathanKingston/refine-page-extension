@@ -103,7 +103,10 @@ describe('iframe annotator', () => {
     globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
       const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
       if (urlStr.includes('annotator.css')) {
-        return new Response('/* mock css */', { status: 200, headers: { 'Content-Type': 'text/css' } });
+        return new Response('/* mock css */', {
+          status: 200,
+          headers: { 'Content-Type': 'text/css' },
+        });
       }
       throw new Error(`Unmocked fetch: ${urlStr}`);
     }) as typeof fetch;
@@ -112,10 +115,7 @@ describe('iframe annotator', () => {
   it('should signal IFRAME_LOADED on import', async () => {
     await import('./annotator');
 
-    expect(parentPostMessage).toHaveBeenCalledWith(
-      { type: 'IFRAME_LOADED' },
-      '*'
-    );
+    expect(parentPostMessage).toHaveBeenCalledWith({ type: 'IFRAME_LOADED' }, '*');
   });
 
   it('should handle LOAD_HTML message', async () => {
@@ -134,12 +134,14 @@ describe('iframe annotator', () => {
 
     // LOAD_HTML triggers annotator setup which tries to fetch CSS from chrome-extension:// URL
     // This fails in jsdom but shouldn't crash
-    postMessageToIframe('LOAD_HTML', { html: '<html><head></head><body><p>Test</p></body></html>' });
-    await new Promise(r => setTimeout(r, 100));
+    postMessageToIframe('LOAD_HTML', {
+      html: '<html><head></head><body><p>Test</p></body></html>',
+    });
+    await new Promise((r) => setTimeout(r, 100));
 
     // SET_TOOL should not throw even if annotator isn't fully initialized
     postMessageToIframe('SET_TOOL', 'relevant');
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 50));
 
     // The main assertion is that the module didn't throw
     expect(true).toBe(true);
@@ -211,11 +213,13 @@ describe('iframe annotator', () => {
   it('should handle TOGGLE_MARKS message', async () => {
     await import('./annotator');
 
-    postMessageToIframe('LOAD_HTML', { html: '<html><head></head><body><p>Test</p><a href="https://example.com">Link</a></body></html>' });
-    await new Promise(r => setTimeout(r, 100));
+    postMessageToIframe('LOAD_HTML', {
+      html: '<html><head></head><body><p>Test</p><a href="https://example.com">Link</a></body></html>',
+    });
+    await new Promise((r) => setTimeout(r, 100));
 
     postMessageToIframe('TOGGLE_MARKS', undefined);
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 50));
 
     // Should respond with marks data or MARKS_DETECTED
     const marksCalls = parentPostMessage.mock.calls.filter(
@@ -228,12 +232,14 @@ describe('iframe annotator', () => {
   it('should handle CLEAR_MARKS message without crashing', async () => {
     await import('./annotator');
 
-    postMessageToIframe('LOAD_HTML', { html: '<html><head></head><body><p>Test</p></body></html>' });
-    await new Promise(r => setTimeout(r, 100));
+    postMessageToIframe('LOAD_HTML', {
+      html: '<html><head></head><body><p>Test</p></body></html>',
+    });
+    await new Promise((r) => setTimeout(r, 100));
 
     // CLEAR_MARKS before marks are enabled should not throw
     postMessageToIframe('CLEAR_MARKS', undefined);
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 50));
 
     // The main assertion is that the module handled the message without throwing
     expect(true).toBe(true);
