@@ -47,33 +47,43 @@ describe('cleanResourceUrls', () => {
   }
 
   it('should clean style element contents', () => {
-    const doc = parseHtml('<html><head><style>body { background: url(https://example.com/bg.png); }</style></head><body></body></html>');
+    const doc = parseHtml(
+      '<html><head><style>body { background: url(https://example.com/bg.png); }</style></head><body></body></html>'
+    );
     cleanResourceUrls(doc);
     const style = doc.querySelector('style');
     expect(style?.textContent).not.toContain('https://example.com');
   });
 
   it('should clean inline style attributes', () => {
-    const doc = parseHtml('<html><head></head><body><div style="background: url(https://example.com/bg.png)">test</div></body></html>');
+    const doc = parseHtml(
+      '<html><head></head><body><div style="background: url(https://example.com/bg.png)">test</div></body></html>'
+    );
     cleanResourceUrls(doc);
     const div = doc.querySelector('div');
     expect(div?.getAttribute('style')).not.toContain('https://example.com');
   });
 
   it('should remove non-data stylesheet links', () => {
-    const doc = parseHtml('<html><head><link rel="stylesheet" href="https://example.com/style.css"></head><body></body></html>');
+    const doc = parseHtml(
+      '<html><head><link rel="stylesheet" href="https://example.com/style.css"></head><body></body></html>'
+    );
     cleanResourceUrls(doc);
     expect(doc.querySelectorAll('link[rel="stylesheet"]').length).toBe(0);
   });
 
   it('should keep data: stylesheet links', () => {
-    const doc = parseHtml('<html><head><link rel="stylesheet" href="data:text/css,body{color:red}"></head><body></body></html>');
+    const doc = parseHtml(
+      '<html><head><link rel="stylesheet" href="data:text/css,body{color:red}"></head><body></body></html>'
+    );
     cleanResourceUrls(doc);
     expect(doc.querySelectorAll('link[rel="stylesheet"]').length).toBe(1);
   });
 
   it('should replace external img src with placeholder', () => {
-    const doc = parseHtml('<html><head></head><body><img src="https://example.com/img.png" alt="test"></body></html>');
+    const doc = parseHtml(
+      '<html><head></head><body><img src="https://example.com/img.png" alt="test"></body></html>'
+    );
     cleanResourceUrls(doc);
     const img = doc.querySelector('img');
     expect(img?.getAttribute('data-original-src')).toBe('https://example.com/img.png');
@@ -81,7 +91,9 @@ describe('cleanResourceUrls', () => {
   });
 
   it('should keep data: img src', () => {
-    const doc = parseHtml('<html><head></head><body><img src="data:image/png;base64,abc"></body></html>');
+    const doc = parseHtml(
+      '<html><head></head><body><img src="data:image/png;base64,abc"></body></html>'
+    );
     cleanResourceUrls(doc);
     const img = doc.querySelector('img');
     expect(img?.getAttribute('src')).toBe('data:image/png;base64,abc');
@@ -89,7 +101,9 @@ describe('cleanResourceUrls', () => {
   });
 
   it('should keep blob: img src', () => {
-    const doc = parseHtml('<html><head></head><body><img src="blob:http://example.com/abc"></body></html>');
+    const doc = parseHtml(
+      '<html><head></head><body><img src="blob:http://example.com/abc"></body></html>'
+    );
     cleanResourceUrls(doc);
     const img = doc.querySelector('img');
     expect(img?.getAttribute('src')).toBe('blob:http://example.com/abc');
@@ -109,7 +123,8 @@ describe('makeInert', () => {
   });
 
   it('should remove script and noscript tags', () => {
-    const html = '<html><head></head><body><script>alert(1)</script><noscript>JS off</noscript><p>Content</p></body></html>';
+    const html =
+      '<html><head></head><body><script>alert(1)</script><noscript>JS off</noscript><p>Content</p></body></html>';
     const result = makeInert(html);
     expect(result).not.toContain('<script');
     expect(result).not.toContain('<noscript');
@@ -135,7 +150,8 @@ describe('makeInert', () => {
   });
 
   it('should disable interactive elements with disabled attribute', () => {
-    const html = '<html><head></head><body><button>Click</button><input type="text"><select></select><textarea></textarea></body></html>';
+    const html =
+      '<html><head></head><body><button>Click</button><input type="text"><select></select><textarea></textarea></body></html>';
     const result = makeInert(html);
     const doc = new DOMParser().parseFromString(result, 'text/html');
     expect(doc.querySelector('button')?.hasAttribute('disabled')).toBe(true);
@@ -145,7 +161,8 @@ describe('makeInert', () => {
   });
 
   it('should remove event handler attributes', () => {
-    const html = '<html><head></head><body><div onclick="alert(1)" onmouseover="void(0)" onload="bad()" onerror="err()" onsubmit="sub()" onchange="ch()" onfocus="f()" onblur="b()" onmouseout="m()">Content</div></body></html>';
+    const html =
+      '<html><head></head><body><div onclick="alert(1)" onmouseover="void(0)" onload="bad()" onerror="err()" onsubmit="sub()" onchange="ch()" onfocus="f()" onblur="b()" onmouseout="m()">Content</div></body></html>';
     const result = makeInert(html);
     expect(result).not.toContain('onclick');
     expect(result).not.toContain('onmouseover');
@@ -194,7 +211,8 @@ describe('makeInert', () => {
   });
 
   it('should clean resource URLs in the document', () => {
-    const html = '<html><head><style>body { background: url(https://cdn.com/bg.png); }</style></head><body><img src="https://cdn.com/img.png"></body></html>';
+    const html =
+      '<html><head><style>body { background: url(https://cdn.com/bg.png); }</style></head><body><img src="https://cdn.com/img.png"></body></html>';
     const result = makeInert(html);
     expect(result).not.toContain('https://cdn.com/bg.png');
     expect(result).toContain('data-original-src');
