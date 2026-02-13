@@ -176,6 +176,91 @@ describe('fromW3CAnnotation', () => {
     expect('bounds' in result!).toBe(true);
   });
 
+  it('should handle array body format', () => {
+    const w3cAnnotation: WebAnnotation = {
+      '@context': 'http://www.w3.org/ns/anno.jsonld',
+      id: 'test-array-body',
+      type: 'Annotation',
+      body: [
+        {
+          type: 'TextualBody',
+          purpose: 'tagging',
+          value: 'answer',
+        },
+      ],
+      target: {
+        source: 'snapshot-1',
+        selector: {
+          type: 'TextQuoteSelector',
+          exact: 'Array body test',
+        },
+      },
+      created: '2024-01-01T00:00:00Z',
+      modified: '2024-01-01T00:00:00Z',
+    };
+
+    const result = fromW3CAnnotation(w3cAnnotation);
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe('answer');
+    expect('selectedText' in result!).toBe(true);
+  });
+
+  it('should handle array selector format', () => {
+    const w3cAnnotation: WebAnnotation = {
+      '@context': 'http://www.w3.org/ns/anno.jsonld',
+      id: 'test-array-selector',
+      type: 'Annotation',
+      body: {
+        type: 'TextualBody',
+        purpose: 'tagging',
+        value: 'relevant',
+      },
+      target: {
+        source: 'snapshot-1',
+        selector: [
+          {
+            type: 'TextQuoteSelector',
+            exact: 'Array selector test',
+          },
+        ],
+      },
+      created: '2024-01-01T00:00:00Z',
+      modified: '2024-01-01T00:00:00Z',
+    };
+
+    const result = fromW3CAnnotation(w3cAnnotation);
+    expect(result).not.toBeNull();
+    expect('selectedText' in result!).toBe(true);
+    if ('selectedText' in result!) {
+      expect(result.selectedText).toBe('Array selector test');
+    }
+  });
+
+  it('should return null for unknown selector type', () => {
+    const w3cAnnotation = {
+      '@context': 'http://www.w3.org/ns/anno.jsonld',
+      id: 'test-unknown',
+      type: 'Annotation',
+      body: {
+        type: 'TextualBody',
+        purpose: 'tagging',
+        value: 'relevant',
+      },
+      target: {
+        source: 'snapshot-1',
+        selector: {
+          type: 'SvgSelector',
+          value: '<svg></svg>',
+        },
+      },
+      created: '2024-01-01T00:00:00Z',
+      modified: '2024-01-01T00:00:00Z',
+    } as unknown as WebAnnotation;
+
+    const result = fromW3CAnnotation(w3cAnnotation);
+    expect(result).toBeNull();
+  });
+
   it('should return null for invalid fragment selector', () => {
     const w3cAnnotation: WebAnnotation = {
       '@context': 'http://www.w3.org/ns/anno.jsonld',
