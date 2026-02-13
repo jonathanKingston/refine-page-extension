@@ -130,7 +130,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshotIndex = [];
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (_msg: any, callback: any) => { if (callback) callback({}); }
+      (_msg: any, callback: any) => {
+        if (callback) callback({});
+      }
     );
     getChrome().runtime.lastError = null;
 
@@ -147,7 +149,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshotIndex = [];
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (_msg: any, callback: any) => { if (callback) callback({}); }
+      (_msg: any, callback: any) => {
+        if (callback) callback({});
+      }
     );
     getChrome().runtime.lastError = null;
 
@@ -167,7 +171,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshotIndex = [];
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (_msg: any, callback: any) => { if (callback) callback({}); }
+      (_msg: any, callback: any) => {
+        if (callback) callback({});
+      }
     );
     getChrome().runtime.lastError = null;
 
@@ -193,7 +199,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
@@ -232,7 +240,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_2 = snap2;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
@@ -245,7 +255,9 @@ describe('viewer module', () => {
     });
 
     // Click pending filter
-    const pendingFilter = document.querySelector('.filter-tab[data-filter="pending"]') as HTMLElement;
+    const pendingFilter = document.querySelector(
+      '.filter-tab[data-filter="pending"]'
+    ) as HTMLElement;
     pendingFilter?.click();
 
     await vi.waitFor(() => {
@@ -261,7 +273,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
@@ -297,7 +311,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
@@ -315,15 +331,21 @@ describe('viewer module', () => {
     });
 
     // Click correctness toggle
-    const correctBtn = document.querySelector('#correctness-toggle .toggle-btn[data-value="correct"]') as HTMLElement;
+    const correctBtn = document.querySelector(
+      '#correctness-toggle .toggle-btn[data-value="correct"]'
+    ) as HTMLElement;
     correctBtn?.click();
 
     // Click in-page toggle
-    const yesBtn = document.querySelector('#in-page-toggle .toggle-btn[data-value="yes"]') as HTMLElement;
+    const yesBtn = document.querySelector(
+      '#in-page-toggle .toggle-btn[data-value="yes"]'
+    ) as HTMLElement;
     yesBtn?.click();
 
     // Click quality toggle
-    const goodBtn = document.querySelector('#quality-toggle .toggle-btn[data-value="good"]') as HTMLElement;
+    const goodBtn = document.querySelector(
+      '#quality-toggle .toggle-btn[data-value="good"]'
+    ) as HTMLElement;
     goodBtn?.click();
 
     // Verify the buttons are active
@@ -335,8 +357,24 @@ describe('viewer module', () => {
   it('should handle question navigation', async () => {
     const snap = makeTestSnapshot({
       questions: [
-        { id: 'q1', query: 'Q1', expectedAnswer: '', annotationIds: [], evaluation: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-        { id: 'q2', query: 'Q2', expectedAnswer: '', annotationIds: [], evaluation: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+        {
+          id: 'q1',
+          query: 'Q1',
+          expectedAnswer: '',
+          annotationIds: [],
+          evaluation: {},
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'q2',
+          query: 'Q2',
+          expectedAnswer: '',
+          annotationIds: [],
+          evaluation: {},
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
       ],
     });
 
@@ -344,7 +382,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
@@ -377,7 +417,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
@@ -411,7 +453,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
@@ -446,7 +490,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshotIndex = [];
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (_msg: any, callback: any) => { if (callback) callback({}); }
+      (_msg: any, callback: any) => {
+        if (callback) callback({});
+      }
     );
     getChrome().runtime.lastError = null;
 
@@ -463,13 +509,16 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
     Object.defineProperty(window, 'location', {
       value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
-      writable: true, configurable: true,
+      writable: true,
+      configurable: true,
     });
 
     await import('./viewer');
@@ -496,13 +545,16 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_2 = snap2;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
     Object.defineProperty(window, 'location', {
       value: { search: '?id=snap_1', href: 'http://localhost/viewer.html?id=snap_1' },
-      writable: true, configurable: true,
+      writable: true,
+      configurable: true,
     });
     window.history.pushState = vi.fn();
 
@@ -525,13 +577,16 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
     Object.defineProperty(window, 'location', {
       value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
-      writable: true, configurable: true,
+      writable: true,
+      configurable: true,
     });
 
     await import('./viewer');
@@ -558,13 +613,16 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
     Object.defineProperty(window, 'location', {
       value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
-      writable: true, configurable: true,
+      writable: true,
+      configurable: true,
     });
 
     await import('./viewer');
@@ -592,13 +650,16 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
     Object.defineProperty(window, 'location', {
       value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
-      writable: true, configurable: true,
+      writable: true,
+      configurable: true,
     });
 
     await import('./viewer');
@@ -608,15 +669,21 @@ describe('viewer module', () => {
     });
 
     // Click quick correctness button
-    const quickCorrect = document.querySelector('#quick-correctness .quick-btn[data-value="correct"]') as HTMLElement;
+    const quickCorrect = document.querySelector(
+      '#quick-correctness .quick-btn[data-value="correct"]'
+    ) as HTMLElement;
     quickCorrect?.click();
 
     // Click quick in-page button
-    const quickYes = document.querySelector('#quick-in-page .quick-btn[data-value="yes"]') as HTMLElement;
+    const quickYes = document.querySelector(
+      '#quick-in-page .quick-btn[data-value="yes"]'
+    ) as HTMLElement;
     quickYes?.click();
 
     // Click quick quality button
-    const quickGood = document.querySelector('#quick-quality .quick-btn[data-value="good"]') as HTMLElement;
+    const quickGood = document.querySelector(
+      '#quick-quality .quick-btn[data-value="good"]'
+    ) as HTMLElement;
     quickGood?.click();
 
     // Should trigger saves
@@ -634,13 +701,16 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
     Object.defineProperty(window, 'location', {
       value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
-      writable: true, configurable: true,
+      writable: true,
+      configurable: true,
     });
 
     await import('./viewer');
@@ -665,13 +735,16 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
     Object.defineProperty(window, 'location', {
       value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
-      writable: true, configurable: true,
+      writable: true,
+      configurable: true,
     });
 
     await import('./viewer');
@@ -703,13 +776,16 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_2 = snap2;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
     Object.defineProperty(window, 'location', {
       value: { search: '?id=snap_1', href: 'http://localhost/viewer.html?id=snap_1' },
-      writable: true, configurable: true,
+      writable: true,
+      configurable: true,
     });
 
     await import('./viewer');
@@ -719,7 +795,9 @@ describe('viewer module', () => {
     });
 
     // Ctrl+Enter
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true })
+    );
 
     await vi.waitFor(() => {
       expect(getChrome().runtime.sendMessage).toHaveBeenCalledWith(
@@ -735,13 +813,16 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
     Object.defineProperty(window, 'location', {
       value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
-      writable: true, configurable: true,
+      writable: true,
+      configurable: true,
     });
 
     await import('./viewer');
@@ -766,7 +847,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshotIndex = [];
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (_msg: any, callback: any) => { if (callback) callback({}); }
+      (_msg: any, callback: any) => {
+        if (callback) callback({});
+      }
     );
     getChrome().runtime.lastError = null;
 
@@ -790,13 +873,16 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
     Object.defineProperty(window, 'location', {
       value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
-      writable: true, configurable: true,
+      writable: true,
+      configurable: true,
     });
 
     await import('./viewer');
@@ -807,14 +893,20 @@ describe('viewer module', () => {
 
     // Select relevant tool
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
-    expect(document.querySelector('.tool-btn[data-tool="relevant"]')?.classList.contains('active')).toBe(true);
+    expect(
+      document.querySelector('.tool-btn[data-tool="relevant"]')?.classList.contains('active')
+    ).toBe(true);
 
     // Press Escape to deselect
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 
     // No tool should be active (select mode)
-    expect(document.querySelector('.tool-btn[data-tool="relevant"]')?.classList.contains('active')).toBe(false);
-    expect(document.querySelector('.tool-btn[data-tool="answer"]')?.classList.contains('active')).toBe(false);
+    expect(
+      document.querySelector('.tool-btn[data-tool="relevant"]')?.classList.contains('active')
+    ).toBe(false);
+    expect(
+      document.querySelector('.tool-btn[data-tool="answer"]')?.classList.contains('active')
+    ).toBe(false);
   });
 
   it('should handle snapshot without existing questions', async () => {
@@ -823,13 +915,16 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshot_snap_test_1 = snap;
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+      (msg: any, callback: any) => {
+        if (callback) callback({ success: true });
+      }
     );
     getChrome().runtime.lastError = null;
 
     Object.defineProperty(window, 'location', {
       value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
-      writable: true, configurable: true,
+      writable: true,
+      configurable: true,
     });
 
     await import('./viewer');
@@ -845,7 +940,9 @@ describe('viewer module', () => {
     getChrome().storage.local.data.snapshotIndex = [];
     getChrome().runtime.sendMessage.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (_msg: any, callback: any) => { if (callback) callback({}); }
+      (_msg: any, callback: any) => {
+        if (callback) callback({});
+      }
     );
     getChrome().runtime.lastError = null;
 
