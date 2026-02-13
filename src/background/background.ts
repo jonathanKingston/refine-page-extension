@@ -1140,65 +1140,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       }
 
-      case 'START_RECORDING': {
-        const config = message.payload?.config;
-        const result = await startRecording(config);
-        return result;
-      }
-
-      case 'STOP_RECORDING': {
-        const result = await stopRecording();
-        return result;
-      }
-
-      case 'GET_RECORDING_STATE': {
-        const state = await getRecordingState();
-        return state;
-      }
-
-      case 'RECORD_INTERACTION': {
-        const { interaction } = message.payload;
-        const tabId = sender.tab?.id;
-        if (!tabId) {
-          throw new Error('No tab ID available');
-        }
-        // Don't await - let it run in background to avoid blocking
-        // If it fails, it will log errors but won't block the content script
-        recordInteraction(interaction, tabId).catch((error) => {
-          console.error('[Recording] Error recording interaction (non-blocking):', error);
-        });
-        return { success: true };
-      }
-
-      case 'PAGE_NAVIGATING': {
-        // Page is navigating away - recording will be re-initialized on new page via tab update listener
-        return { success: true };
-      }
-
-      case 'GET_TRACES': {
-        return getAllTraces();
-      }
-
-      case 'GET_TRACE': {
-        return getTrace(message.payload.id);
-      }
-
-      case 'DELETE_TRACE': {
-        await deleteTrace(message.payload.id);
-        return { success: true };
-      }
-
-      case 'EXPORT_TRACE': {
-        const trace = await getTrace(message.payload.id);
-        if (!trace) {
-          throw new Error('Trace not found');
-        }
-        // Export trace as JSON (snapshots are already stored separately)
-        return trace;
-      }
-
+      /* v8 ignore next 3 -- unreachable: knownTypes check above prevents reaching default */
       default:
-        // Unknown message type - don't handle it
         return undefined;
     }
   };
