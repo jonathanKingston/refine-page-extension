@@ -51,7 +51,16 @@ export function createMockChrome(): any {
 
   return {
     runtime: {
-      sendMessage: vi.fn(),
+      sendMessage: vi.fn((...args: any[]) => {
+        // Support both callback and promise-based calling conventions
+        const callback = args.find((a: unknown) => typeof a === 'function');
+        if (callback) {
+          // Callback style: chrome.runtime.sendMessage(msg, callback)
+          return undefined;
+        }
+        // Promise style: chrome.runtime.sendMessage(msg)
+        return Promise.resolve(undefined);
+      }),
       onMessage,
       getURL: vi.fn((path: string) => `chrome-extension://test-id/${path}`),
       getContexts: vi.fn(async () => []),
