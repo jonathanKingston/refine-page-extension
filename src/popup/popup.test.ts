@@ -207,29 +207,59 @@ describe('popup', () => {
         if (msg.type === 'GET_ALL_SNAPSHOTS') {
           callback([
             {
-              id: 's1', url: 'https://a.com', title: 'Recent', status: 'pending',
+              id: 's1',
+              url: 'https://a.com',
+              title: 'Recent',
+              status: 'pending',
               capturedAt: new Date(now.getTime() - 30000).toISOString(), // 30s ago
-              updatedAt: now.toISOString(), tags: [], annotations: { text: [], region: [] }, questions: [],
+              updatedAt: now.toISOString(),
+              tags: [],
+              annotations: { text: [], region: [] },
+              questions: [],
             },
             {
-              id: 's2', url: 'https://b.com', title: 'Minutes', status: 'pending',
+              id: 's2',
+              url: 'https://b.com',
+              title: 'Minutes',
+              status: 'pending',
               capturedAt: new Date(now.getTime() - 300000).toISOString(), // 5m ago
-              updatedAt: now.toISOString(), tags: [], annotations: { text: [], region: [] }, questions: [],
+              updatedAt: now.toISOString(),
+              tags: [],
+              annotations: { text: [], region: [] },
+              questions: [],
             },
             {
-              id: 's3', url: 'https://c.com', title: 'Hours', status: 'approved',
+              id: 's3',
+              url: 'https://c.com',
+              title: 'Hours',
+              status: 'approved',
               capturedAt: new Date(now.getTime() - 7200000).toISOString(), // 2h ago
-              updatedAt: now.toISOString(), tags: [], annotations: { text: [], region: [] }, questions: [],
+              updatedAt: now.toISOString(),
+              tags: [],
+              annotations: { text: [], region: [] },
+              questions: [],
             },
             {
-              id: 's4', url: 'https://d.com', title: 'Days', status: 'pending',
+              id: 's4',
+              url: 'https://d.com',
+              title: 'Days',
+              status: 'pending',
               capturedAt: new Date(now.getTime() - 172800000).toISOString(), // 2d ago
-              updatedAt: now.toISOString(), tags: [], annotations: { text: [], region: [] }, questions: [],
+              updatedAt: now.toISOString(),
+              tags: [],
+              annotations: { text: [], region: [] },
+              questions: [],
             },
             {
-              id: 's5', url: 'https://e.com', title: 'Weeks', status: 'pending',
+              id: 's5',
+              url: 'https://e.com',
+              title: 'Weeks',
+              status: 'pending',
               capturedAt: new Date(now.getTime() - 1209600000).toISOString(), // 14d ago
-              updatedAt: now.toISOString(), tags: [], annotations: { text: [], region: [] }, questions: [],
+              updatedAt: now.toISOString(),
+              tags: [],
+              annotations: { text: [], region: [] },
+              questions: [],
             },
           ]);
         } else {
@@ -320,19 +350,29 @@ describe('popup', () => {
 
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
-    zip.file('index.json', JSON.stringify({
-      version: '1.0.0',
-      exportedAt: new Date().toISOString(),
-      extensionId: 'test',
-      snapshots: [{
-        id: 'snap_1', url: 'https://example.com', title: 'Test',
-        htmlFile: 'html/snap_1.html',
-        viewport: { width: 1920, height: 1080 },
-        annotations: { text: [], region: [] }, questions: [],
-        status: 'pending', capturedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(), tags: [],
-      }],
-    }));
+    zip.file(
+      'index.json',
+      JSON.stringify({
+        version: '1.0.0',
+        exportedAt: new Date().toISOString(),
+        extensionId: 'test',
+        snapshots: [
+          {
+            id: 'snap_1',
+            url: 'https://example.com',
+            title: 'Test',
+            htmlFile: 'html/snap_1.html',
+            viewport: { width: 1920, height: 1080 },
+            annotations: { text: [], region: [] },
+            questions: [],
+            status: 'pending',
+            capturedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            tags: [],
+          },
+        ],
+      })
+    );
     zip.folder('html')?.file('snap_1.html', '<html><body>test</body></html>');
     const zipArrayBuffer = await zip.generateAsync({ type: 'arraybuffer' });
 
@@ -347,7 +387,7 @@ describe('popup', () => {
 
     await import('./popup');
     document.dispatchEvent(new Event('DOMContentLoaded'));
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 50));
 
     // JSZip.loadAsync in popup expects a File/Blob. Use a real Blob with .zip name.
     const zipBlob = new Blob([zipArrayBuffer], { type: 'application/zip' });
@@ -355,7 +395,7 @@ describe('popup', () => {
     const input = document.getElementById('import-input') as HTMLInputElement;
     Object.defineProperty(input, 'files', { value: [file], writable: true });
     input.dispatchEvent(new Event('change'));
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 500));
 
     const statusText = document.querySelector('.status-text');
     expect(statusText?.textContent).toContain('Imported');
@@ -496,17 +536,29 @@ describe('popup', () => {
 
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
-    zip.file('index.json', JSON.stringify({
-      version: '1.0.0', exportedAt: new Date().toISOString(), extensionId: 'test',
-      snapshots: [{
-        id: 'snap_1', url: 'https://example.com', title: 'Test',
-        htmlFile: 'html/nonexistent.html',
-        viewport: { width: 1920, height: 1080 },
-        annotations: { text: [], region: [] }, questions: [],
-        status: 'pending', capturedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(), tags: [],
-      }],
-    }));
+    zip.file(
+      'index.json',
+      JSON.stringify({
+        version: '1.0.0',
+        exportedAt: new Date().toISOString(),
+        extensionId: 'test',
+        snapshots: [
+          {
+            id: 'snap_1',
+            url: 'https://example.com',
+            title: 'Test',
+            htmlFile: 'html/nonexistent.html',
+            viewport: { width: 1920, height: 1080 },
+            annotations: { text: [], region: [] },
+            questions: [],
+            status: 'pending',
+            capturedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            tags: [],
+          },
+        ],
+      })
+    );
     // Do NOT add the HTML file — simulate missing file
     const zipArrayBuffer = await zip.generateAsync({ type: 'arraybuffer' });
 
@@ -521,14 +573,14 @@ describe('popup', () => {
 
     await import('./popup');
     document.dispatchEvent(new Event('DOMContentLoaded'));
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 50));
 
     const zipBlob = new Blob([zipArrayBuffer], { type: 'application/zip' });
     const file = Object.assign(zipBlob, { name: 'export.zip' });
     const input = document.getElementById('import-input') as HTMLInputElement;
     Object.defineProperty(input, 'files', { value: [file], writable: true });
     input.dispatchEvent(new Event('change'));
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 500));
 
     const statusText = document.querySelector('.status-text');
     expect(statusText?.textContent).toContain('Imported');
@@ -542,11 +594,19 @@ describe('popup', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (msg: any, callback: any) => {
         if (msg.type === 'GET_ALL_SNAPSHOTS') {
-          callback([{
-            id: 'snap_1', url: 'https://example.com', title: 'Test Page', status: 'pending',
-            capturedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), tags: [],
-            annotations: { text: [], region: [] }, questions: [],
-          }]);
+          callback([
+            {
+              id: 'snap_1',
+              url: 'https://example.com',
+              title: 'Test Page',
+              status: 'pending',
+              capturedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              tags: [],
+              annotations: { text: [], region: [] },
+              questions: [],
+            },
+          ]);
         } else if (msg.type === 'OPEN_VIEWER') {
           openedId = msg.payload.snapshotId;
           callback({ success: true });
@@ -587,14 +647,14 @@ describe('popup', () => {
 
     await import('./popup');
     document.dispatchEvent(new Event('DOMContentLoaded'));
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 50));
 
     const zipBlob = new Blob([zipArrayBuffer], { type: 'application/zip' });
     const file = Object.assign(zipBlob, { name: 'bad.zip' });
     const input = document.getElementById('import-input') as HTMLInputElement;
     Object.defineProperty(input, 'files', { value: [file], writable: true });
     input.dispatchEvent(new Event('change'));
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 500));
 
     const statusText = document.querySelector('.status-text');
     expect(statusText?.textContent).toContain('Invalid ZIP');
