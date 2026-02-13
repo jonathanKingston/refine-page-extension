@@ -11,6 +11,7 @@ async function getSnapshotIndex(): Promise<string[]> {
   return result.snapshotIndex || [];
 }
 
+/* v8 ignore next 5 -- currently unused; kept for potential future use */
 async function getSnapshotFromStorage(id: string): Promise<Snapshot | null> {
   const key = `snapshot_${id}`;
   const result = await chrome.storage.local.get(key);
