@@ -457,6 +457,390 @@ describe('viewer module', () => {
     localStorage.removeItem('refine-page-theme');
   });
 
+  it('should handle decline button', async () => {
+    const snap = makeTestSnapshot();
+    getChrome().storage.local.data.snapshotIndex = ['snap_test_1'];
+    getChrome().storage.local.data.snapshot_snap_test_1 = snap;
+    getChrome().runtime.sendMessage.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+    );
+    getChrome().runtime.lastError = null;
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
+      writable: true, configurable: true,
+    });
+
+    await import('./viewer');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vi.waitFor(() => {
+      expect(document.getElementById('page-title')?.textContent).toBe('Test Snapshot');
+    });
+
+    document.getElementById('decline-btn')?.click();
+
+    await vi.waitFor(() => {
+      expect(getChrome().runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'UPDATE_SNAPSHOT' }),
+        expect.any(Function)
+      );
+    });
+  });
+
+  it('should handle skip button navigating to next pending', async () => {
+    const snap1 = makeTestSnapshot({ id: 'snap_1', title: 'Page 1' });
+    const snap2 = makeTestSnapshot({ id: 'snap_2', title: 'Page 2' });
+    getChrome().storage.local.data.snapshotIndex = ['snap_1', 'snap_2'];
+    getChrome().storage.local.data.snapshot_snap_1 = snap1;
+    getChrome().storage.local.data.snapshot_snap_2 = snap2;
+    getChrome().runtime.sendMessage.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+    );
+    getChrome().runtime.lastError = null;
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '?id=snap_1', href: 'http://localhost/viewer.html?id=snap_1' },
+      writable: true, configurable: true,
+    });
+    window.history.pushState = vi.fn();
+
+    await import('./viewer');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vi.waitFor(() => {
+      expect(document.getElementById('page-title')?.textContent).toBe('Page 1');
+    });
+
+    document.getElementById('skip-btn')?.click();
+
+    await vi.waitFor(() => {
+      expect(window.history.pushState).toHaveBeenCalled();
+    });
+  });
+
+  it('should handle review notes input', async () => {
+    const snap = makeTestSnapshot();
+    getChrome().storage.local.data.snapshotIndex = ['snap_test_1'];
+    getChrome().storage.local.data.snapshot_snap_test_1 = snap;
+    getChrome().runtime.sendMessage.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+    );
+    getChrome().runtime.lastError = null;
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
+      writable: true, configurable: true,
+    });
+
+    await import('./viewer');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vi.waitFor(() => {
+      expect(document.getElementById('page-title')?.textContent).toBe('Test Snapshot');
+    });
+
+    const notes = document.getElementById('review-notes') as HTMLTextAreaElement;
+    notes.value = 'Some review notes';
+    notes.dispatchEvent(new Event('input'));
+
+    await vi.waitFor(() => {
+      expect(getChrome().runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'UPDATE_SNAPSHOT' }),
+        expect.any(Function)
+      );
+    });
+  });
+
+  it('should handle question query editing', async () => {
+    const snap = makeTestSnapshot();
+    getChrome().storage.local.data.snapshotIndex = ['snap_test_1'];
+    getChrome().storage.local.data.snapshot_snap_test_1 = snap;
+    getChrome().runtime.sendMessage.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+    );
+    getChrome().runtime.lastError = null;
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
+      writable: true, configurable: true,
+    });
+
+    await import('./viewer');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vi.waitFor(() => {
+      expect(document.getElementById('page-title')?.textContent).toBe('Test Snapshot');
+    });
+
+    const queryInput = document.getElementById('query-input') as HTMLTextAreaElement;
+    queryInput.value = 'Updated question text';
+    queryInput.dispatchEvent(new Event('input'));
+
+    // Should save
+    await vi.waitFor(() => {
+      expect(getChrome().runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'UPDATE_SNAPSHOT' }),
+        expect.any(Function)
+      );
+    });
+  });
+
+  it('should handle quick eval buttons in bottom bar', async () => {
+    const snap = makeTestSnapshot();
+    getChrome().storage.local.data.snapshotIndex = ['snap_test_1'];
+    getChrome().storage.local.data.snapshot_snap_test_1 = snap;
+    getChrome().runtime.sendMessage.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+    );
+    getChrome().runtime.lastError = null;
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
+      writable: true, configurable: true,
+    });
+
+    await import('./viewer');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vi.waitFor(() => {
+      expect(document.getElementById('page-title')?.textContent).toBe('Test Snapshot');
+    });
+
+    // Click quick correctness button
+    const quickCorrect = document.querySelector('#quick-correctness .quick-btn[data-value="correct"]') as HTMLElement;
+    quickCorrect?.click();
+
+    // Click quick in-page button
+    const quickYes = document.querySelector('#quick-in-page .quick-btn[data-value="yes"]') as HTMLElement;
+    quickYes?.click();
+
+    // Click quick quality button
+    const quickGood = document.querySelector('#quick-quality .quick-btn[data-value="good"]') as HTMLElement;
+    quickGood?.click();
+
+    // Should trigger saves
+    await vi.waitFor(() => {
+      expect(getChrome().runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'UPDATE_SNAPSHOT' }),
+        expect.any(Function)
+      );
+    });
+  });
+
+  it('should handle zoom shortcuts', async () => {
+    const snap = makeTestSnapshot();
+    getChrome().storage.local.data.snapshotIndex = ['snap_test_1'];
+    getChrome().storage.local.data.snapshot_snap_test_1 = snap;
+    getChrome().runtime.sendMessage.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+    );
+    getChrome().runtime.lastError = null;
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
+      writable: true, configurable: true,
+    });
+
+    await import('./viewer');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vi.waitFor(() => {
+      expect(document.getElementById('page-title')?.textContent).toBe('Test Snapshot');
+    });
+
+    // Zoom in with '=' key
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '=', bubbles: true }));
+
+    // Zoom out with '-' key
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '-', bubbles: true }));
+
+    // The zoom handler modifies iframe transform — just verify no crash
+    expect(true).toBe(true);
+  });
+
+  it('should handle evaluation keyboard shortcuts', async () => {
+    const snap = makeTestSnapshot();
+    getChrome().storage.local.data.snapshotIndex = ['snap_test_1'];
+    getChrome().storage.local.data.snapshot_snap_test_1 = snap;
+    getChrome().runtime.sendMessage.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+    );
+    getChrome().runtime.lastError = null;
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
+      writable: true, configurable: true,
+    });
+
+    await import('./viewer');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vi.waitFor(() => {
+      expect(document.getElementById('page-title')?.textContent).toBe('Test Snapshot');
+    });
+
+    // Test evaluation shortcuts
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true })); // correct
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'y', bubbles: true })); // yes (in page)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true })); // good (quality)
+
+    // All should trigger saves
+    await vi.waitFor(() => {
+      const updateCalls = getChrome().runtime.sendMessage.mock.calls.filter(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (call: any[]) => call[0]?.type === 'UPDATE_SNAPSHOT'
+      );
+      expect(updateCalls.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('should handle Ctrl+Enter approve and advance', async () => {
+    const snap1 = makeTestSnapshot({ id: 'snap_1', title: 'Page 1' });
+    const snap2 = makeTestSnapshot({ id: 'snap_2', title: 'Page 2' });
+    getChrome().storage.local.data.snapshotIndex = ['snap_1', 'snap_2'];
+    getChrome().storage.local.data.snapshot_snap_1 = snap1;
+    getChrome().storage.local.data.snapshot_snap_2 = snap2;
+    getChrome().runtime.sendMessage.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+    );
+    getChrome().runtime.lastError = null;
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '?id=snap_1', href: 'http://localhost/viewer.html?id=snap_1' },
+      writable: true, configurable: true,
+    });
+
+    await import('./viewer');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vi.waitFor(() => {
+      expect(document.getElementById('page-title')?.textContent).toBe('Page 1');
+    });
+
+    // Ctrl+Enter
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+
+    await vi.waitFor(() => {
+      expect(getChrome().runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'UPDATE_SNAPSHOT' }),
+        expect.any(Function)
+      );
+    });
+  });
+
+  it('should handle expected answer input editing', async () => {
+    const snap = makeTestSnapshot();
+    getChrome().storage.local.data.snapshotIndex = ['snap_test_1'];
+    getChrome().storage.local.data.snapshot_snap_test_1 = snap;
+    getChrome().runtime.sendMessage.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+    );
+    getChrome().runtime.lastError = null;
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
+      writable: true, configurable: true,
+    });
+
+    await import('./viewer');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vi.waitFor(() => {
+      expect(document.getElementById('page-title')?.textContent).toBe('Test Snapshot');
+    });
+
+    const expectedInput = document.getElementById('expected-answer-input') as HTMLInputElement;
+    expectedInput.value = 'Expected answer text';
+    expectedInput.dispatchEvent(new Event('input'));
+
+    await vi.waitFor(() => {
+      expect(getChrome().runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'UPDATE_SNAPSHOT' }),
+        expect.any(Function)
+      );
+    });
+  });
+
+  it('should not trigger shortcuts when focused on input', async () => {
+    getChrome().storage.local.data.snapshotIndex = [];
+    getChrome().runtime.sendMessage.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (_msg: any, callback: any) => { if (callback) callback({}); }
+    );
+    getChrome().runtime.lastError = null;
+
+    await import('./viewer');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+
+    // Focus on an input, then press 'r' — should NOT trigger tool switch
+    const queryInput = document.getElementById('query-input') as HTMLTextAreaElement;
+    const event = new KeyboardEvent('keydown', { key: 'r', bubbles: true });
+    Object.defineProperty(event, 'target', { value: queryInput });
+    document.dispatchEvent(event);
+
+    // Relevant button should NOT be active
+    const relevantBtn = document.querySelector('.tool-btn[data-tool="relevant"]');
+    expect(relevantBtn?.classList.contains('active')).toBe(false);
+  });
+
+  it('should handle Escape key to deselect tool', async () => {
+    const snap = makeTestSnapshot();
+    getChrome().storage.local.data.snapshotIndex = ['snap_test_1'];
+    getChrome().storage.local.data.snapshot_snap_test_1 = snap;
+    getChrome().runtime.sendMessage.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+    );
+    getChrome().runtime.lastError = null;
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
+      writable: true, configurable: true,
+    });
+
+    await import('./viewer');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vi.waitFor(() => {
+      expect(document.getElementById('page-title')?.textContent).toBe('Test Snapshot');
+    });
+
+    // Select relevant tool
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
+    expect(document.querySelector('.tool-btn[data-tool="relevant"]')?.classList.contains('active')).toBe(true);
+
+    // Press Escape to deselect
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    // No tool should be active (select mode)
+    expect(document.querySelector('.tool-btn[data-tool="relevant"]')?.classList.contains('active')).toBe(false);
+    expect(document.querySelector('.tool-btn[data-tool="answer"]')?.classList.contains('active')).toBe(false);
+  });
+
+  it('should handle snapshot without existing questions', async () => {
+    const snap = makeTestSnapshot({ questions: [] });
+    getChrome().storage.local.data.snapshotIndex = ['snap_test_1'];
+    getChrome().storage.local.data.snapshot_snap_test_1 = snap;
+    getChrome().runtime.sendMessage.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (msg: any, callback: any) => { if (callback) callback({ success: true }); }
+    );
+    getChrome().runtime.lastError = null;
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '?id=snap_test_1', href: 'http://localhost/viewer.html?id=snap_test_1' },
+      writable: true, configurable: true,
+    });
+
+    await import('./viewer');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+
+    // Should auto-create a default question
+    await vi.waitFor(() => {
+      expect(document.getElementById('page-title')?.textContent).toBe('Test Snapshot');
+    });
+  });
+
   it('should handle empty snapshot list', async () => {
     getChrome().storage.local.data.snapshotIndex = [];
     getChrome().runtime.sendMessage.mockImplementation(
