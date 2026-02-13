@@ -3,57 +3,14 @@
  * Provides a minimal but functional mock of chrome.* APIs used by the extension.
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { vi } from 'vitest';
 
-export interface MockChromeStorage {
-  data: Record<string, unknown>;
-  get: ReturnType<typeof vi.fn>;
-  set: ReturnType<typeof vi.fn>;
-  remove: ReturnType<typeof vi.fn>;
-}
-
-export interface MockChrome {
-  runtime: {
-    sendMessage: ReturnType<typeof vi.fn>;
-    onMessage: {
-      addListener: ReturnType<typeof vi.fn>;
-      removeListener: ReturnType<typeof vi.fn>;
-      _listeners: Array<(...args: unknown[]) => unknown>;
-    };
-    getURL: ReturnType<typeof vi.fn>;
-    getContexts: ReturnType<typeof vi.fn>;
-    id: string;
-    lastError: null | { message: string };
-    ContextType: { OFFSCREEN_DOCUMENT: string };
-    onInstalled: {
-      addListener: ReturnType<typeof vi.fn>;
-    };
-  };
-  storage: {
-    local: MockChromeStorage;
-  };
-  tabs: {
-    query: ReturnType<typeof vi.fn>;
-    create: ReturnType<typeof vi.fn>;
-    sendMessage: ReturnType<typeof vi.fn>;
-    get: ReturnType<typeof vi.fn>;
-  };
-  pageCapture: {
-    saveAsMHTML: ReturnType<typeof vi.fn>;
-  };
-  offscreen: {
-    createDocument: ReturnType<typeof vi.fn>;
-    Reason: { DOM_PARSER: string };
-  };
-  scripting: {
-    executeScript: ReturnType<typeof vi.fn>;
-  };
-}
-
-export function createMockChrome(): MockChrome {
+export function createMockChrome(): any {
   const storageData: Record<string, unknown> = {};
 
-  const storage: MockChromeStorage = {
+  const storage = {
     data: storageData,
     get: vi.fn(async (keys: string | string[]) => {
       if (typeof keys === 'string') {
@@ -78,16 +35,16 @@ export function createMockChrome(): MockChrome {
     }),
   };
 
-  const messageListeners: Array<(...args: unknown[]) => unknown> = [];
+  const messageListeners: Array<(...args: any[]) => any> = [];
 
   return {
     runtime: {
       sendMessage: vi.fn(),
       onMessage: {
-        addListener: vi.fn((listener: (...args: unknown[]) => unknown) => {
+        addListener: vi.fn((listener: (...args: any[]) => any) => {
           messageListeners.push(listener);
         }),
-        removeListener: vi.fn((listener: (...args: unknown[]) => unknown) => {
+        removeListener: vi.fn((listener: (...args: any[]) => any) => {
           const idx = messageListeners.indexOf(listener);
           if (idx >= 0) messageListeners.splice(idx, 1);
         }),
