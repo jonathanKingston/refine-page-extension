@@ -15,9 +15,21 @@ import type {
   ElementMark,
 } from '@/types';
 
+import { parseZipExport } from '@/lib/zipExport';
+
 // Import annotation library types (actual annotators are now in iframe)
 import '@recogito/text-annotator/text-annotator.css';
 import '@annotorious/annotorious/annotorious.css';
+
+function hasChromeStorage(): boolean {
+  // Note: `window.chrome` exists on many pages; we require the extension storage API.
+  return (
+    typeof chrome !== 'undefined' && !!chrome?.storage?.local && !!chrome?.runtime?.sendMessage
+  );
+}
+
+// In standalone (non-extension) mode, snapshots are kept in memory after loading a ZIP.
+let standaloneSnapshots: Snapshot[] | null = null;
 
 // Strip CSP meta tags from HTML to allow our annotation scripts to run
 function stripCspFromHtml(html: string): string {
@@ -89,30 +101,10 @@ async function sendMessage<T>(type: string, payload?: unknown): Promise<T> {
   });
 }
 
-// Direct storage access - bypasses message passing to avoid size limits
-async function getSnapshotIndex(): Promise<string[]> {
-  const result = await chrome.storage.local.get('snapshotIndex');
-  return result.snapshotIndex || [];
-}
+// Storage abstraction — works in both extension and standalone web mode.
 
-async function getSnapshotFromStorage(id: string): Promise<Snapshot | null> {
-  const key = `snapshot_${id}`;
-  const result = await chrome.storage.local.get(key);
-  return result[key] || null;
-}
-
-async function getAllSnapshotsFromStorage(): Promise<Snapshot[]> {
-  const index = await getSnapshotIndex();
-  const keys = index.map((id) => `snapshot_${id}`);
-  if (keys.length === 0) return [];
-
-  const result = await chrome.storage.local.get(keys);
-  return keys.map((key) => result[key]).filter(Boolean);
-}
-
-async function getAllSnapshotSummaries(): Promise<SnapshotSummary[]> {
-  const snapshots = await getAllSnapshotsFromStorage();
-  return snapshots.map((s) => ({
+function toSummary(s: Snapshot): SnapshotSummary {
+  return {
     id: s.id,
     url: s.url,
     title: s.title,
@@ -122,7 +114,49 @@ async function getAllSnapshotSummaries(): Promise<SnapshotSummary[]> {
     tags: s.tags,
     annotationCount: { text: s.annotations.text.length, region: s.annotations.region.length },
     questionCount: s.questions.length,
-  }));
+  };
+}
+
+async function getSnapshotById(id: string): Promise<Snapshot | null> {
+  if (hasChromeStorage()) {
+    const key = `snapshot_${id}`;
+    const result = await chrome.storage.local.get(key);
+    return result[key] || null;
+  }
+  return standaloneSnapshots?.find((s) => s.id === id) ?? null;
+}
+
+async function getAllSnapshots(): Promise<Snapshot[]> {
+  if (hasChromeStorage()) {
+    const result = await chrome.storage.local.get('snapshotIndex');
+    const index: string[] = result.snapshotIndex || [];
+    const keys = index.map((id) => `snapshot_${id}`);
+    if (keys.length === 0) return [];
+    const byKey = await chrome.storage.local.get(keys);
+    return keys.map((k) => byKey[k]).filter(Boolean);
+  }
+  return standaloneSnapshots ?? [];
+}
+
+async function getAllSnapshotSummaries(): Promise<SnapshotSummary[]> {
+  const snapshots = await getAllSnapshots();
+  return snapshots.map(toSummary);
+}
+
+async function persistSnapshot(snapshot: Snapshot): Promise<void> {
+  if (hasChromeStorage()) {
+    await sendMessage('UPDATE_SNAPSHOT', {
+      id: snapshot.id,
+      updates: snapshot,
+    });
+    return;
+  }
+
+  // Standalone mode: update in-memory array
+  if (!standaloneSnapshots) standaloneSnapshots = [];
+  const idx = standaloneSnapshots.findIndex((s) => s.id === snapshot.id);
+  if (idx >= 0) standaloneSnapshots[idx] = snapshot;
+  else standaloneSnapshots.push(snapshot);
 }
 
 // Get URL parameters
@@ -133,7 +167,7 @@ function getUrlParams(): URLSearchParams {
 // Load snapshot into preview (direct storage access - no message size limits)
 async function loadSnapshot(snapshotId: string) {
   try {
-    const snapshot = await getSnapshotFromStorage(snapshotId);
+    const snapshot = await getSnapshotById(snapshotId);
     if (!snapshot) {
       console.error('Snapshot not found:', snapshotId);
       return;
@@ -166,10 +200,7 @@ async function loadSnapshot(snapshotId: string) {
       };
       snapshot.questions.push(defaultQuestion);
       // Save the snapshot with the new question
-      await sendMessage('UPDATE_SNAPSHOT', {
-        id: snapshot.id,
-        updates: snapshot,
-      });
+      await persistSnapshot(snapshot);
     }
 
     currentQuestionId = snapshot.questions[0].id;
@@ -208,7 +239,7 @@ function updateUI() {
     const htmlWithoutCsp = stripCspFromHtml(currentSnapshot.html);
 
     // Use our iframe.html page which has the annotator script
-    const iframeUrl = chrome.runtime.getURL('iframe.html');
+    const iframeUrl = hasChromeStorage() ? chrome.runtime.getURL('iframe.html') : 'iframe.html';
 
     // Set up message handling before loading iframe
     setupIframeMessageHandler(iframe, htmlWithoutCsp);
@@ -1692,10 +1723,7 @@ async function saveCurrentSnapshot(showConfirmation = false) {
   showSaveStatus('saving');
 
   try {
-    await sendMessage('UPDATE_SNAPSHOT', {
-      id: currentSnapshot.id,
-      updates: currentSnapshot,
-    });
+    await persistSnapshot(currentSnapshot);
     showSaveStatus('saved');
     if (showConfirmation) {
       showNotification('Saved');
@@ -2063,6 +2091,85 @@ function applyZoom() {
   }
 }
 
+// Show a modal to load a ZIP export when running in standalone web mode.
+function showStandaloneZipLoader(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const container = document.createElement('div');
+    container.id = 'standalone-zip-loader';
+    container.style.cssText = `
+      position: fixed;
+      inset: 0;
+      z-index: 100000;
+      background: rgba(0,0,0,0.65);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    `;
+
+    const card = document.createElement('div');
+    card.style.cssText = `
+      width: min(560px, 100%);
+      background: #111827;
+      color: #f9fafb;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    `;
+
+    card.innerHTML = `
+      <div style="font-size: 14px; font-weight: 600; margin-bottom: 6px;">Load refine.page export</div>
+      <div style="font-size: 13px; color: rgba(249,250,251,0.75); margin-bottom: 12px;">
+        Choose a <code>.zip</code> exported from the extension (Export button in the popup).
+        This enables running eval fully in a normal web page (no extension APIs).
+      </div>
+      <input id="standalone-zip-input" type="file" accept=".zip" style="display:block; width: 100%; margin-bottom: 12px;" />
+      <div id="standalone-zip-error" style="display:none; font-size: 13px; color: #fca5a5; margin-bottom: 10px;"></div>
+      <div style="display:flex; gap: 8px; justify-content: flex-end;">
+        <button id="standalone-zip-cancel" style="padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: transparent; color: #f9fafb; cursor: pointer;">Close</button>
+        <button id="standalone-zip-load" style="padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: #2563eb; color: white; cursor: pointer;">Load</button>
+      </div>
+    `;
+
+    container.appendChild(card);
+    document.body.appendChild(container);
+
+    const input = card.querySelector<HTMLInputElement>('#standalone-zip-input');
+    const errorEl = card.querySelector<HTMLDivElement>('#standalone-zip-error');
+    const btnCancel = card.querySelector<HTMLButtonElement>('#standalone-zip-cancel');
+    const btnLoad = card.querySelector<HTMLButtonElement>('#standalone-zip-load');
+
+    const showError = (msg: string) => {
+      if (!errorEl) return;
+      errorEl.textContent = msg;
+      errorEl.style.display = 'block';
+    };
+
+    btnCancel?.addEventListener('click', () => {
+      container.remove();
+      resolve();
+    });
+
+    btnLoad?.addEventListener('click', async () => {
+      try {
+        const file = input?.files?.[0];
+        if (!file) {
+          showError('Please choose a .zip export file.');
+          return;
+        }
+        const parsed = await parseZipExport(file);
+        standaloneSnapshots = parsed.snapshots as Snapshot[];
+        container.remove();
+        resolve();
+      } catch (e) {
+        showError((e as Error).message);
+      }
+    });
+  });
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   const params = getUrlParams();
@@ -2110,6 +2217,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('questions-tab')?.classList.toggle('hidden', tabName !== 'questions');
     });
   });
+
+  // Standalone web mode: no extension APIs, require loading an export ZIP
+  if (!hasChromeStorage() && !standaloneSnapshots) {
+    await showStandaloneZipLoader();
+  }
 
   await loadAllSnapshots();
 
